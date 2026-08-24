@@ -149,6 +149,17 @@ impl View {
             self.source = source;
             return Err("aucun « impl Render for » dans ce fichier".into());
         };
+        // Both anchors, or neither: initializing a field that was never
+        // declared reports success and leaves the project unbuildable.
+        let (Some(_), Some(_)) = (
+            struct_brace(&source, &type_name),
+            self_brace(&source, &type_name),
+        ) else {
+            self.source = source;
+            return Err(format!(
+                "« {type_name} » n'a pas la forme attendue — struct et « Self {{ … }} » introuvables"
+            ));
+        };
         if let Some(brace) = struct_brace(&source, &type_name) {
             source = insert_into_block(source, brace, &format!("    {name}: {ty},\n"));
         }
@@ -286,18 +297,44 @@ fn already_imported(source: &str, line: &str) -> bool {
         return false;
     };
 
-    // Every `use` of the same path, braced or not, in the file's header.
-    source.lines().any(|candidate| {
-        let candidate = candidate.trim();
-        let Some(rest) = candidate.strip_prefix(&format!("use {path}::")) else {
+    // Statements rather than lines: rustfmt wraps a long braced import over
+    // several of them, and a line-by-line scan misses it.
+    use_statements(source).iter().any(|statement| {
+        let Some(rest) = statement.strip_prefix(&format!("use {path}::")) else {
             return false;
         };
-        let rest = rest.trim_end_matches(';');
         match rest.strip_prefix('{').and_then(|r| r.strip_suffix('}')) {
             Some(list) => list.split(',').any(|entry| entry.trim() == name),
             None => rest == name,
         }
     })
+}
+
+/// The `use …;` statements of a file, whitespace collapsed.
+fn use_statements(source: &str) -> Vec<String> {
+    let mut statements = Vec::new();
+    let mut search = 0;
+    while let Some(index) = source[search..].find("use ") {
+        let start = search + index;
+        let at_line_start = source[..start]
+            .chars()
+            .last()
+            .is_none_or(|c| c == '\n' || c == ' ');
+        let Some(end) = source[start..].find(';').map(|offset| start + offset) else {
+            break;
+        };
+        if at_line_start {
+            // Whitespace collapsed inside the path, but the `use ` kept: the
+            // caller matches on `use <path>::`.
+            let body: String = source[start + "use ".len()..end]
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join("");
+            statements.push(format!("use {body}"));
+        }
+        search = end + 1;
+    }
+    statements
 }
 
 /// Field names referenced by `Input::new(&self.<field>)` in the tree.
@@ -346,6 +383,14 @@ fn ensure_input_field(source: String, field: &str) -> String {
     );
 
     let Some(type_name) = view_type_name(&source) else {
+        return source;
+    };
+    // Declaring the field without initializing it, or the reverse, leaves a
+    // file that does not compile. Both anchors, or neither.
+    let (Some(_), Some(_)) = (
+        struct_brace(&source, &type_name),
+        self_brace(&source, &type_name),
+    ) else {
         return source;
     };
 
@@ -423,10 +468,28 @@ fn view_type_name(source: &str) -> Option<String> {
     (!name.is_empty()).then_some(name)
 }
 
-/// The `{` opening the declaration of `pub struct <name>`.
+/// The `{` opening the declaration of `struct <name>`, whatever its
+/// visibility.
+///
+/// The match is anchored on a word boundary: a prefix match would find
+/// `pub struct AppConfig` when looking for `App`, which is the very bug this
+/// anchoring was meant to remove.
 fn struct_brace(source: &str, name: &str) -> Option<usize> {
-    let offset = source.find(&format!("pub struct {name}"))?;
-    source[offset..].find('{').map(|index| offset + index)
+    let needle = format!("struct {name}");
+    let mut search = 0;
+    while let Some(index) = source[search..].find(&needle) {
+        let at = search + index;
+        let after = at + needle.len();
+        let boundary = source[after..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_alphanumeric() && c != '_');
+        if boundary {
+            return source[at..].find('{').map(|offset| at + offset);
+        }
+        search = after;
+    }
+    None
 }
 
 /// The `{` opening the `Self {` of that type's `new`.

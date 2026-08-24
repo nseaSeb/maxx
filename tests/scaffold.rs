@@ -503,3 +503,80 @@ fn insertions_land_in_the_view_not_in_a_helper_type() {
     // And the initializer goes in the struct literal, not in the signature.
     assert!(accueil.contains("Self {\n            champ: cx.new("));
 }
+
+#[test]
+fn a_state_field_is_refused_when_the_view_has_no_usable_shape() {
+    let root = scratch("maxx_shape");
+    scaffold::create_project(&root, "essai").unwrap();
+    let path = root.join("src/ui/accueil.rs");
+
+    // A view with no `Self { .. }` to initialize into.
+    let source = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("        Self {}\n", "        Self::default()\n");
+    std::fs::write(&path, &source).unwrap();
+
+    let mut view = View::load(&path).unwrap();
+    assert!(
+        view.add_state_field("compteur", "usize", "0").is_err(),
+        "mieux vaut refuser que déclarer la moitié du champ"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        source,
+        "et le fichier ne doit pas avoir bougé"
+    );
+}
+
+#[test]
+fn a_wrapped_import_is_not_duplicated() {
+    let root = scratch("maxx_wrapped");
+    scaffold::create_project(&root, "essai").unwrap();
+    let path = root.join("src/ui/accueil.rs");
+
+    let source = std::fs::read_to_string(&path).unwrap().replace(
+        "use gpui::{Context, Window, prelude::*};",
+        "use gpui::{\n    Context,\n    Window,\n    px,\n    prelude::*,\n};",
+    );
+    std::fs::write(&path, &source).unwrap();
+
+    let mut view = View::load(&path).unwrap();
+    let mut button = maxx::registry::instantiate("button").unwrap();
+    let spec = maxx::registry::of(&button).unwrap();
+    let width = maxx::registry::props(spec)
+        .into_iter()
+        .find(|prop| prop.label == "Largeur")
+        .unwrap();
+    maxx::registry::write(&mut button, width, "120");
+    view.root.push_child(button);
+    view.save().unwrap();
+
+    let written = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        !written.contains("use gpui::px;"),
+        "px est déjà importé par le use groupé :\n{written}"
+    );
+}
+
+#[test]
+fn a_helper_type_whose_name_starts_like_the_view_is_left_alone() {
+    let root = scratch("maxx_prefix");
+    scaffold::create_project(&root, "essai").unwrap();
+    let path = root.join("src/ui/accueil.rs");
+
+    let source = std::fs::read_to_string(&path).unwrap().replace(
+        "pub struct Accueil {}",
+        "pub struct AccueilConfig {\n    pub titre: String,\n}\n\npub struct Accueil {}",
+    );
+    std::fs::write(&path, &source).unwrap();
+
+    let mut view = View::load(&path).unwrap();
+    view.root
+        .push_child(maxx::registry::instantiate("input").unwrap());
+    view.save().unwrap();
+
+    let written = std::fs::read_to_string(&path).unwrap();
+    let config = &written[written.find("pub struct AccueilConfig").unwrap()
+        ..written.find("pub struct Accueil {").unwrap()];
+    assert!(!config.contains("champ"), "le type voisin est intact :\n{config}");
+}

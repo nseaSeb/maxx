@@ -402,3 +402,50 @@ fn a_hand_written_method_argument_is_protected() {
         "une expression écrite à la main ne s'édite pas en texte libre"
     );
 }
+
+#[test]
+fn a_multiline_string_survives_a_full_save_cycle() {
+    // `splice` stopped indenting inside literals, but `dedent` still stripped
+    // them on the way back in, so the fix was one-sided and the string drifted
+    // a little on every save.
+    let mut file = String::from(
+        "impl Render for Accueil {\n\
+         \x20   fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {\n\
+         \x20       // maxx:begin\n\
+         \x20       div().child(\n\
+         \"ligne un\n\
+         \x20 ligne deux\",\n\
+         \x20       )\n\
+         \x20       // maxx:end\n\
+         \x20   }\n\
+         }\n",
+    );
+
+    let mut seen = Vec::new();
+    for _ in 0..3 {
+        let (node, region) = parser::parse(&file).expect("the region should parse");
+        let block = maxx::codegen::render_for_splice(&node, region.width());
+        file = parser::splice(&file, &block).expect("markers are present");
+        seen.push(file.clone());
+    }
+
+    assert_eq!(seen[0], seen[1], "le fichier ne doit plus bouger");
+    assert_eq!(seen[1], seen[2]);
+    assert!(
+        seen[0].contains("\n  ligne deux\""),
+        "l'indentation de la chaîne doit rester intacte :\n{}",
+        seen[0]
+    );
+}
+
+#[test]
+fn a_lifetime_is_not_a_char_literal() {
+    let source = "impl Foo {\n    fn f<'a>() { let c = 'x'; }\n    fn g() {}\n}\n";
+    let open = source.find('{').unwrap();
+    let close = maxx::parser::matching_brace(source, open).unwrap();
+    assert_eq!(
+        &source[close..],
+        "}\n",
+        "le bloc doit se fermer sur l'accolade de l'impl"
+    );
+}

@@ -49,18 +49,17 @@ pub fn matching_brace(source: &str, open: usize) -> Option<usize> {
                 index += 1;
             }
             b'"' => {
-                index = quoted_end(source, index, b'"');
+                index = quoted_end(source, index);
                 continue;
             }
-            b'\'' => {
-                // A lifetime is not a literal: `'a` has no closing quote.
-                let end = quoted_end(source, index, b'\'');
-                if end <= bytes.len() {
+            b'\'' => match char_literal_end(source, index) {
+                Some(end) => {
                     index = end;
                     continue;
                 }
-                index += 1;
-            }
+                // A lifetime: nothing to skip.
+                None => index += 1,
+            },
             b'{' => {
                 depth += 1;
                 index += 1;
@@ -78,20 +77,42 @@ pub fn matching_brace(source: &str, open: usize) -> Option<usize> {
     None
 }
 
-/// The offset just past a `"…"` or `'…'` literal starting at `start`.
-fn quoted_end(source: &str, start: usize, quote: u8) -> usize {
+/// The offset just past a `"…"` literal starting at `start`.
+fn quoted_end(source: &str, start: usize) -> usize {
     let bytes = source.as_bytes();
     let mut index = start + 1;
     while index < bytes.len() {
         match bytes[index] {
             b'\\' => index += 2,
-            byte if byte == quote => return index + 1,
-            // A char literal never spans a line; a lifetime lands here.
-            b'\n' if quote == b'\'' => return start + 1,
+            b'"' => return index + 1,
             _ => index += 1,
         }
     }
     bytes.len()
+}
+
+/// The offset just past a `'x'` literal starting at `start`, or `None` when the
+/// quote opens a lifetime.
+///
+/// Telling them apart matters: treating `'a` as a literal makes the scan pair
+/// it with the next quote and skip everything in between.
+fn char_literal_end(source: &str, start: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    if bytes.get(start + 1) == Some(&b'\\') {
+        // An escape: read to the closing quote, which is close by.
+        let mut index = start + 2;
+        while index < bytes.len() && index < start + 12 {
+            if bytes[index] == b'\'' {
+                return Some(index + 1);
+            }
+            index += 1;
+        }
+        return None;
+    }
+    let mut chars = source[start + 1..].char_indices();
+    let (_, first) = chars.next()?;
+    let after = start + 1 + first.len_utf8();
+    (bytes.get(after) == Some(&b'\'')).then_some(after + 1)
 }
 
 /// The offset just past a `r"…"` / `r#"…"#` literal starting at `start`.
@@ -139,10 +160,15 @@ fn string_ranges(source: &str) -> Vec<std::ops::Range<usize>> {
                 None => index += 1,
             },
             b'"' => {
-                let end = quoted_end(source, index, b'"');
+                let end = quoted_end(source, index);
                 ranges.push(index..end);
                 index = end;
             }
+            // A `'"'` would otherwise open a range running to the next quote.
+            b'\'' => match char_literal_end(source, index) {
+                Some(end) => index = end,
+                None => index += 1,
+            },
             _ => index += 1,
         }
     }
@@ -331,15 +357,31 @@ pub fn parse(source: &str) -> Result<(Node, Region), Error> {
 }
 
 /// Removes the region's own indentation from every line.
+///
+/// A line that begins inside a multi-line string literal is part of the user's
+/// data and is left exactly as it is — `splice` does not indent it on the way
+/// out, and stripping it here would eat characters from the string on every
+/// save.
 fn dedent(source: &str, indent: &str) -> String {
+    let literals = string_ranges(source);
     let mut out = String::with_capacity(source.len());
+    let mut offset = 0usize;
+
     for line in source.lines() {
-        let stripped = line.strip_prefix(indent).unwrap_or_else(|| {
-            // A line indented less than the markers: take what is there.
-            line.trim_start_matches([' ', '\t'])
-        });
-        out.push_str(stripped);
+        let inside_literal = literals
+            .iter()
+            .any(|range| range.start < offset && offset < range.end);
+        if inside_literal {
+            out.push_str(line);
+        } else {
+            let stripped = line.strip_prefix(indent).unwrap_or_else(|| {
+                // A line indented less than the markers: take what is there.
+                line.trim_start_matches([' ', '\t'])
+            });
+            out.push_str(stripped);
+        }
         out.push('\n');
+        offset += line.len() + 1;
     }
     out
 }

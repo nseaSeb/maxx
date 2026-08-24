@@ -1000,7 +1000,6 @@ impl Workspace {
     /// habit every editor gives you for an unmodified buffer. One changed on
     /// both sides is a real conflict and waits for a decision.
     fn check_disk(&mut self, cx: &mut Context<Self>) {
-        self.edit_snapshot = None;
         let mut reloaded = Vec::new();
         let mut conflicted = Vec::new();
 
@@ -1014,6 +1013,13 @@ impl Workspace {
             } else {
                 reloaded.push(index);
             }
+        }
+
+        // Only a view that actually moved invalidates the snapshot; clearing it
+        // on every return to the window would swallow the undo step for a text
+        // edit interrupted by an alt-tab.
+        if !reloaded.is_empty() || !conflicted.is_empty() {
+            self.edit_snapshot = None;
         }
 
         for index in reloaded {
