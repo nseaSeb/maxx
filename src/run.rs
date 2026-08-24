@@ -5,7 +5,7 @@
 //! foreground task drains a few times a second.
 
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
@@ -60,6 +60,38 @@ fn spawn_cargo(root: PathBuf, subcommand: &'static str) -> Receiver<Message> {
     let (sender, receiver) = channel();
     std::thread::spawn(move || run(root, subcommand, sender));
     receiver
+}
+
+/// Opens a terminal in `path`.
+///
+/// Ghostty needs its own `--working-directory` flag: `open -a Ghostty <dir>`
+/// launches the application but does not necessarily start the shell there.
+/// Terminal.app, which every Mac has, is the fallback and does honour a
+/// directory argument.
+pub fn open_terminal(path: &Path) {
+    if Path::new("/Applications/Ghostty.app").exists() {
+        let opened = Command::new("open")
+            .arg("-na")
+            .arg("Ghostty")
+            .arg("--args")
+            .arg(format!("--working-directory={}", path.display()))
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false);
+        if opened {
+            return;
+        }
+    }
+    let _ = Command::new("open").arg("-a").arg("Terminal").arg(path).status();
+}
+
+/// Opens `path` in Zed, through its command line tool when it is installed and
+/// through the application bundle otherwise.
+pub fn open_editor(path: &Path) {
+    if Command::new("zed").arg(path).status().is_ok() {
+        return;
+    }
+    let _ = Command::new("open").arg("-a").arg("Zed").arg(path).status();
 }
 
 /// Kills a run by its operating system pid.

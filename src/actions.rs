@@ -45,6 +45,8 @@ actions!(
         PrewarmProject,
         // Go menu
         RevealInFinder,
+        OpenTerminal,
+        OpenInZed,
         // Window menu
         Minimize,
         Zoom,
@@ -131,6 +133,16 @@ pub fn register_handlers(cx: &mut App) {
         }
     });
 
+    cx.on_action(|_: &OpenTerminal, cx: &mut App| {
+        if let Some(path) = active_workspace_path(cx) {
+            crate::run::open_terminal(&path);
+        }
+    });
+    cx.on_action(|_: &OpenInZed, cx: &mut App| {
+        if let Some(path) = active_workspace_path(cx) {
+            crate::run::open_editor(&path);
+        }
+    });
     cx.on_action(|_: &Minimize, cx: &mut App| {
         with_active_workspace(cx, |_, window, _| window.minimize_window());
     });
@@ -165,6 +177,8 @@ pub fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-.", StopProject, None),
         KeyBinding::new("cmd-j", ToggleOutput, None),
         KeyBinding::new("cmd-alt-r", RevealInFinder, None),
+        KeyBinding::new("cmd-alt-t", OpenTerminal, None),
+        KeyBinding::new("cmd-alt-z", OpenInZed, None),
         KeyBinding::new("cmd-m", Minimize, None),
     ]
 }
