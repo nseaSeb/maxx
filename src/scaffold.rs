@@ -23,6 +23,7 @@ pub fn create_project(root: &Path, name: &str) -> io::Result<()> {
     std::fs::write(root.join(".cargo/config.toml"), cargo_config())?;
     std::fs::write(root.join(".gitignore"), "/target\n/.cargo\n")?;
     std::fs::write(root.join("src/main.rs"), main_rs())?;
+    std::fs::write(root.join("src/menus.rs"), menus_rs())?;
     std::fs::write(root.join("src/ui/mod.rs"), "pub mod accueil;\n")?;
     std::fs::write(root.join("src/ui/accueil.rs"), view_rs("Accueil"))?;
     Ok(())
@@ -127,8 +128,84 @@ target-dir = "{}"
     )
 }
 
+/// The menu bar of a generated project.
+///
+/// A GPUI application gets no menu bar of its own — not even a Quit — unless it
+/// calls `set_menus`, so the template ships a usable one and maxx edits it.
+fn menus_rs() -> String {
+    r#"use gpui::{App, Menu, MenuItem, OsAction, actions};
+
+actions!(app, [About, Quit, HideApp, HideOthers, ShowAll, Undo, Redo, Cut, Copy, Paste, SelectAll, Minimize]);
+
+/// Wires what the menu entries do.
+pub fn register(cx: &mut App) {
+    cx.on_action(|_: &Quit, cx: &mut App| cx.quit());
+    cx.on_action(|_: &HideApp, cx: &mut App| cx.hide());
+    cx.on_action(|_: &HideOthers, cx: &mut App| cx.hide_other_apps());
+    cx.on_action(|_: &ShowAll, cx: &mut App| cx.unhide_other_apps());
+    cx.on_action(|_: &About, _cx: &mut App| println!("À propos"));
+    // maxx:handlers
+}
+
+/// The shortcuts the menu entries display.
+pub fn key_bindings() -> Vec<gpui::KeyBinding> {
+    use gpui::KeyBinding;
+    vec![
+        KeyBinding::new("cmd-q", Quit, None),
+        KeyBinding::new("cmd-h", HideApp, None),
+        KeyBinding::new("cmd-alt-h", HideOthers, None),
+        KeyBinding::new("cmd-z", Undo, None),
+        KeyBinding::new("cmd-shift-z", Redo, None),
+        KeyBinding::new("cmd-x", Cut, None),
+        KeyBinding::new("cmd-c", Copy, None),
+        KeyBinding::new("cmd-v", Paste, None),
+        KeyBinding::new("cmd-a", SelectAll, None),
+        KeyBinding::new("cmd-m", Minimize, None),
+    ]
+}
+
+/// The menu bar itself.
+pub fn app_menus() -> Vec<Menu> {
+    // maxx:begin
+    vec![
+        Menu {
+            name: "app".into(),
+            items: vec![
+                MenuItem::action("À propos", About),
+                MenuItem::separator(),
+                MenuItem::action("Masquer", HideApp),
+                MenuItem::action("Masquer les autres", HideOthers),
+                MenuItem::action("Tout afficher", ShowAll),
+                MenuItem::separator(),
+                MenuItem::action("Quitter", Quit),
+            ],
+        },
+        Menu {
+            name: "Édition".into(),
+            items: vec![
+                MenuItem::os_action("Annuler", Undo, OsAction::Undo),
+                MenuItem::os_action("Rétablir", Redo, OsAction::Redo),
+                MenuItem::separator(),
+                MenuItem::os_action("Couper", Cut, OsAction::Cut),
+                MenuItem::os_action("Copier", Copy, OsAction::Copy),
+                MenuItem::os_action("Coller", Paste, OsAction::Paste),
+                MenuItem::os_action("Tout sélectionner", SelectAll, OsAction::SelectAll),
+            ],
+        },
+        Menu {
+            name: "Fenêtre".into(),
+            items: vec![MenuItem::action("Réduire", Minimize)],
+        },
+    ]
+    // maxx:end
+}
+"#
+    .to_string()
+}
+
 fn main_rs() -> String {
-    r#"mod ui;
+    r#"mod menus;
+mod ui;
 
 use gpui::{
     App, Application, Bounds, WindowBounds, WindowOptions, prelude::*, px, size,
@@ -141,6 +218,10 @@ fn main() {
     Application::new().run(|cx: &mut App| {
         gpui_component::init(cx);
         cx.activate(true);
+
+        menus::register(cx);
+        cx.bind_keys(menus::key_bindings());
+        cx.set_menus(menus::app_menus());
 
         let bounds = Bounds::centered(None, size(px(900.), px(600.)), cx);
         cx.open_window(

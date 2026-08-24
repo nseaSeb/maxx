@@ -20,11 +20,15 @@ use crate::model::{Call, Node, Path};
 use gpui::{Pixels, Point, Window};
 use crate::registry::{self, Kind, Prop, Spec};
 use crate::theme;
-use crate::workspace::Workspace;
+use crate::menufile::Selection;
+use crate::workspace::{MenuField, Workspace};
 
 impl Workspace {
     /// The designer, or an invitation to open a view.
     pub(crate) fn render_designer(&self, cx: &mut Context<Self>) -> AnyElement {
+        if self.menu_file.is_some() {
+            return self.render_menu_editor(cx);
+        }
         if self.view().is_none() {
             return div()
                 .flex()
@@ -107,6 +111,137 @@ impl Workspace {
                         this.activate_view(index, cx);
                     }))
             }))
+    }
+
+    /// The menu bar of the project, as a tree with a small inspector.
+    fn render_menu_editor(&self, cx: &mut Context<Self>) -> AnyElement {
+        let menus = self.menu_file.as_ref().expect("checked by the caller");
+        let selection = menus.selected;
+
+        let mut rows: Vec<AnyElement> = Vec::new();
+        for (menu_index, menu) in menus.menus.iter().enumerate() {
+            let target = Selection::Menu(menu_index);
+            rows.push(
+                menu_row(
+                    SharedString::from(menu.name.clone()),
+                    0,
+                    selection == Some(target),
+                    target,
+                    cx,
+                )
+                .into_any_element(),
+            );
+            for (item_index, item) in menu.items.iter().enumerate() {
+                let target = Selection::Item(menu_index, item_index);
+                rows.push(
+                    menu_row(
+                        SharedString::from(item.label()),
+                        1,
+                        selection == Some(target),
+                        target,
+                        cx,
+                    )
+                    .into_any_element(),
+                );
+            }
+        }
+
+        div()
+            .flex()
+            .flex_row()
+            .flex_1()
+            .overflow_hidden()
+            .child(
+                v_flex()
+                    .flex_1()
+                    .p_4()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(theme::TEXT_MUTED))
+                            .child("Barre de menus du projet"),
+                    )
+                    .children(rows),
+            )
+            .child(
+                v_flex()
+                    .w(px(280.))
+                    .flex_none()
+                    .border_l_1()
+                    .border_color(rgb(theme::BORDER))
+                    .bg(rgb(theme::PANEL_BG))
+                    .child(self.render_menu_inspector(cx))
+                    .child(section_title("Ajouter"))
+                    .child(
+                        v_flex()
+                            .gap_1()
+                            .p_2()
+                            .child(menu_button("menu-add", "Menu", cx, |this, cx| {
+                                this.add_menu(cx)
+                            }))
+                            .child(menu_button("item-add", "Entrée", cx, |this, cx| {
+                                this.add_menu_item(false, cx)
+                            }))
+                            .child(menu_button("sep-add", "Séparateur", cx, |this, cx| {
+                                this.add_menu_item(true, cx)
+                            }))
+                            .child(menu_button("menu-del", "Supprimer", cx, |this, cx| {
+                                this.remove_menu_selection(cx)
+                            })),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    /// The fields of the selected menu or entry.
+    fn render_menu_inspector(&self, _cx: &mut Context<Self>) -> impl IntoElement {
+        let menus = self.menu_file.as_ref().expect("checked by the caller");
+        let fields: &[(MenuField, &str)] = match menus.selected {
+            Some(Selection::Menu(_)) => &[(MenuField::Name, "Titre")],
+            Some(Selection::Item(_, _)) => {
+                &[(MenuField::Label, "Libellé"), (MenuField::Action, "Action")]
+            }
+            None => &[],
+        };
+
+        let mut rows = Vec::new();
+        for (field, label) in fields {
+            let Some(state) = self.menu_input(*field) else {
+                continue;
+            };
+            rows.push(
+                h_flex()
+                    .items_center()
+                    .gap_2()
+                    .px_3()
+                    .py_1()
+                    .child(
+                        div()
+                            .w(px(70.))
+                            .flex_none()
+                            .text_xs()
+                            .text_color(rgb(theme::TEXT_MUTED))
+                            .child(*label),
+                    )
+                    .child(div().flex_1().child(Input::new(state).small()))
+                    .into_any_element(),
+            );
+        }
+
+        v_flex()
+            .child(section_title("Propriétés"))
+            .when(rows.is_empty(), |this| {
+                this.child(
+                    div()
+                        .px_3()
+                        .py_2()
+                        .text_xs()
+                        .text_color(rgb(theme::TEXT_MUTED))
+                        .child("Sélectionnez un menu ou une entrée."),
+                )
+            })
+            .children(rows)
     }
 
     /// The drawing surface: the tree rendered with real components.
@@ -600,6 +735,49 @@ fn binding_toggle(
         .hover(|this| this.bg(rgb(theme::HOVER_BG)))
         .child(if bound { "{ }" } else { "abc" })
         .on_click(cx.listener(move |this, _, _, cx| this.toggle_binding(prop, cx)))
+}
+
+/// One line of the menu tree.
+fn menu_row(
+    label: SharedString,
+    depth: usize,
+    selected: bool,
+    target: Selection,
+    cx: &mut Context<Workspace>,
+) -> impl IntoElement {
+    div()
+        .id(SharedString::from(format!("menu-{target:?}")))
+        .flex()
+        .items_center()
+        .h(px(22.))
+        .pr_2()
+        .pl(px(8. + 16. * depth as f32))
+        .rounded_sm()
+        .cursor_pointer()
+        .when(selected, |this| this.bg(rgb(theme::SELECTED_BG)))
+        .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+        .child(label)
+        .on_click(cx.listener(move |this, _, _, cx| this.select_menu(target, cx)))
+}
+
+/// One button of the menu panel.
+fn menu_button(
+    id: &'static str,
+    label: &'static str,
+    cx: &mut Context<Workspace>,
+    action: impl Fn(&mut Workspace, &mut Context<Workspace>) + 'static,
+) -> impl IntoElement {
+    div()
+        .id(id)
+        .px_2()
+        .py_1()
+        .rounded_sm()
+        .text_xs()
+        .cursor_pointer()
+        .bg(rgb(theme::BG))
+        .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+        .child(label)
+        .on_click(cx.listener(move |this, _, _, cx| action(this, cx)))
 }
 
 /// Section header inside the right-hand panels.

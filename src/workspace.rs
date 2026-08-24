@@ -30,9 +30,29 @@ use crate::project::{Entry, Project, flatten};
 use crate::registry;
 use crate::registry::Kind;
 use crate::theme;
+use crate::menu_model::ItemDef;
+use crate::menufile::{MenuFile, Selection};
 use crate::view::View;
 use std::collections::HashSet;
 use std::path::PathBuf;
+
+/// Which box of the menu panel a value belongs to.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MenuField {
+    /// The title of a menu.
+    Name,
+    /// The label of an entry.
+    Label,
+    /// The action an entry dispatches.
+    Action,
+}
+
+/// Whether a name can be a Rust type, which is what an action is.
+fn is_type_name(value: &str) -> bool {
+    let mut chars = value.chars();
+    matches!(chars.next(), Some(first) if first.is_alphabetic() || first == '_')
+        && chars.all(|c| c.is_alphanumeric() || c == '_')
+}
 
 /// Walks the selection back to the nearest node that still exists.
 ///
@@ -99,6 +119,12 @@ pub struct Workspace {
     selected: Option<PathBuf>,
     show_panel: bool,
     show_status_bar: bool,
+    /// The project's menu bar, when `src/menus.rs` is the file being edited.
+    pub menu_file: Option<MenuFile>,
+    /// Text boxes of the menu panel.
+    menu_inputs: Vec<(MenuField, Entity<InputState>)>,
+    /// Selection the menu boxes were built for.
+    menu_synced: Option<Option<Selection>>,
     /// Views open in the workshop, in tab order.
     views: Vec<View>,
     /// Index of the view being designed.
@@ -150,6 +176,9 @@ impl Workspace {
             selected: None,
             show_panel: true,
             show_status_bar: true,
+            menu_file: None,
+            menu_inputs: Vec::new(),
+            menu_synced: None,
             views: Vec::new(),
             active: None,
             message: None,
@@ -289,6 +318,19 @@ impl Workspace {
 
     fn select_file(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         self.message = None;
+        if MenuFile::is_menu_file(&path) {
+            match MenuFile::load(&path) {
+                Ok(menus) => {
+                    self.menu_file = Some(menus);
+                    self.menu_synced = None;
+                }
+                Err(error) => self.message = Some(SharedString::from(error)),
+            }
+            self.selected = Some(path);
+            cx.notify();
+            return;
+        }
+        self.menu_file = None;
         if path.extension().is_some_and(|extension| extension == "rs") {
             // Already open: just bring its tab forward.
             if let Some(index) = self.views.iter().position(|view| view.path == path) {
@@ -333,6 +375,136 @@ impl Workspace {
             .iter()
             .find(|(candidate, _)| std::ptr::eq(*candidate, prop))
             .map(|(_, state)| state)
+    }
+
+    /// The text box bound to a field of the menu panel.
+    pub(crate) fn menu_input(&self, field: MenuField) -> Option<&Entity<InputState>> {
+        self.menu_inputs
+            .iter()
+            .find(|(candidate, _)| *candidate == field)
+            .map(|(_, state)| state)
+    }
+
+    /// Rebuilds the menu panel's boxes when its selection changes.
+    fn sync_menu_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let key = self.menu_file.as_ref().map(|menus| menus.selected);
+        if key == self.menu_synced {
+            return;
+        }
+        self.menu_synced = key;
+        self.menu_inputs.clear();
+
+        let Some(menus) = self.menu_file.as_ref() else {
+            return;
+        };
+        let mut fields = Vec::new();
+        match menus.selected {
+            Some(Selection::Menu(_)) => {
+                if let Some(menu) = menus.selected_menu() {
+                    fields.push((MenuField::Name, menu.name.clone()));
+                }
+            }
+            Some(Selection::Item(_, _)) => {
+                if let Some(ItemDef::Action { label, action, .. }) = menus.selected_item() {
+                    fields.push((MenuField::Label, label.clone()));
+                    fields.push((MenuField::Action, action.clone()));
+                }
+            }
+            None => {}
+        }
+
+        for (field, value) in fields {
+            let state = cx.new(|cx| InputState::new(window, cx).default_value(value));
+            cx.subscribe(&state, move |this, state, event: &InputEvent, cx| {
+                if matches!(event, InputEvent::Change) {
+                    let value = state.read(cx).value().to_string();
+                    this.edit_menu_field(field, &value, cx);
+                }
+            })
+            .detach();
+            self.menu_inputs.push((field, state));
+        }
+    }
+
+    /// Writes one field of the menu panel.
+    fn edit_menu_field(&mut self, field: MenuField, value: &str, cx: &mut Context<Self>) {
+        let Some(menus) = self.menu_file.as_mut() else {
+            return;
+        };
+        let Some(selection) = menus.selected else {
+            return;
+        };
+        match (selection, field) {
+            (Selection::Menu(index), MenuField::Name) => {
+                if let Some(menu) = menus.menus.get_mut(index) {
+                    menu.name = value.to_string();
+                }
+            }
+            (Selection::Item(menu, item), _) => {
+                if let Some(ItemDef::Action { label, action, .. }) = menus
+                    .menus
+                    .get_mut(menu)
+                    .and_then(|menu| menu.items.get_mut(item))
+                {
+                    match field {
+                        MenuField::Label => *label = value.to_string(),
+                        // An action name is a Rust type: refuse what would not
+                        // compile rather than write it.
+                        MenuField::Action if is_type_name(value) => *action = value.to_string(),
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+        cx.notify();
+    }
+
+    /// Selects a menu or one of its entries.
+    pub fn select_menu(&mut self, selection: Selection, cx: &mut Context<Self>) {
+        if let Some(menus) = self.menu_file.as_mut() {
+            menus.selected = Some(selection);
+            cx.notify();
+        }
+    }
+
+    /// Adds a menu to the bar.
+    pub fn add_menu(&mut self, cx: &mut Context<Self>) {
+        if let Some(menus) = self.menu_file.as_mut() {
+            menus.add_menu();
+            cx.notify();
+        }
+    }
+
+    /// Adds an entry to the selected menu.
+    pub fn add_menu_item(&mut self, separator: bool, cx: &mut Context<Self>) {
+        let Some(menus) = self.menu_file.as_mut() else {
+            return;
+        };
+        if menus.selected.is_none() {
+            self.message = Some(SharedString::from("sélectionnez d'abord un menu"));
+            cx.notify();
+            return;
+        }
+        let item = if separator {
+            ItemDef::Separator
+        } else {
+            ItemDef::Action {
+                label: "Entrée".into(),
+                action: "MonAction".into(),
+                os_action: None,
+            }
+        };
+        menus.add_item(item);
+        cx.notify();
+    }
+
+    /// Removes the selected menu or entry.
+    pub fn remove_menu_selection(&mut self, cx: &mut Context<Self>) {
+        if let Some(menus) = self.menu_file.as_mut() {
+            menus.remove_selected();
+            cx.notify();
+        }
     }
 
     /// Rebuilds the inspector's text fields when the selection or the tree has
@@ -948,6 +1120,14 @@ impl Workspace {
     }
 
     fn write_view(&mut self, force: bool, cx: &mut Context<Self>) {
+        if let Some(menus) = self.menu_file.as_mut() {
+            self.message = match menus.save() {
+                Ok(()) => Some(SharedString::from(format!("{} enregistré", menus.name()))),
+                Err(error) => Some(SharedString::from(error)),
+            };
+            cx.notify();
+            return;
+        }
         let Some(view) = self.view() else {
             return;
         };
@@ -980,6 +1160,15 @@ impl Workspace {
     /// Drops what the designer holds and re-reads the file.
     pub fn reload_view(&mut self, cx: &mut Context<Self>) {
         self.edit_snapshot = None;
+        if let Some(menus) = self.menu_file.as_mut() {
+            self.message = match menus.reload() {
+                Ok(()) => Some(SharedString::from("menus rechargés")),
+                Err(error) => Some(SharedString::from(error)),
+            };
+            self.menu_synced = None;
+            cx.notify();
+            return;
+        }
         let Some(view) = self.view_mut() else {
             return;
         };
@@ -1391,6 +1580,30 @@ impl Workspace {
         let conflict = self
             .view()
             .is_some_and(|view| self.conflicts.contains(&view.path));
+        if self.menu_file.is_some() {
+            let menus = self.menu_file.as_ref().expect("just checked");
+            let label = match &self.message {
+                Some(message) => message.clone(),
+                None => SharedString::from(format!(
+                    "{}{} · {} menus",
+                    menus.name(),
+                    if menus.dirty() { " •" } else { "" },
+                    menus.menus.len()
+                )),
+            };
+            return div()
+                .flex()
+                .items_center()
+                .h(px(24.))
+                .px_3()
+                .flex_none()
+                .bg(rgb(theme::PANEL_BG))
+                .border_t_1()
+                .border_color(rgb(theme::BORDER))
+                .text_xs()
+                .text_color(rgb(theme::TEXT_MUTED))
+                .child(label);
+        }
         let label = match (&self.message, &self.view(), &self.project) {
             (Some(message), _, _) => message.clone(),
             (None, Some(view), _) => SharedString::from(format!(
@@ -1433,6 +1646,7 @@ impl Render for Workspace {
         self.was_active = active;
 
         self.sync_prop_inputs(window, cx);
+        self.sync_menu_inputs(window, cx);
         let show_panel = self.show_panel && self.project.is_some();
 
         div()

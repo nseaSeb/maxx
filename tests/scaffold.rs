@@ -580,3 +580,72 @@ fn a_helper_type_whose_name_starts_like_the_view_is_left_alone() {
         ..written.find("pub struct Accueil {").unwrap()];
     assert!(!config.contains("champ"), "le type voisin est intact :\n{config}");
 }
+
+#[test]
+fn a_generated_project_has_a_menu_bar() {
+    let root = scratch("maxx_menus");
+    scaffold::create_project(&root, "essai").unwrap();
+    let path = root.join("src/menus.rs");
+
+    let main = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    assert!(main.contains("cx.set_menus(menus::app_menus());"));
+    assert!(main.contains("menus::register(cx);"));
+
+    let mut menus = maxx::menufile::MenuFile::load(&path).expect("les menus doivent se relire");
+    assert_eq!(menus.menus.len(), 3);
+    assert_eq!(menus.menus[1].name, "Édition");
+    assert!(menus.menus[0]
+        .items
+        .iter()
+        .any(|item| item.label() == "Quitter"));
+    assert!(!menus.dirty());
+
+    // An entry with a brand new action declares and wires it on save.
+    menus.selected = Some(maxx::menufile::Selection::Menu(0));
+    menus.add_item(maxx::menu_model::ItemDef::Action {
+        label: "Préférences…".into(),
+        action: "OpenSettings".into(),
+        os_action: None,
+    });
+    assert!(menus.dirty());
+    menus.save().expect("l'enregistrement doit réussir");
+
+    let source = std::fs::read_to_string(&path).unwrap();
+    assert!(source.contains("MenuItem::action(\"Préférences…\", OpenSettings)"));
+    assert!(source.contains("OpenSettings]"), "déclaré dans actions! : {source}");
+    assert!(source.contains("cx.on_action(|_: &OpenSettings,"));
+
+    // And it reads back, twice over, without drifting.
+    let mut again = maxx::menufile::MenuFile::load(&path).unwrap();
+    assert_eq!(again.menus, menus.menus);
+    again.save().unwrap();
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), source);
+}
+
+#[test]
+fn an_unknown_menu_entry_is_carried_through() {
+    let root = scratch("maxx_menus_opaque");
+    scaffold::create_project(&root, "essai").unwrap();
+    let path = root.join("src/menus.rs");
+
+    let source = std::fs::read_to_string(&path).unwrap().replace(
+        "MenuItem::action(\"Quitter\", Quit),",
+        "MenuItem::submenu(sous_menu()),\n                MenuItem::action(\"Quitter\", Quit),",
+    );
+    std::fs::write(&path, &source).unwrap();
+
+    let mut menus = maxx::menufile::MenuFile::load(&path).expect("doit se relire quand même");
+    assert!(menus
+        .menus
+        .iter()
+        .flat_map(|menu| &menu.items)
+        .any(|item| matches!(item, maxx::menu_model::ItemDef::Opaque(_))));
+
+    menus.save().unwrap();
+    assert!(
+        std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("MenuItem::submenu(sous_menu())"),
+        "ce que maxx ne comprend pas ressort tel quel"
+    );
+}

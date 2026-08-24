@@ -4,6 +4,8 @@
 pub mod actions;
 pub mod codegen;
 pub mod designer;
+pub mod menu_model;
+pub mod menufile;
 pub mod menus;
 pub mod model;
 pub mod parser;

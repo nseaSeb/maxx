@@ -9,6 +9,14 @@ Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
   À faire avec la machinerie d'insertion de champs déjà écrite pour le champ
   texte (`view::ensure_input_field`).
 
+## Menus
+
+- **Sous-menus et raccourcis.** L'éditeur gère les menus, les entrées et les
+  séparateurs ; un `MenuItem::submenu(..)` est conservé mais pas modifiable, et
+  le raccourci d'une entrée se déclare encore à la main dans `key_bindings`.
+- **Ni réordonnancement ni glisser-déposer** dans l'éditeur de menus : une
+  entrée s'ajoute après la sélection et se supprime, c'est tout.
+
 ## Confort
 
 - **Panneaux redimensionnables** via `gpui_component::dock`. Les onglets et le

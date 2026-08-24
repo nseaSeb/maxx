@@ -85,6 +85,19 @@ bouton `→ Zed` à côté de la propriété Action ouvre l'éditeur sur la lign
 méthode. Et il ne faut pas oublier `cx.notify()` — sans lui le champ change et
 l'écran ne bouge pas.
 
+## Barre de menus
+
+Une application GPUI n'a aucune barre de menus tant qu'elle n'appelle pas
+`set_menus` — pas même un « Quitter ». Le gabarit en pose donc une, dans
+`src/menus.rs`, avec les gestes que macOS attend : À propos, Masquer, Quitter,
+un menu Édition câblé sur les actions système, et Réduire.
+
+Ce fichier a sa propre zone marquée : ouvrez-le depuis l'explorateur et maxx
+affiche un éditeur de menus. Ajouter une entrée avec une action inconnue
+déclare cette action dans `actions!` et lui écrit un gestionnaire vide, comme le
+double-clic sur un bouton le fait pour une vue. Une entrée que maxx ne
+reconnaît pas — un sous-menu, un appel maison — est conservée telle quelle.
+
 ## Fichiers modifiés en dehors de maxx
 
 maxx tient une copie du fichier en mémoire, donc écrire sans regarder le disque
