@@ -327,9 +327,6 @@ impl Workspace {
             }
             Kind::Text | Kind::Field | Kind::Handler | Kind::Number | Kind::Color => {
                 match self.prop_input(prop) {
-                Some(state) => row.child(div().flex_1().child(Input::new(state).small())),
-                // No input yet this frame: the sync runs at the top of `render`,
-                // so this only shows for a frame after a selection change.
                 Some(state) if matches!(prop.kind, Kind::Handler) => row
                     .child(div().flex_1().child(Input::new(state).small()))
                     .child(
@@ -349,6 +346,8 @@ impl Workspace {
                     .child(div().flex_1().child(Input::new(state).small()))
                     .child(binding_toggle(spec, prop, false, cx)),
                 Some(state) => row.child(div().flex_1().child(Input::new(state).small())),
+                // No input this frame: the sync runs at the top of `render`, so
+                // this only shows for a frame after a selection change.
                 None => row.child(
                     div()
                         .flex_1()
