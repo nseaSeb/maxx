@@ -58,7 +58,7 @@ fn saving_a_text_input_adds_the_field_and_the_import() {
 
     let mut view = View::load(&path).unwrap();
     let input = maxx::registry::instantiate("input").expect("le champ texte est au catalogue");
-    view.root.children.push(input);
+    view.root.push_child(input);
     view.save().expect("l'enregistrement doit réussir");
 
     let source = std::fs::read_to_string(&path).unwrap();
@@ -82,7 +82,7 @@ fn every_component_of_the_catalogue_is_written_out() {
     let mut view = View::load(&path).unwrap();
     for spec in maxx::registry::CATALOGUE {
         let node = maxx::registry::instantiate(spec.id).expect("le catalogue s'instancie");
-        view.root.children.push(node);
+        view.root.push_child(node);
     }
     view.save().expect("l'enregistrement doit réussir");
 
@@ -110,7 +110,7 @@ fn saving_twice_produces_the_same_file() {
     let path = root.join("src/ui/accueil.rs");
 
     let mut view = View::load(&path).unwrap();
-    view.root.children.push(maxx::registry::instantiate("button").unwrap());
+    view.root.push_child(maxx::registry::instantiate("button").unwrap());
     view.save().unwrap();
     let once = std::fs::read_to_string(&path).unwrap();
 
@@ -173,7 +173,7 @@ fn a_button_action_writes_a_method_stub() {
     let name = maxx::registry::suggested_handler(&button);
     assert_eq!(name, "on_bouton");
     maxx::registry::write(&mut button, action, &name);
-    view.root.children.push(button);
+    view.root.push_child(button);
     view.save().expect("l'enregistrement doit réussir");
 
     let source = std::fs::read_to_string(&path).unwrap();
@@ -248,7 +248,7 @@ fn style_properties_reach_the_generated_file() {
             .unwrap_or_else(|| panic!("propriété « {label} » absente"));
         maxx::registry::write(&mut button, prop, value);
     }
-    view.root.children.push(button);
+    view.root.push_child(button);
     view.save().unwrap();
 
     let source = std::fs::read_to_string(&path).unwrap();
@@ -466,4 +466,40 @@ fn an_outside_change_is_noticed() {
         .as_deref(),
         Some("Modifié dans Zed")
     );
+}
+
+#[test]
+fn insertions_land_in_the_view_not_in_a_helper_type() {
+    let root = scratch("maxx_anchor");
+    scaffold::create_project(&root, "essai").unwrap();
+    let path = root.join("src/ui/accueil.rs");
+
+    // A helper type declared above the view, as a developer would.
+    let source = std::fs::read_to_string(&path).unwrap();
+    let source = source.replace(
+        "pub struct Accueil {}",
+        "pub struct Ligne {\n    pub titre: String,\n}\n\nimpl Ligne {\n    pub fn nouvelle() -> Self {\n        Self {\n            titre: String::new(),\n        }\n    }\n}\n\npub struct Accueil {}",
+    );
+    std::fs::write(&path, &source).unwrap();
+
+    let mut view = View::load(&path).unwrap();
+    let mut button = maxx::registry::instantiate("button").unwrap();
+    let spec = maxx::registry::of(&button).unwrap();
+    let action = spec.props.iter().find(|p| p.label == "Action").unwrap();
+    maxx::registry::write(&mut button, action, "on_go");
+    view.root.push_child(button);
+    view.root.push_child(maxx::registry::instantiate("input").unwrap());
+    view.save().expect("l'enregistrement doit réussir");
+
+    let written = std::fs::read_to_string(&path).unwrap();
+    let ligne = &written[written.find("pub struct Ligne").unwrap()
+        ..written.find("pub struct Accueil").unwrap()];
+    assert!(!ligne.contains("champ"), "le type auxiliaire est intact :\n{ligne}");
+    assert!(!ligne.contains("on_go"), "le stub ne va pas dans le type auxiliaire");
+
+    let accueil = &written[written.find("pub struct Accueil").unwrap()..];
+    assert!(accueil.contains("pub champ: Entity<InputState>,"));
+    assert!(accueil.contains("pub fn on_go("));
+    // And the initializer goes in the struct literal, not in the signature.
+    assert!(accueil.contains("Self {\n            champ: cx.new("));
 }

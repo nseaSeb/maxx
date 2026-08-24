@@ -117,6 +117,8 @@ pub fn stop(pid: u32) {
 }
 
 fn run(root: PathBuf, subcommand: &str, sender: Sender<Message>) {
+    use std::os::unix::process::CommandExt as _;
+
     let child = Command::new("cargo")
         .arg(subcommand)
         .current_dir(&root)
@@ -124,6 +126,9 @@ fn run(root: PathBuf, subcommand: &str, sender: Sender<Message>) {
         .env("CARGO_TERM_COLOR", "never")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        // Without this the child stays in maxx's own group, and signalling
+        // `-pid` reaches a group that does not exist — or someone else's.
+        .process_group(0)
         .spawn();
 
     let mut child = match child {

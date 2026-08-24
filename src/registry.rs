@@ -215,6 +215,35 @@ pub const CATALOGUE: &[Spec] = &[
     },
 ];
 
+/// `120` and `12.5` become Rust float literals; `.5`, `inf` and `NaN` are
+/// refused.
+///
+/// `f32::from_str` accepts spellings `rustc` does not, and emitting one leaves
+/// the generated project unbuildable.
+fn pixel_literal(value: &str) -> Option<String> {
+    let value = value.trim();
+    let digits = value.strip_prefix('-').unwrap_or(value);
+    if digits.is_empty() || !digits.starts_with(|c: char| c.is_ascii_digit()) {
+        return None;
+    }
+    if !digits
+        .chars()
+        .all(|c| c.is_ascii_digit() || c == '.')
+        || digits.matches('.').count() > 1
+    {
+        return None;
+    }
+    let number: f32 = value.parse().ok()?;
+    if !number.is_finite() {
+        return None;
+    }
+    Some(if value.ends_with('.') || value.contains('.') {
+        format!("px({value})")
+    } else {
+        format!("px({value}.)")
+    })
+}
+
 /// Why a value was refused, for the inspector to say so.
 ///
 /// `write` silently ignores what it cannot encode — which is the right
@@ -222,7 +251,7 @@ pub const CATALOGUE: &[Spec] = &[
 pub fn validate(prop: &Prop, value: &str) -> Option<&'static str> {
     let value = value.trim();
     match prop.kind {
-        Kind::Number if !value.is_empty() && value.parse::<f32>().is_err() => {
+        Kind::Number if !value.is_empty() && pixel_literal(value).is_none() => {
             Some("une longueur est un nombre de pixels, par exemple 120")
         }
         Kind::Color => {
@@ -363,6 +392,13 @@ fn is_identifier(value: &str) -> bool {
 pub fn editable(node: &Node, prop: &Prop) -> bool {
     match (prop.target, prop.kind) {
         (Target::Method(_), Kind::Number | Kind::Color) => !node.is_opaque(),
+        (Target::Method(name), Kind::Text) => match node.call(name).and_then(|c| c.args.first()) {
+            // A literal, or nothing yet: free to type in.
+            None | Some(Arg::Str(_)) => !node.is_opaque(),
+            // Anything else is an expression someone wrote; the binding button
+            // handles the shapes maxx knows, and the rest is left alone.
+            Some(_) => false,
+        },
         (Target::BaseArg(index), Kind::Text) => match &node.base {
             Base::Known { args, .. } => match args.get(index) {
                 None | Some(Arg::Str(_)) => true,
@@ -547,12 +583,7 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
         Target::Method(name) if matches!(prop.kind, Kind::Number) => {
             if value.trim().is_empty() {
                 node.remove_call(name);
-            } else if let Ok(number) = value.trim().parse::<f32>() {
-                let literal = if value.contains('.') {
-                    format!("px({})", value.trim())
-                } else {
-                    format!("px({number}.)")
-                };
+            } else if let Some(literal) = pixel_literal(value) {
                 node.set_call(name, Arg::Verbatim(literal));
             }
         }

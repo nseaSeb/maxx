@@ -127,8 +127,9 @@ pub struct Workspace {
     state_name_input: Option<Entity<InputState>>,
     /// Index into `view::STATE_TYPES` for the field about to be added.
     state_type: usize,
-    /// The tree as it was when the focused inspector field was entered.
-    edit_snapshot: Option<Node>,
+    /// The tree as it was when the focused inspector field was entered, and
+    /// the view it belongs to.
+    edit_snapshot: Option<(PathBuf, Node)>,
     /// Views changed both on disk and in the designer, awaiting a decision.
     conflicts: HashSet<PathBuf>,
     /// Whether the window held the focus on the previous frame, to notice the
@@ -194,6 +195,7 @@ impl Workspace {
 
     /// Brings the view at `index` to the front.
     pub fn activate_view(&mut self, index: usize, cx: &mut Context<Self>) {
+        self.edit_snapshot = None;
         if index < self.views.len() {
             self.active = Some(index);
             self.revision += 1;
@@ -380,7 +382,9 @@ impl Workspace {
                 // through the revision counter, rebuild the field under the
                 // caret. One per visit to the field is the right grain.
                 InputEvent::Focus => {
-                    this.edit_snapshot = this.view().map(|view| view.root.clone());
+                    this.edit_snapshot = this
+                        .view()
+                        .map(|view| (view.path.clone(), view.root.clone()));
                 }
                 InputEvent::Blur => this.close_text_edit(cx),
                 InputEvent::PressEnter { .. } => this.close_text_edit(cx),
@@ -533,13 +537,15 @@ impl Workspace {
 
     /// Closes an inspector text edit, turning it into a single undo step.
     fn close_text_edit(&mut self, cx: &mut Context<Self>) {
-        let Some(before) = self.edit_snapshot.take() else {
+        let Some((path, before)) = self.edit_snapshot.take() else {
             return;
         };
         let Some(view) = self.view_mut() else {
             return;
         };
-        if view.root == before {
+        // The tab may have changed, or the view may have been reloaded, since
+        // the field took the focus; that snapshot belongs to neither.
+        if view.path != path || view.root == before {
             return;
         }
         view.past.push(before);
@@ -973,6 +979,7 @@ impl Workspace {
 
     /// Drops what the designer holds and re-reads the file.
     pub fn reload_view(&mut self, cx: &mut Context<Self>) {
+        self.edit_snapshot = None;
         let Some(view) = self.view_mut() else {
             return;
         };
@@ -993,6 +1000,7 @@ impl Workspace {
     /// habit every editor gives you for an unmodified buffer. One changed on
     /// both sides is a real conflict and waits for a decision.
     fn check_disk(&mut self, cx: &mut Context<Self>) {
+        self.edit_snapshot = None;
         let mut reloaded = Vec::new();
         let mut conflicted = Vec::new();
 

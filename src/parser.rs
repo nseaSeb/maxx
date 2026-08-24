@@ -17,21 +17,136 @@ pub const BEGIN: &str = "// maxx:begin";
 pub const END: &str = "// maxx:end";
 
 /// The offset of the `}` closing the `{` at `open`.
-pub(crate) fn matching_brace(source: &str, open: usize) -> Option<usize> {
+///
+/// Braces inside comments, strings and char literals do not count. Counting
+/// them ends a block early, and the callers of this function splice code at the
+/// offset it returns — a `}` in a doc comment was enough to write a method stub
+/// into the middle of that comment.
+pub fn matching_brace(source: &str, open: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
     let mut depth = 0usize;
-    for (offset, character) in source[open..].char_indices() {
-        match character {
-            '{' => depth += 1,
-            '}' => {
+    let mut index = open;
+
+    while index < bytes.len() {
+        match bytes[index] {
+            b'/' if bytes.get(index + 1) == Some(&b'/') => {
+                index = source[index..]
+                    .find('\n')
+                    .map_or(bytes.len(), |offset| index + offset + 1);
+                continue;
+            }
+            b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                index = source[index + 2..]
+                    .find("*/")
+                    .map_or(bytes.len(), |offset| index + 2 + offset + 2);
+                continue;
+            }
+            b'r' => {
+                if let Some(end) = raw_string_end(source, index) {
+                    index = end;
+                    continue;
+                }
+                index += 1;
+            }
+            b'"' => {
+                index = quoted_end(source, index, b'"');
+                continue;
+            }
+            b'\'' => {
+                // A lifetime is not a literal: `'a` has no closing quote.
+                let end = quoted_end(source, index, b'\'');
+                if end <= bytes.len() {
+                    index = end;
+                    continue;
+                }
+                index += 1;
+            }
+            b'{' => {
+                depth += 1;
+                index += 1;
+            }
+            b'}' => {
                 depth -= 1;
                 if depth == 0 {
-                    return Some(open + offset);
+                    return Some(index);
                 }
+                index += 1;
             }
-            _ => {}
+            _ => index += 1,
         }
     }
     None
+}
+
+/// The offset just past a `"…"` or `'…'` literal starting at `start`.
+fn quoted_end(source: &str, start: usize, quote: u8) -> usize {
+    let bytes = source.as_bytes();
+    let mut index = start + 1;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\\' => index += 2,
+            byte if byte == quote => return index + 1,
+            // A char literal never spans a line; a lifetime lands here.
+            b'\n' if quote == b'\'' => return start + 1,
+            _ => index += 1,
+        }
+    }
+    bytes.len()
+}
+
+/// The offset just past a `r"…"` / `r#"…"#` literal starting at `start`.
+fn raw_string_end(source: &str, start: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut index = start + 1;
+    let mut hashes = 0;
+    while bytes.get(index) == Some(&b'#') {
+        hashes += 1;
+        index += 1;
+    }
+    if bytes.get(index) != Some(&b'"') {
+        return None;
+    }
+    let terminator = format!("\"{}", "#".repeat(hashes));
+    source[index + 1..]
+        .find(&terminator)
+        .map(|offset| index + 1 + offset + terminator.len())
+}
+
+/// The byte ranges of the string literals in `source`.
+///
+/// Used to leave the inside of a multi-line literal alone when re-indenting.
+fn string_ranges(source: &str) -> Vec<std::ops::Range<usize>> {
+    let bytes = source.as_bytes();
+    let mut ranges = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'/' if bytes.get(index + 1) == Some(&b'/') => {
+                index = source[index..]
+                    .find('\n')
+                    .map_or(bytes.len(), |offset| index + offset + 1);
+            }
+            b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                index = source[index + 2..]
+                    .find("*/")
+                    .map_or(bytes.len(), |offset| index + 2 + offset + 2);
+            }
+            b'r' => match raw_string_end(source, index) {
+                Some(end) => {
+                    ranges.push(index..end);
+                    index = end;
+                }
+                None => index += 1,
+            },
+            b'"' => {
+                let end = quoted_end(source, index, b'"');
+                ranges.push(index..end);
+                index = end;
+            }
+            _ => index += 1,
+        }
+    }
+    ranges
 }
 
 /// Wraps the expression a hand-written `render` returns in maxx's markers, so
@@ -71,7 +186,11 @@ pub fn adopt(source: &str) -> Result<String, Error> {
 
     let line_start = source[..start].rfind('\n').map_or(0, |index| index + 1);
     let indent = &source[line_start..start];
-    let indent = if indent.trim().is_empty() { indent } else { "        " };
+    // Widening the markers to whole lines would drag whatever shares the line
+    // into the managed region, and the file would no longer open at all.
+    if !indent.trim().is_empty() {
+        return Err(Error::NoTrailingExpression);
+    }
     let line_end = source[end..]
         .find('\n')
         .map_or(source.len(), |index| end + index + 1);
@@ -131,8 +250,42 @@ pub struct Region {
     pub start: usize,
     /// Offset of the first byte of the line carrying [`END`].
     pub end: usize,
-    /// Indentation of the `BEGIN` marker, reused for the generated block.
-    pub indent: usize,
+    /// Indentation of the `BEGIN` marker, reused verbatim for the generated
+    /// block — tabs stay tabs.
+    pub indent: String,
+    /// The line ending the file uses, so a CRLF file stays CRLF.
+    pub newline: &'static str,
+}
+
+impl Region {
+    /// Width of the indentation, for the line-length budget.
+    pub fn width(&self) -> usize {
+        self.indent.chars().map(|c| if c == '\t' { 4 } else { 1 }).sum()
+    }
+}
+
+/// Whether the managed region holds a comment.
+///
+/// `syn` throws comments away, so saving would delete it. The caller refuses to
+/// write rather than lose it quietly.
+pub fn region_has_comment(source: &str) -> bool {
+    let Ok(region) = locate(source) else {
+        return false;
+    };
+    let inner = &source[region.start..region.end];
+    let literals = string_ranges(inner);
+    let bytes = inner.as_bytes();
+    let mut index = 0;
+    while index + 1 < bytes.len() {
+        if bytes[index] == b'/' && matches!(bytes[index + 1], b'/' | b'*') {
+            let in_literal = literals.iter().any(|range| range.contains(&index));
+            if !in_literal {
+                return true;
+            }
+        }
+        index += 1;
+    }
+    false
 }
 
 /// Locates the managed region of `source`.
@@ -152,12 +305,14 @@ pub fn locate(source: &str) -> Result<Region, Error> {
     let end = source[..end_marker].rfind('\n').map_or(0, |offset| offset + 1);
 
     let line_start = source[..begin].rfind('\n').map_or(0, |offset| offset + 1);
-    let indent = source[line_start..begin].len();
+    let indent = source[line_start..begin].to_string();
+    let newline = if source.contains("\r\n") { "\r\n" } else { "\n" };
 
     Ok(Region {
         start,
         end: end.max(start),
         indent,
+        newline,
     })
 }
 
@@ -167,7 +322,7 @@ pub fn parse(source: &str) -> Result<(Node, Region), Error> {
     // Dedented first: `splice` re-indents every line on the way out, so an
     // opaque expression kept with its file indentation would gain a level of
     // indentation on every save.
-    let inner = dedent(&source[region.start..region.end], region.indent);
+    let inner = dedent(&source[region.start..region.end], &region.indent);
     let inner = inner.trim();
     let expr: Expr = syn::parse_str(inner).map_err(Error::Syntax)?;
     // Spans are relative to the string handed to `parse_str`, so the node's
@@ -175,16 +330,15 @@ pub fn parse(source: &str) -> Result<(Node, Region), Error> {
     Ok((node_from_expr(&expr, inner), region))
 }
 
-/// Removes up to `indent` leading spaces from every line.
-fn dedent(source: &str, indent: usize) -> String {
+/// Removes the region's own indentation from every line.
+fn dedent(source: &str, indent: &str) -> String {
     let mut out = String::with_capacity(source.len());
     for line in source.lines() {
-        let strip = line
-            .chars()
-            .take(indent)
-            .take_while(|character| *character == ' ')
-            .count();
-        out.push_str(&line[strip..]);
+        let stripped = line.strip_prefix(indent).unwrap_or_else(|| {
+            // A line indented less than the markers: take what is there.
+            line.trim_start_matches([' ', '\t'])
+        });
+        out.push_str(stripped);
         out.push('\n');
     }
     out
@@ -194,17 +348,27 @@ fn dedent(source: &str, indent: usize) -> String {
 /// where the markers are.
 pub fn splice(source: &str, block: &str) -> Result<String, Error> {
     let region = locate(source)?;
-    let indent = " ".repeat(region.indent);
+
+    // A line that begins inside a multi-line string literal is part of the
+    // user's data: indenting it would silently change what the string says.
+    let literals = string_ranges(block);
+    let mut offset = 0usize;
 
     let mut rendered = String::with_capacity(block.len() + 16);
     for line in block.lines() {
+        let inside_literal = literals
+            .iter()
+            .any(|range| range.start < offset && offset < range.end);
         if line.is_empty() {
-            rendered.push('\n');
+            rendered.push_str(region.newline);
         } else {
-            rendered.push_str(&indent);
+            if !inside_literal {
+                rendered.push_str(&region.indent);
+            }
             rendered.push_str(line);
-            rendered.push('\n');
+            rendered.push_str(region.newline);
         }
+        offset += line.len() + 1;
     }
 
     let mut out = String::with_capacity(source.len() + rendered.len());
@@ -248,7 +412,7 @@ fn node_from_expr(expr: &Expr, source: &str) -> Node {
         let name = method.method.to_string();
         if name == "child" && method.args.len() == 1 {
             let child = method.args.first().expect("length checked");
-            node.children.push(node_from_expr(child, source));
+            node.push_child(node_from_expr(child, source));
         } else {
             node.calls.push(Call {
                 name,

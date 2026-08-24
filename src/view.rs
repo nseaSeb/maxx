@@ -85,10 +85,10 @@ impl View {
     /// managed region is: the file must come back out as it went in.
     pub fn state_fields(&self) -> Vec<StateField> {
         let mut fields = Vec::new();
-        let Some(offset) = self.source.find("pub struct ") else {
+        let Some(type_name) = view_type_name(&self.source) else {
             return fields;
         };
-        let Some(open) = self.source[offset..].find('{').map(|index| offset + index) else {
+        let Some(open) = struct_brace(&self.source, &type_name) else {
             return fields;
         };
         let Some(close) = matching_brace(&self.source, open) else {
@@ -139,15 +139,20 @@ impl View {
             return Err(format!("le champ « {name} » existe déjà"));
         }
 
+        // The same gate `write_view` applies: this writes the file too.
+        if self.disk_changed() {
+            return Err("fichier modifié en dehors de maxx — rechargez d'abord".into());
+        }
+
         let mut source = std::mem::take(&mut self.source);
-        if let Some(offset) = source.find("pub struct ")
-            && let Some(brace) = source[offset..].find('{').map(|index| offset + index)
-        {
+        let Some(type_name) = view_type_name(&source) else {
+            self.source = source;
+            return Err("aucun « impl Render for » dans ce fichier".into());
+        };
+        if let Some(brace) = struct_brace(&source, &type_name) {
             source = insert_into_block(source, brace, &format!("    {name}: {ty},\n"));
         }
-        if let Some(offset) = source.find("        Self {")
-            && let Some(brace) = source[offset..].find('{').map(|index| offset + index)
-        {
+        if let Some(brace) = self_brace(&source, &type_name) {
             source = insert_into_block(source, brace, &format!("            {name}: {initial},\n"));
         }
         if ty == "SharedString" {
@@ -207,10 +212,16 @@ impl View {
         // `splice` re-indents every line by the marker's own indentation, so
         // the block is rendered flush left and only the width budget knows
         // about that offset.
-        let indent = parser::locate(&self.source)
-            .map_err(|error| error.to_string())?
-            .indent;
-        let block = codegen::render_for_splice(&self.root, indent);
+        // `syn` throws comments away, so rendering the region back would delete
+        // one written inside it. Refusing is better than losing it quietly.
+        if parser::region_has_comment(&self.source) {
+            return Err(
+                "un commentaire se trouve dans la zone gérée — l'enregistrement le perdrait"
+                    .into(),
+            );
+        }
+        let region = parser::locate(&self.source).map_err(|error| error.to_string())?;
+        let block = codegen::render_for_splice(&self.root, region.width());
 
         let mut source = parser::splice(&self.source, &block).map_err(|error| error.to_string())?;
         source = ensure_imports(source, &registry::imports(&self.root));
@@ -233,7 +244,7 @@ fn ensure_imports(source: String, lines: &[&str]) -> String {
     let missing: Vec<&str> = lines
         .iter()
         .copied()
-        .filter(|line| !source.contains(line))
+        .filter(|line| !already_imported(&source, line))
         .collect();
     if missing.is_empty() {
         return source;
@@ -254,6 +265,39 @@ fn ensure_imports(source: String, lines: &[&str]) -> String {
     }
     out.push_str(&source[anchor..]);
     out
+}
+
+/// Whether the item a `use` line brings in is already in scope.
+///
+/// Comparing whole lines misses `use gpui::{Context, px};`, and appending the
+/// line anyway is a duplicate-import error the user then has to fix by hand.
+fn already_imported(source: &str, line: &str) -> bool {
+    if source.contains(line) {
+        return true;
+    }
+    let Some(item) = line
+        .trim()
+        .strip_prefix("use ")
+        .and_then(|rest| rest.strip_suffix(';'))
+    else {
+        return false;
+    };
+    let Some((path, name)) = item.rsplit_once("::") else {
+        return false;
+    };
+
+    // Every `use` of the same path, braced or not, in the file's header.
+    source.lines().any(|candidate| {
+        let candidate = candidate.trim();
+        let Some(rest) = candidate.strip_prefix(&format!("use {path}::")) else {
+            return false;
+        };
+        let rest = rest.trim_end_matches(';');
+        match rest.strip_prefix('{').and_then(|r| r.strip_suffix('}')) {
+            Some(list) => list.split(',').any(|entry| entry.trim() == name),
+            None => rest == name,
+        }
+    })
 }
 
 /// Field names referenced by `Input::new(&self.<field>)` in the tree.
@@ -301,16 +345,16 @@ fn ensure_input_field(source: String, field: &str) -> String {
         ],
     );
 
-    if let Some(offset) = source.find("pub struct ")
-        && let Some(brace) = source[offset..].find('{').map(|index| offset + index)
-    {
+    let Some(type_name) = view_type_name(&source) else {
+        return source;
+    };
+
+    if let Some(brace) = struct_brace(&source, &type_name) {
         let declaration = format!("    pub {field}: Entity<InputState>,\n");
         source = insert_into_block(source, brace, &declaration);
     }
 
-    if let Some(offset) = source.find("        Self {")
-        && let Some(brace) = source[offset..].find('{').map(|index| offset + index)
-    {
+    if let Some(brace) = self_brace(&source, &type_name) {
         let initializer =
             format!("            {field}: cx.new(|cx| InputState::new(window, cx)),\n");
         source = insert_into_block(source, brace, &initializer);
@@ -330,19 +374,21 @@ fn ensure_input_field(source: String, field: &str) -> String {
 /// An existing method is never touched — the stub is a starting point, and what
 /// the developer wrote in it is the whole point of the file.
 fn ensure_handler(source: String, name: &str) -> String {
+    // `cx.listener(..)` needs the parameter the template leaves unused. Done
+    // before the early return below: a handler written by hand still needs the
+    // signature fixed, or the generated call does not compile.
+    let mut source = source.replace(
+        "fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>)",
+        "fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>)",
+    );
+
     if source.contains(&format!("fn {name}(")) {
         return source;
     }
 
     // `Context` and `Window` already come from the template's braced import;
     // adding them again would be a duplicate-import error.
-    let mut source = ensure_imports(source, &["use gpui::ClickEvent;"]);
-
-    // `cx.listener(..)` needs the parameter the template leaves unused.
-    source = source.replace(
-        "fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>)",
-        "fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>)",
-    );
+    source = ensure_imports(source, &["use gpui::ClickEvent;"]);
 
     let Some(type_name) = view_type_name(&source) else {
         return source;
@@ -365,12 +411,39 @@ fn ensure_handler(source: String, name: &str) -> String {
     source
 }
 
-/// The name of the type the file declares.
+/// The name of the type whose `render` carries the managed region.
+///
+/// Taking the first `pub struct` of the file instead sent handler stubs and
+/// state fields into a helper type declared above the view.
 fn view_type_name(source: &str) -> Option<String> {
-    let offset = source.find("pub struct ")? + "pub struct ".len();
+    let offset = source.find("impl Render for ")? + "impl Render for ".len();
     let rest = &source[offset..];
     let end = rest.find(|character: char| !character.is_alphanumeric() && character != '_')?;
-    Some(rest[..end].to_string())
+    let name = rest[..end].to_string();
+    (!name.is_empty()).then_some(name)
+}
+
+/// The `{` opening the declaration of `pub struct <name>`.
+fn struct_brace(source: &str, name: &str) -> Option<usize> {
+    let offset = source.find(&format!("pub struct {name}"))?;
+    source[offset..].find('{').map(|index| offset + index)
+}
+
+/// The `{` opening the `Self {` of that type's `new`.
+fn self_brace(source: &str, name: &str) -> Option<usize> {
+    let offset = source.find(&format!("impl {name} {{"))?;
+    let close = matching_brace(source, source[offset..].find('{').map(|i| offset + i)?)?;
+    let block = &source[offset..close];
+    // `-> Self {` is the signature, not the struct literal.
+    let mut search = 0;
+    while let Some(index) = block[search..].find("Self {") {
+        let at = search + index;
+        if !block[..at].trim_end().ends_with("->") {
+            return Some(offset + at + "Self ".len());
+        }
+        search = at + "Self ".len();
+    }
+    None
 }
 
 /// Inserts `line` just inside the block opening at `brace`, collapsing `{}`

@@ -219,7 +219,9 @@ impl Workspace {
             let extra: Vec<Call> = node
                 .calls
                 .iter()
-                .filter(|call| !registry::covers(spec, &call.name))
+                .filter(|call| {
+                    call.name != crate::model::CHILD_SLOT && !registry::covers(spec, &call.name)
+                })
                 .cloned()
                 .collect();
             if !extra.is_empty() {

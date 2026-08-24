@@ -109,7 +109,7 @@ fn rendering_is_idempotent() {
         if let Base::Known { args, .. } = &mut child.base {
             args.push(Arg::Str(label.into()));
         }
-        node.children.push(child);
+        node.push_child(child);
     }
 
     let once = render(&node, 0);
@@ -174,7 +174,7 @@ fn a_multiline_opaque_expression_does_not_drift() {
     for _ in 0..3 {
         let (node, region) = parser::parse(&file).expect("the region should parse");
         assert!(node.is_opaque());
-        let block = maxx::codegen::render_for_splice(&node, region.indent);
+        let block = maxx::codegen::render_for_splice(&node, region.width());
         file = parser::splice(&file, &block).expect("markers are present");
     }
 
@@ -192,8 +192,8 @@ fn a_multiline_opaque_expression_does_not_drift() {
 #[test]
 fn moving_a_node_into_a_later_sibling_works() {
     let mut root = Node::known("v_flex");
-    root.children.push(Node::known("Label::new"));
-    root.children.push(Node::known("h_flex"));
+    root.push_child(Node::known("Label::new"));
+    root.push_child(Node::known("h_flex"));
 
     assert_eq!(root.move_node(&[0], &[1, 0]), Some(vec![0, 0]));
     assert_eq!(root.children.len(), 1);
@@ -250,8 +250,8 @@ fn an_invalid_field_name_is_refused() {
 fn a_node_cannot_be_dropped_into_itself() {
     let mut root = Node::known("v_flex");
     let mut column = Node::known("v_flex");
-    column.children.push(Node::known("Label::new"));
-    root.children.push(column);
+    column.push_child(Node::known("Label::new"));
+    root.push_child(column);
 
     // Into its own child.
     assert_eq!(root.move_node(&[0], &[0, 0]), None);
@@ -268,7 +268,7 @@ fn dropping_before_an_earlier_sibling_keeps_the_order() {
         if let Base::Known { args, .. } = &mut child.base {
             args.push(Arg::Str(label.into()));
         }
-        root.children.push(child);
+        root.push_child(child);
     }
 
     // Move the third child to the front.
@@ -313,8 +313,8 @@ fn the_selection_survives_an_undo() {
     // Deleting the second child then undoing must not send the selection back
     // to the root when the node it pointed at is there again.
     let mut root = Node::known("v_flex");
-    root.children.push(Node::known("Label::new"));
-    root.children.push(Node::known("Label::new"));
+    root.push_child(Node::known("Label::new"));
+    root.push_child(Node::known("Label::new"));
 
     let before = root.clone();
     root.remove(&[1]).unwrap();
@@ -324,5 +324,81 @@ fn the_selection_survives_an_undo() {
     assert!(
         root.at(&[1]).is_some(),
         "et il est de retour après l'annulation, donc la sélection tient"
+    );
+}
+
+#[test]
+fn interleaved_children_keep_their_place() {
+    // Lifting every child to the end of the chain moved a header below a list.
+    let source = "v_flex().child(entete()).children(self.lignes()).child(pied())";
+    assert_eq!(reparse(source), source);
+
+    let conditional =
+        "v_flex().child(a()).when(self.gros, |d| d.child(b())).child(c())";
+    assert_eq!(reparse(conditional), conditional);
+}
+
+#[test]
+fn a_brace_in_a_comment_does_not_end_a_block() {
+    let source = "impl Accueil {\n    /// Ferme le panneau } et remet tout à zéro.\n    pub fn r(&mut self) {}\n}\n";
+    let open = source.find('{').unwrap();
+    let close = maxx::parser::matching_brace(source, open).unwrap();
+    assert_eq!(&source[close..], "}\n", "le bloc se ferme à la bonne accolade");
+
+    let with_string = "fn f() { let s = \"} pas une accolade\"; }\n";
+    let open = with_string.find('{').unwrap();
+    let close = maxx::parser::matching_brace(with_string, open).unwrap();
+    assert_eq!(&with_string[close..], "}\n");
+}
+
+#[test]
+fn a_multiline_string_is_not_reindented() {
+    let file = file_with("v_flex()");
+    let block = "div().child(\n    \"ligne un\nligne deux\",\n)";
+    let spliced = parser::splice(&file, block).expect("markers are present");
+    assert!(
+        spliced.contains("\nligne deux\","),
+        "les espaces ne doivent pas entrer dans la chaîne :\n{spliced}"
+    );
+}
+
+#[test]
+fn a_length_must_be_a_rust_literal() {
+    let mut node = maxx::registry::instantiate("button").unwrap();
+    let spec = maxx::registry::of(&node).unwrap();
+    let width = maxx::registry::props(spec)
+        .into_iter()
+        .find(|prop| prop.label == "Largeur")
+        .unwrap();
+
+    for refused in [".5", "inf", "NaN", "-inf", "12px", "1.2.3"] {
+        maxx::registry::write(&mut node, width, refused);
+        assert!(
+            maxx::registry::validate(width, refused).is_some(),
+            "« {refused} » doit être signalé"
+        );
+        assert!(
+            !maxx::codegen::render(&node, 0).contains("px("),
+            "« {refused} » ne doit pas atteindre le fichier"
+        );
+    }
+
+    maxx::registry::write(&mut node, width, "120");
+    assert!(maxx::codegen::render(&node, 0).contains(".w(px(120.))"));
+    maxx::registry::write(&mut node, width, "12.5");
+    assert!(maxx::codegen::render(&node, 0).contains(".w(px(12.5))"));
+}
+
+#[test]
+fn a_hand_written_method_argument_is_protected() {
+    let source = "Button::new(\"ok\").label(t!(\"valider\"))";
+    let file = file_with(source);
+    let (node, _) = parser::parse(&file).expect("the region should parse");
+    let spec = maxx::registry::of(&node).unwrap();
+    let label = spec.props.iter().find(|p| p.label == "Libellé").unwrap();
+
+    assert!(
+        !maxx::registry::editable(&node, label),
+        "une expression écrite à la main ne s'édite pas en texte libre"
     );
 }

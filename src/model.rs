@@ -42,6 +42,13 @@ impl Arg {
     }
 }
 
+/// Marks where a child sits among the calls.
+///
+/// A chain can interleave children with other calls — `.child(a).when(..).child(b)` —
+/// and lifting every child to the end would move it in the rendered tree. The
+/// slot keeps the original order; the name cannot collide with a Rust method.
+pub const CHILD_SLOT: &str = "\u{0}child";
+
 /// One `.method(args)` in a builder chain.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Call {
@@ -170,6 +177,22 @@ impl Node {
         }
     }
 
+    /// Positions of the child slots inside `calls`.
+    fn slots(&self) -> Vec<usize> {
+        self.calls
+            .iter()
+            .enumerate()
+            .filter(|(_, call)| call.name == CHILD_SLOT)
+            .map(|(index, _)| index)
+            .collect()
+    }
+
+    /// Appends a child and the slot that records where it goes.
+    pub fn push_child(&mut self, child: Node) {
+        self.calls.push(Call::bare(CHILD_SLOT));
+        self.children.push(child);
+    }
+
     /// Borrows the node at `path`, or `None` if the path leaves the tree.
     pub fn at(&self, path: &[usize]) -> Option<&Node> {
         match path.split_first() {
@@ -200,6 +223,9 @@ impl Node {
         if *index > parent.children.len() {
             return false;
         }
+        let slots = parent.slots();
+        let at = slots.get(*index).copied().unwrap_or(parent.calls.len());
+        parent.calls.insert(at, Call::bare(CHILD_SLOT));
         parent.children.insert(*index, node);
         true
     }
@@ -211,6 +237,9 @@ impl Node {
         let parent = self.at_mut(parent_path)?;
         if *index >= parent.children.len() {
             return None;
+        }
+        if let Some(at) = parent.slots().get(*index).copied() {
+            parent.calls.remove(at);
         }
         Some(parent.children.remove(*index))
     }

@@ -4,7 +4,7 @@
 //! designer rewrites these files constantly, so the layout has to be stable and
 //! diff-friendly — one builder call per line, indentation by depth.
 
-use crate::model::{Base, Node, write_args};
+use crate::model::{Base, CHILD_SLOT, Node, write_args};
 
 /// Width beyond which a chain is broken across lines.
 const WIDTH: usize = 76;
@@ -40,12 +40,22 @@ fn render_with(node: &Node, depth: usize, offset: usize) -> String {
 fn render_inline(node: &Node) -> String {
     let mut out = String::new();
     write_head(&mut out, node);
+    let mut children = node.children.iter();
     for call in &node.calls {
+        if call.name == CHILD_SLOT {
+            if let Some(child) = children.next() {
+                out.push_str(".child(");
+                out.push_str(&render_inline(child));
+                out.push(')');
+            }
+            continue;
+        }
         out.push('.');
         out.push_str(&call.name);
         write_args(&mut out, &call.args);
     }
-    for child in &node.children {
+    // Children added without a slot — built programmatically — go last.
+    for child in children {
         out.push_str(".child(");
         out.push_str(&render_inline(child));
         out.push(')');
@@ -59,7 +69,14 @@ fn render_block(node: &Node, depth: usize, offset: usize) -> String {
     let mut out = String::new();
     write_head(&mut out, node);
 
+    let mut children = node.children.iter();
     for call in &node.calls {
+        if call.name == CHILD_SLOT {
+            if let Some(child) = children.next() {
+                write_child(&mut out, child, depth, offset, &inner);
+            }
+            continue;
+        }
         out.push('\n');
         out.push_str(&inner);
         out.push('.');
@@ -67,27 +84,33 @@ fn render_block(node: &Node, depth: usize, offset: usize) -> String {
         write_args(&mut out, &call.args);
     }
 
-    for child in &node.children {
-        let rendered = render_with(child, depth + 1, offset);
-        out.push('\n');
-        out.push_str(&inner);
-        if rendered.contains('\n') {
-            // Break the argument onto its own line so the nested chain keeps
-            // its own indentation column.
-            out.push_str(".child(\n");
-            out.push_str(&INDENT.repeat(depth + 2));
-            out.push_str(&render_with(child, depth + 2, offset));
-            out.push_str(",\n");
-            out.push_str(&inner);
-            out.push(')');
-        } else {
-            out.push_str(".child(");
-            out.push_str(&rendered);
-            out.push(')');
-        }
+    // Children added without a slot — built programmatically — go last.
+    for child in children {
+        write_child(&mut out, child, depth, offset, &inner);
     }
 
     out
+}
+
+/// Writes one `.child(..)`, on its own line when the child does not fit.
+fn write_child(out: &mut String, child: &Node, depth: usize, offset: usize, inner: &str) {
+    let rendered = render_with(child, depth + 1, offset);
+    out.push('\n');
+    out.push_str(inner);
+    if rendered.contains('\n') {
+        // Break the argument onto its own line so the nested chain keeps its
+        // own indentation column.
+        out.push_str(".child(\n");
+        out.push_str(&INDENT.repeat(depth + 2));
+        out.push_str(&render_with(child, depth + 2, offset));
+        out.push_str(",\n");
+        out.push_str(inner);
+        out.push(')');
+    } else {
+        out.push_str(".child(");
+        out.push_str(&rendered);
+        out.push(')');
+    }
 }
 
 /// Writes the head of the chain: the constructor, or the verbatim source of an
