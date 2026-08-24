@@ -18,7 +18,10 @@ pub fn create_project(root: &Path, name: &str) -> io::Result<()> {
         ));
     }
     std::fs::create_dir_all(root.join("src/ui"))?;
+    std::fs::create_dir_all(root.join(".cargo"))?;
     std::fs::write(root.join("Cargo.toml"), cargo_toml(&crate_name(name)))?;
+    std::fs::write(root.join(".cargo/config.toml"), cargo_config())?;
+    std::fs::write(root.join(".gitignore"), "/target\n/.cargo\n")?;
     std::fs::write(root.join("src/main.rs"), main_rs())?;
     std::fs::write(root.join("src/ui/mod.rs"), "pub mod accueil;\n")?;
     std::fs::write(root.join("src/ui/accueil.rs"), view_rs("Accueil"))?;
@@ -104,6 +107,23 @@ gpui-component = "0.5.1"
 [profile.dev.package."*"]
 opt-level = 2
 "#
+    )
+}
+
+/// Points the project at the cache every maxx project shares.
+///
+/// The path is absolute, so it is machine-local — hence the `.gitignore` entry.
+/// Losing it costs a rebuild, nothing more.
+fn cargo_config() -> String {
+    format!(
+        r#"# Écrit par maxx. Tous les projets maxx compilent dans le même
+# répertoire : gpui et gpui-component représentent environ 750 crates, et un
+# projet qui a son propre `target/` les recompile intégralement. Ce fichier est
+# propre à cette machine, d'où son entrée dans .gitignore.
+[build]
+target-dir = "{}"
+"#,
+        crate::run::shared_target_dir().display()
     )
 }
 

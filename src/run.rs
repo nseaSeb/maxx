@@ -35,8 +35,30 @@ pub enum State {
 
 /// Starts `cargo run` in `root` and returns the channel its output arrives on.
 pub fn start(root: PathBuf) -> Receiver<Message> {
+    spawn_cargo(root, "run")
+}
+
+/// Starts `cargo build` in `root`, to pay the cost of the dependency tree while
+/// the user is still drawing.
+pub fn prewarm(root: PathBuf) -> Receiver<Message> {
+    spawn_cargo(root, "build")
+}
+
+/// The directory every generated project compiles into.
+///
+/// Sharing it is what makes the second project cheap: `gpui` and
+/// `gpui-component` are around 750 crates, and a project with its own `target/`
+/// recompiles all of them. The path is written into the project's
+/// `.cargo/config.toml` rather than passed as an environment variable, so a
+/// `cargo run` typed in a terminal lands in the same cache.
+pub fn shared_target_dir() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+    PathBuf::from(home).join("Library/Caches/maxx/target")
+}
+
+fn spawn_cargo(root: PathBuf, subcommand: &'static str) -> Receiver<Message> {
     let (sender, receiver) = channel();
-    std::thread::spawn(move || run(root, sender));
+    std::thread::spawn(move || run(root, subcommand, sender));
     receiver
 }
 
@@ -53,9 +75,9 @@ pub fn stop(pid: u32) {
     let _ = Command::new("kill").arg("-TERM").arg(pid.to_string()).status();
 }
 
-fn run(root: PathBuf, sender: Sender<Message>) {
+fn run(root: PathBuf, subcommand: &str, sender: Sender<Message>) {
     let child = Command::new("cargo")
-        .arg("run")
+        .arg(subcommand)
         .current_dir(&root)
         // Colour codes would end up in the panel as escape sequences.
         .env("CARGO_TERM_COLOR", "never")
@@ -66,7 +88,7 @@ fn run(root: PathBuf, sender: Sender<Message>) {
     let mut child = match child {
         Ok(child) => child,
         Err(error) => {
-            let _ = sender.send(Message::Line(format!("cargo run : {error}")));
+            let _ = sender.send(Message::Line(format!("cargo {subcommand} : {error}")));
             let _ = sender.send(Message::Finished(false));
             return;
         }

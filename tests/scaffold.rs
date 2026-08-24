@@ -281,3 +281,18 @@ fn an_uncatalogued_call_is_reported_as_such() {
     assert!(maxx::registry::covers(spec, "w"), "les styles communs comptent");
     assert!(!maxx::registry::covers(spec, "shadow_lg"));
 }
+
+#[test]
+fn a_generated_project_shares_the_build_cache() {
+    let root = scratch("maxx_cache_a");
+    scaffold::create_project(&root, "cache_a").unwrap();
+
+    let config = std::fs::read_to_string(root.join(".cargo/config.toml")).unwrap();
+    assert!(config.contains("[build]"));
+    assert!(config.contains(&maxx::run::shared_target_dir().display().to_string()));
+
+    // The cache is machine-local, so it must not follow the project into git.
+    let ignore = std::fs::read_to_string(root.join(".gitignore")).unwrap();
+    assert!(ignore.contains("/.cargo"));
+    assert!(ignore.contains("/target"));
+}

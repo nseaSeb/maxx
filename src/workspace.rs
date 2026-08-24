@@ -462,9 +462,19 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Builds the dependency tree in the background, so the first run does not
+    /// have to.
+    pub fn prewarm_project(&mut self, cx: &mut Context<Self>) {
+        self.start_cargo(true, cx);
+    }
+
     /// Runs `cargo run` on the open project and streams its output into the
     /// bottom panel.
     pub fn run_project(&mut self, cx: &mut Context<Self>) {
+        self.start_cargo(false, cx);
+    }
+
+    fn start_cargo(&mut self, prewarm: bool, cx: &mut Context<Self>) {
         let Some(project) = self.project.as_ref() else {
             return;
         };
@@ -483,7 +493,11 @@ impl Workspace {
         self.show_output = true;
         self.message = None;
 
-        let receiver = crate::run::start(root);
+        let receiver = if prewarm {
+            crate::run::prewarm(root)
+        } else {
+            crate::run::start(root)
+        };
         self.run_task = Some(cx.spawn(async move |workspace, cx| {
             loop {
                 let mut lines = Vec::new();

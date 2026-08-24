@@ -64,6 +64,23 @@ livre le toolchain Metal en composant séparé, et sans cette feature le build
 échoue sur un outil `metal` introuvable. Les projets générés portent la même
 feature, pour la même raison.
 
+## Compilation des projets générés
+
+`gpui` et `gpui-component` représentent environ 750 crates. Un projet qui a son
+propre `target/` les recompile intégralement, ce qui coûte plusieurs minutes à
+chaque nouveau projet.
+
+Chaque projet généré reçoit donc un `.cargo/config.toml` qui pointe vers un
+cache commun, `~/Library/Caches/maxx/target` : le premier projet paie le prix,
+les suivants sont quasi instantanés. Comme le fichier porte un chemin absolu, il
+est propre à la machine et se trouve dans le `.gitignore` du projet — le perdre
+ne coûte qu'une recompilation. Un `cargo run` tapé dans un terminal lit le même
+fichier, donc terminal et maxx partagent le cache.
+
+À la création d'un projet, `cargo build` démarre en arrière-plan pour payer ce
+prix pendant que vous dessinez. `Exécution > Préparer les dépendances` le
+relance à la demande.
+
 ## Organisation
 
 | Fichier | Rôle |

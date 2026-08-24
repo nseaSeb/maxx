@@ -68,6 +68,8 @@ pub fn app_menus() -> Vec<Menu> {
             items: vec![
                 MenuItem::action("Lancer le projet", RunProject),
                 MenuItem::action("Arrêter", StopProject),
+                MenuItem::separator(),
+                MenuItem::action("Préparer les dépendances", PrewarmProject),
             ],
         },
         Menu {

@@ -42,6 +42,7 @@ actions!(
         // Run menu
         RunProject,
         StopProject,
+        PrewarmProject,
         // Go menu
         RevealInFinder,
         // Window menu
@@ -109,6 +110,9 @@ pub fn register_handlers(cx: &mut App) {
     });
     cx.on_action(|_: &RunProject, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.run_project(cx));
+    });
+    cx.on_action(|_: &PrewarmProject, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.prewarm_project(cx));
     });
     cx.on_action(|_: &StopProject, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.stop_project(cx));
@@ -203,7 +207,14 @@ fn new_project(_: &NewProject, cx: &mut App) {
                 .map(|name| name.to_string_lossy().into_owned())
                 .unwrap_or_else(|| "mon_app".into());
             match crate::scaffold::create_project(&path, &name) {
-                Ok(()) => workspace::open_folder(path, cx),
+                Ok(()) => {
+                    workspace::open_folder(path, cx);
+                    // The dependency tree costs minutes the first time; pay it
+                    // now, while there is drawing to do.
+                    workspace::with_active(cx, |workspace, _, cx| {
+                        workspace.prewarm_project(cx)
+                    });
+                }
                 Err(error) => eprintln!("création du projet impossible : {error}"),
             }
         })
