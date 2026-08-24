@@ -38,7 +38,7 @@ pub fn app_menus() -> Vec<Menu> {
                 MenuItem::action("Enregistrer", Save),
                 MenuItem::separator(),
                 MenuItem::action("Fermer le projet", CloseFolder),
-                MenuItem::action("Fermer la fenêtre", CloseWindow),
+                MenuItem::action("Fermer la vue", CloseWindow),
             ],
         },
         Menu {

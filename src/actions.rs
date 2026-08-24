@@ -94,7 +94,14 @@ pub fn register_handlers(cx: &mut App) {
         });
     });
     cx.on_action(|_: &CloseWindow, cx: &mut App| {
-        with_active_workspace(cx, |_, window, _| window.remove_window());
+        with_active_workspace(cx, |workspace, window, cx| {
+            // ⌘W closes the front tab first, the window only once there are no
+            // views left — the habit every editor gives you.
+            match workspace.active_index() {
+                Some(index) => workspace.close_view(index, cx),
+                None => window.remove_window(),
+            }
+        });
     });
 
     cx.on_action(|_: &ToggleProjectPanel, cx: &mut App| {

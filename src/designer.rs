@@ -24,7 +24,7 @@ use crate::workspace::Workspace;
 impl Workspace {
     /// The designer, or an invitation to open a view.
     pub(crate) fn render_designer(&self, cx: &mut Context<Self>) -> AnyElement {
-        if self.view.is_none() {
+        if self.view().is_none() {
             return div()
                 .flex()
                 .flex_1()
@@ -35,21 +35,82 @@ impl Workspace {
                 .into_any_element();
         }
 
-        // Not `h_flex`: it centres its children vertically, which leaves the
-        // side panel floating in the middle instead of spanning the window.
+        v_flex()
+            .flex_1()
+            .overflow_hidden()
+            .child(self.render_tabs(cx))
+            .child(
+                // Not `h_flex`: it centres its children vertically, which would
+                // leave the side panel floating in the middle of the window.
+                div()
+                    .flex()
+                    .flex_row()
+                    .flex_1()
+                    .overflow_hidden()
+                    .child(self.render_canvas(cx))
+                    .child(self.render_side_panels(cx)),
+            )
+            .into_any_element()
+    }
+
+    /// One tab per open view.
+    fn render_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let tabs: Vec<(usize, SharedString, bool, bool)> = self
+            .open_views()
+            .iter()
+            .enumerate()
+            .map(|(index, view)| {
+                (
+                    index,
+                    SharedString::from(view.name()),
+                    self.active_index() == Some(index),
+                    view.dirty(),
+                )
+            })
+            .collect();
+
         div()
             .flex()
             .flex_row()
-            .flex_1()
-            .overflow_hidden()
-            .child(self.render_canvas(cx))
-            .child(self.render_side_panels(cx))
-            .into_any_element()
+            .h(px(28.))
+            .flex_none()
+            .bg(rgb(theme::PANEL_BG))
+            .border_b_1()
+            .border_color(rgb(theme::BORDER))
+            .children(tabs.into_iter().map(|(index, name, active, dirty)| {
+                h_flex()
+                    .id(SharedString::from(format!("tab-{index}")))
+                    .gap_1()
+                    .px_3()
+                    .cursor_pointer()
+                    .bg(rgb(if active { theme::BG } else { theme::PANEL_BG }))
+                    .border_r_1()
+                    .border_color(rgb(theme::BORDER))
+                    .text_xs()
+                    .text_color(rgb(if active { theme::TEXT } else { theme::TEXT_MUTED }))
+                    .child(name)
+                    .when(dirty, |this| this.child("•"))
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("tab-close-{index}")))
+                            .px_1()
+                            .rounded_sm()
+                            .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                            .child("×")
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                cx.stop_propagation();
+                                this.close_view(index, cx);
+                            })),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.activate_view(index, cx);
+                    }))
+            }))
     }
 
     /// The drawing surface: the tree rendered with real components.
     fn render_canvas(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let view = self.view.as_ref().expect("checked by the caller");
+        let view = self.view().expect("checked by the caller");
         div()
             .flex()
             .flex_1()
@@ -82,7 +143,7 @@ impl Workspace {
 
     /// The node tree, mirroring the canvas selection.
     fn render_tree(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let view = self.view.as_ref().expect("checked by the caller");
+        let view = self.view().expect("checked by the caller");
         let mut rows: Vec<(Path, SharedString, usize, bool)> = Vec::new();
         view.root.walk(&mut |path, node| {
             rows.push((
@@ -116,7 +177,7 @@ impl Workspace {
 
     /// Property editor for the selected node, driven by the catalogue.
     fn render_inspector(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let view = self.view.as_ref().expect("checked by the caller");
+        let view = self.view().expect("checked by the caller");
         let node = view.selected();
         let spec = registry::of(node);
 

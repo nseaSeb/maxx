@@ -41,7 +41,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use crate::actions::OpenFolder;
-use crate::model::{Node, Path as NodePath};
+use crate::model::Path as NodePath;
 use crate::registry::Kind;
 use crate::project::{Entry, Project, flatten};
 use crate::registry;
@@ -57,13 +57,10 @@ pub struct Workspace {
     selected: Option<PathBuf>,
     show_panel: bool,
     show_status_bar: bool,
-    /// The view currently being designed, if the selected file is one.
-    pub view: Option<View>,
-    /// Undo stack: whole-tree snapshots, the cheap and correct option at this
-    /// size.
-    past: Vec<Node>,
-    /// Redo stack.
-    future: Vec<Node>,
+    /// Views open in the workshop, in tab order.
+    views: Vec<View>,
+    /// Index of the view being designed.
+    active: Option<usize>,
     /// Last error shown in the status bar.
     message: Option<SharedString>,
     /// Live text fields of the inspector, one per editable text property of the
@@ -95,9 +92,8 @@ impl Workspace {
             selected: None,
             show_panel: true,
             show_status_bar: true,
-            view: None,
-            past: Vec::new(),
-            future: Vec::new(),
+            views: Vec::new(),
+            active: None,
             message: None,
             prop_inputs: Vec::new(),
             revision: 0,
@@ -110,6 +106,61 @@ impl Workspace {
         };
         workspace.refresh_entries();
         workspace
+    }
+
+    /// The view being designed.
+    pub fn view(&self) -> Option<&View> {
+        self.views.get(self.active?)
+    }
+
+    /// The view being designed, mutably.
+    pub fn view_mut(&mut self) -> Option<&mut View> {
+        self.views.get_mut(self.active?)
+    }
+
+    /// Every open view, in tab order.
+    pub fn open_views(&self) -> &[View] {
+        &self.views
+    }
+
+    /// Index of the view being designed.
+    pub fn active_index(&self) -> Option<usize> {
+        self.active
+    }
+
+    /// Brings the view at `index` to the front.
+    pub fn activate_view(&mut self, index: usize, cx: &mut Context<Self>) {
+        if index < self.views.len() {
+            self.active = Some(index);
+            self.revision += 1;
+            self.message = None;
+            cx.notify();
+        }
+    }
+
+    /// Closes the view at `index`. A view with unsaved edits is kept, with a
+    /// message, rather than discarded.
+    pub fn close_view(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(view) = self.views.get(index) else {
+            return;
+        };
+        if view.dirty() {
+            self.message = Some(SharedString::from(format!(
+                "{} n'est pas enregistré — ⌘S avant de fermer",
+                view.name()
+            )));
+            cx.notify();
+            return;
+        }
+        self.views.remove(index);
+        self.active = match self.active {
+            Some(_) if self.views.is_empty() => None,
+            Some(active) if active >= index && active > 0 => Some(active - 1),
+            Some(active) => Some(active.min(self.views.len() - 1)),
+            None => None,
+        };
+        self.revision += 1;
+        cx.notify();
     }
 
     /// The project this workspace holds, if any.
@@ -131,7 +182,7 @@ impl Workspace {
     /// Drops the project and returns the window to the welcome screen, so a
     /// later `Open Folder…` can reuse it.
     pub fn close_project(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.view.as_ref().is_some_and(|view| view.dirty()) {
+        if self.view().is_some_and(|view| view.dirty()) {
             self.message = Some(SharedString::from(
                 "vue non enregistrée — ⌘S avant de fermer le projet",
             ));
@@ -139,9 +190,10 @@ impl Workspace {
             return;
         }
         self.project = None;
-        self.view = None;
-        self.past.clear();
-        self.future.clear();
+        self.views.clear();
+        self.active = None;
+        
+        
         self.entries.clear();
         self.expanded.clear();
         self.selected = None;
@@ -170,25 +222,20 @@ impl Workspace {
     }
 
     fn select_file(&mut self, path: PathBuf, cx: &mut Context<Self>) {
-        if self.view.as_ref().is_some_and(|view| view.dirty()) {
-            self.message = Some(SharedString::from(
-                "vue non enregistrée — ⌘S pour l'écrire, ⌘Z pour revenir en arrière",
-            ));
-            cx.notify();
-            return;
-        }
         self.message = None;
         if path.extension().is_some_and(|extension| extension == "rs") {
-            match View::load(&path) {
-                Ok(view) => {
-                    self.view = Some(view);
-                    self.past.clear();
-                    self.future.clear();
-                    self.revision += 1;
-                }
-                Err(error) => {
-                    self.view = None;
-                    self.message = Some(SharedString::from(error));
+            // Already open: just bring its tab forward.
+            if let Some(index) = self.views.iter().position(|view| view.path == path) {
+                self.active = Some(index);
+                self.revision += 1;
+            } else {
+                match View::load(&path) {
+                    Ok(view) => {
+                        self.views.push(view);
+                        self.active = Some(self.views.len() - 1);
+                        self.revision += 1;
+                    }
+                    Err(error) => self.message = Some(SharedString::from(error)),
                 }
             }
         }
@@ -198,7 +245,7 @@ impl Workspace {
 
     /// Selects a node of the tree being designed.
     pub fn select(&mut self, path: NodePath, cx: &mut Context<Self>) {
-        if let Some(view) = self.view.as_mut() {
+        if let Some(view) = self.view_mut() {
             view.selected = path;
             cx.notify();
         }
@@ -220,8 +267,7 @@ impl Workspace {
     /// holding both `&mut self` and a `Window`.
     fn sync_prop_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let key = self
-            .view
-            .as_ref()
+            .view()
             .map(|view| (self.revision, view.selected.clone()));
         if key == self.synced {
             return;
@@ -229,11 +275,13 @@ impl Workspace {
         self.synced = key;
         self.prop_inputs.clear();
 
-        let Some(view) = self.view.as_ref() else {
+        // The selected node is cloned rather than borrowed: `self.view()`
+        // borrows the whole workspace, and the loop below needs
+        // `self.prop_inputs` mutably.
+        let Some(node) = self.view().map(|view| view.selected().clone()) else {
             return;
         };
-        let node = view.selected();
-        let Some(spec) = crate::registry::of(node) else {
+        let Some(spec) = crate::registry::of(&node) else {
             return;
         };
 
@@ -241,11 +289,11 @@ impl Workspace {
             if !matches!(
                 prop.kind,
                 Kind::Text | Kind::Field | Kind::Handler | Kind::Number | Kind::Color
-            ) || !crate::registry::editable(node, prop)
+            ) || !crate::registry::editable(&node, prop)
             {
                 continue;
             }
-            let value = crate::registry::read(node, prop).unwrap_or_default();
+            let value = crate::registry::read(&node, prop).unwrap_or_default();
             let state = cx.new(|cx| InputState::new(window, cx).default_value(value));
             cx.subscribe(&state, move |this, state, event: &InputEvent, cx| {
                 if matches!(event, InputEvent::Change) {
@@ -260,7 +308,7 @@ impl Workspace {
 
     /// Removes a call from the selected node.
     pub fn remove_call_at_selection(&mut self, name: &str, cx: &mut Context<Self>) {
-        let Some(view) = self.view.as_ref() else {
+        let Some(view) = self.view() else {
             return;
         };
         let selected = view.selected.clone();
@@ -268,7 +316,7 @@ impl Workspace {
             return;
         }
         self.checkpoint();
-        let view = self.view.as_mut().expect("just borrowed");
+        let view = self.view_mut().expect("just borrowed");
         if let Some(node) = view.root.at_mut(&selected) {
             node.remove_call(name);
         }
@@ -279,7 +327,7 @@ impl Workspace {
     /// undo checkpoint per keystroke, and no revision bump, so `sync` leaves the
     /// caret alone.
     fn edit_prop_text(&mut self, prop: &'static crate::registry::Prop, value: &str, cx: &mut Context<Self>) {
-        let Some(view) = self.view.as_mut() else {
+        let Some(view) = self.view_mut() else {
             return;
         };
         let selected = view.selected.clone();
@@ -296,21 +344,22 @@ impl Workspace {
     /// Records the current tree so the change about to be made can be undone.
     fn checkpoint(&mut self) {
         self.revision += 1;
-        if let Some(view) = self.view.as_ref() {
-            self.past.push(view.root.clone());
-            self.future.clear();
+        if let Some(view) = self.view_mut() {
+            let snapshot = view.root.clone();
+            view.past.push(snapshot);
+            view.future.clear();
         }
     }
 
     /// Writes a property of the selected node.
     pub fn edit_prop(&mut self, prop: &'static crate::registry::Prop, value: &str, cx: &mut Context<Self>) {
-        let Some(view) = self.view.as_mut() else {
+        let Some(view) = self.view_mut() else {
             return;
         };
         let selected = view.selected.clone();
         if view.root.at(&selected).is_some() {
             self.checkpoint();
-            let view = self.view.as_mut().expect("just borrowed");
+            let view = self.view_mut().expect("just borrowed");
             if let Some(node) = view.root.at_mut(&selected) {
                 registry::write(node, prop, value);
             }
@@ -324,7 +373,7 @@ impl Workspace {
         let Some(mut node) = registry::instantiate(id) else {
             return;
         };
-        let Some(view) = self.view.as_ref() else {
+        let Some(view) = self.view() else {
             return;
         };
 
@@ -368,7 +417,7 @@ impl Workspace {
         };
 
         self.checkpoint();
-        let view = self.view.as_mut().expect("just borrowed");
+        let view = self.view_mut().expect("just borrowed");
         if view.root.insert(&destination, node) {
             view.selected = destination;
         }
@@ -475,7 +524,7 @@ impl Workspace {
                 let Some(mut node) = registry::instantiate(id) else {
                     return;
                 };
-                let Some(view) = self.view.as_ref() else {
+                let Some(view) = self.view() else {
                     return;
                 };
                 if id == "input" {
@@ -485,7 +534,7 @@ impl Workspace {
                     }
                 }
                 self.checkpoint();
-                let view = self.view.as_mut().expect("just borrowed");
+                let view = self.view_mut().expect("just borrowed");
                 if view.root.insert(&destination, node) {
                     view.selected = destination;
                 }
@@ -503,12 +552,12 @@ impl Workspace {
                     return;
                 }
                 self.checkpoint();
-                let view = self.view.as_mut().expect("a view is open to be dropped on");
+                let view = self.view_mut().expect("a view is open to be dropped on");
                 match view.root.move_node(&from, &destination) {
                     Some(landed) => view.selected = landed,
                     None => {
                         // Nothing moved: drop the checkpoint we just took.
-                        self.past.pop();
+                        view.past.pop();
                     }
                 }
             }
@@ -519,7 +568,7 @@ impl Workspace {
     /// Gives the selected node a handler, named after it, if its component has
     /// an action property and none is set yet. Bound to double-click.
     pub fn add_handler_to_selection(&mut self, cx: &mut Context<Self>) {
-        let Some(view) = self.view.as_ref() else {
+        let Some(view) = self.view() else {
             return;
         };
         let node = view.selected();
@@ -540,7 +589,7 @@ impl Workspace {
         let name = registry::suggested_handler(node);
         let selected = view.selected.clone();
         self.checkpoint();
-        let view = self.view.as_mut().expect("just borrowed");
+        let view = self.view_mut().expect("just borrowed");
         if let Some(node) = view.root.at_mut(&selected) {
             registry::write(node, prop, &name);
         }
@@ -552,7 +601,7 @@ impl Workspace {
 
     /// Deletes the selected node. The root is never deleted.
     pub fn delete_selected(&mut self, cx: &mut Context<Self>) {
-        let Some(view) = self.view.as_ref() else {
+        let Some(view) = self.view() else {
             return;
         };
         if view.selected.is_empty() {
@@ -560,7 +609,7 @@ impl Workspace {
         }
         let selected = view.selected.clone();
         self.checkpoint();
-        let view = self.view.as_mut().expect("just borrowed");
+        let view = self.view_mut().expect("just borrowed");
         if view.root.remove(&selected).is_some() {
             view.selected = selected[..selected.len() - 1].to_vec();
         }
@@ -604,7 +653,7 @@ impl Workspace {
 
     /// Writes the view back to its file.
     pub fn save_view(&mut self, cx: &mut Context<Self>) {
-        let Some(view) = self.view.as_mut() else {
+        let Some(view) = self.view_mut() else {
             return;
         };
         self.message = match view.save() {
@@ -616,12 +665,13 @@ impl Workspace {
 
     /// Steps back one edit.
     pub fn undo(&mut self, cx: &mut Context<Self>) {
-        let Some(view) = self.view.as_mut() else {
+        self.revision += 1;
+        let Some(view) = self.view_mut() else {
             return;
         };
-        if let Some(previous) = self.past.pop() {
-            self.revision += 1;
-            self.future.push(std::mem::replace(&mut view.root, previous));
+        if let Some(previous) = view.past.pop() {
+            let replaced = std::mem::replace(&mut view.root, previous);
+            view.future.push(replaced);
             view.selected.clear();
             cx.notify();
         }
@@ -629,12 +679,13 @@ impl Workspace {
 
     /// Steps forward one edit.
     pub fn redo(&mut self, cx: &mut Context<Self>) {
-        let Some(view) = self.view.as_mut() else {
+        self.revision += 1;
+        let Some(view) = self.view_mut() else {
             return;
         };
-        if let Some(next) = self.future.pop() {
-            self.revision += 1;
-            self.past.push(std::mem::replace(&mut view.root, next));
+        if let Some(next) = view.future.pop() {
+            let replaced = std::mem::replace(&mut view.root, next);
+            view.past.push(replaced);
             view.selected.clear();
             cx.notify();
         }
@@ -887,7 +938,7 @@ impl Workspace {
     }
 
     fn render_status_bar(&self) -> impl IntoElement {
-        let label = match (&self.message, &self.view, &self.project) {
+        let label = match (&self.message, &self.view(), &self.project) {
             (Some(message), _, _) => message.clone(),
             (None, Some(view), _) => SharedString::from(format!(
                 "{}{} · {} nœuds",

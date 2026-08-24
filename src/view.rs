@@ -22,6 +22,10 @@ pub struct View {
     pub selected: crate::model::Path,
     /// The tree as it stands on disk, to tell whether there is anything to save.
     saved: Node,
+    /// Undo stack for this view: whole-tree snapshots.
+    pub past: Vec<Node>,
+    /// Redo stack for this view.
+    pub future: Vec<Node>,
 }
 
 impl View {
@@ -35,6 +39,8 @@ impl View {
             saved: root.clone(),
             root,
             selected: Vec::new(),
+            past: Vec::new(),
+            future: Vec::new(),
         })
     }
 
