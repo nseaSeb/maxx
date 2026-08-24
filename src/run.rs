@@ -94,6 +94,15 @@ pub fn open_editor(path: &Path) {
     let _ = Command::new("open").arg("-a").arg("Zed").arg(path).status();
 }
 
+/// Opens `path` in Zed at `line`.
+pub fn open_editor_at(path: &Path, line: usize) {
+    let target = format!("{}:{}", path.display(), line);
+    if Command::new("zed").arg(&target).status().is_ok() {
+        return;
+    }
+    let _ = Command::new("open").arg("-a").arg("Zed").arg(path).status();
+}
+
 /// Kills a run by its operating system pid.
 ///
 /// The child is a `cargo` process that has itself spawned the application, so

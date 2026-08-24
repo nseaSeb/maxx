@@ -64,6 +64,27 @@ livre le toolchain Metal en composant séparé, et sans cette feature le build
 échoue sur un outil `metal` introuvable. Les projets générés portent la même
 feature, pour la même raison.
 
+## État de la vue
+
+Une propriété texte est un littéral par défaut. Le bouton `abc` de l'inspecteur
+la fait lire un champ de la vue à la place :
+
+```rust
+Label::new("Titre")                 →   Label::new(self.titre.clone())
+```
+
+Les champs se déclarent dans la section « État », qui les insère dans la struct
+et dans `new`. Un `usize` ou un `f32` est rendu par `.to_string()`, un
+`SharedString` par `.clone()`.
+
+Une propriété liée n'est plus éditable en texte libre : l'écraser par un
+littéral changerait silencieusement ce que le code veut dire.
+
+Ce qui reste à écrire à la main, et c'est voulu : le corps des méthodes. Le
+bouton `→ Zed` à côté de la propriété Action ouvre l'éditeur sur la ligne de la
+méthode. Et il ne faut pas oublier `cx.notify()` — sans lui le champ change et
+l'écran ne bouge pas.
+
 ## Compilation des projets générés
 
 `gpui` et `gpui-component` représentent environ 750 crates. Un projet qui a son

@@ -296,3 +296,92 @@ fn a_generated_project_shares_the_build_cache() {
     assert!(ignore.contains("/.cargo"));
     assert!(ignore.contains("/target"));
 }
+
+#[test]
+fn a_state_field_is_declared_and_initialised() {
+    let root = scratch("maxx_state");
+    scaffold::create_project(&root, "essai").unwrap();
+    let path = root.join("src/ui/accueil.rs");
+
+    let mut view = View::load(&path).unwrap();
+    assert!(view.state_fields().is_empty());
+
+    view.add_state_field("message", "SharedString", "\"\".into()")
+        .expect("le champ doit être ajouté");
+
+    let fields = view.state_fields();
+    assert_eq!(fields.len(), 1);
+    assert_eq!(fields[0].name, "message");
+    assert_eq!(fields[0].ty, "SharedString");
+    assert_eq!(fields[0].read_expression(), "self.message.clone()");
+
+    let source = std::fs::read_to_string(&path).unwrap();
+    assert!(source.contains("message: SharedString,"));
+    assert!(source.contains("message: \"\".into(),"));
+    assert!(source.contains("use gpui::SharedString;"));
+
+    // A second field with the same name is refused rather than duplicated.
+    assert!(view.add_state_field("message", "usize", "0").is_err());
+    assert!(view.add_state_field("mon champ", "usize", "0").is_err());
+}
+
+#[test]
+fn a_property_can_read_a_state_field() {
+    let mut label = maxx::registry::instantiate("label").unwrap();
+    let spec = maxx::registry::of(&label).unwrap();
+    let text = spec
+        .props
+        .iter()
+        .find(|prop| prop.label == "Texte")
+        .unwrap();
+
+    assert_eq!(maxx::registry::read_binding(&label, text), None);
+
+    maxx::registry::write_binding(&mut label, text, Some("self.message.clone()"));
+    assert_eq!(
+        maxx::codegen::render(&label, 0),
+        "Label::new(self.message.clone())"
+    );
+    assert_eq!(
+        maxx::registry::read_binding(&label, text).as_deref(),
+        Some("message")
+    );
+    // A bound value is not editable as free text: overwriting it with a string
+    // literal would silently change what the code means.
+    assert!(!maxx::registry::editable(&label, text));
+
+    maxx::registry::write_binding(&mut label, text, None);
+    assert_eq!(maxx::registry::read_binding(&label, text), None);
+    assert!(maxx::registry::editable(&label, text));
+}
+
+#[test]
+fn the_demo_view_reads_as_a_binding() {
+    // The hand-written demo is the reference for what maxx must understand.
+    let path = std::path::PathBuf::from("/Users/sebastienportrait/rust/maxx-demo/src/ui/accueil.rs");
+    if !path.exists() {
+        return;
+    }
+    let view = View::load(&path).expect("la vue de démo doit se relire");
+
+    let fields = view.state_fields();
+    assert!(fields.iter().any(|field| field.name == "message"));
+    assert!(fields.iter().any(|field| field.name == "clics"));
+
+    let label = &view.root.children[0];
+    let spec = maxx::registry::of(label).unwrap();
+    let text = spec.props.iter().find(|p| p.label == "Texte").unwrap();
+    assert_eq!(
+        maxx::registry::read_binding(label, text).as_deref(),
+        Some("message")
+    );
+
+    let button = &view.root.children[1];
+    let spec = maxx::registry::of(button).unwrap();
+    let action = spec.props.iter().find(|p| p.label == "Action").unwrap();
+    assert_eq!(
+        maxx::registry::read(button, action).as_deref(),
+        Some("on_changer")
+    );
+    assert!(view.method_line("on_changer").is_some());
+}

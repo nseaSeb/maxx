@@ -113,6 +113,10 @@ pub struct Workspace {
     show_output: bool,
     /// The task draining the runner's channel. Dropping it stops the drain.
     run_task: Option<Task<()>>,
+    /// Name box of the state panel.
+    state_name_input: Option<Entity<InputState>>,
+    /// Index into `view::STATE_TYPES` for the field about to be added.
+    state_type: usize,
     /// Scroll position of the right-hand panels.
     pub(crate) side_scroll: ScrollHandle,
     /// Scroll position of the output panel.
@@ -139,6 +143,8 @@ impl Workspace {
             run_pid: None,
             show_output: false,
             run_task: None,
+            state_name_input: None,
+            state_type: 0,
             side_scroll: ScrollHandle::new(),
             output_scroll: UniformListScrollHandle::new(),
         };
@@ -310,6 +316,11 @@ impl Workspace {
         if key == self.synced {
             return;
         }
+        if self.state_name_input.is_none() {
+            self.state_name_input =
+                Some(cx.new(|cx| InputState::new(window, cx).placeholder("nom du champ")));
+        }
+
         self.synced = key;
         self.prop_inputs.clear();
 
@@ -341,6 +352,130 @@ impl Workspace {
             })
             .detach();
             self.prop_inputs.push((prop, state));
+        }
+    }
+
+    /// Binds a text property to a state field, or unbinds it.
+    pub fn toggle_binding(&mut self, prop: &'static crate::registry::Prop, cx: &mut Context<Self>) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        let selected = view.selected.clone();
+        let bound = view
+            .root
+            .at(&selected)
+            .and_then(|node| registry::read_binding(node, prop));
+        let fields = view.state_fields();
+
+        let expression = match bound {
+            Some(_) => None,
+            None => match fields.first() {
+                Some(field) => Some(field.read_expression()),
+                None => {
+                    self.message = Some(SharedString::from(
+                        "aucun champ d'état — ajoutez-en un dans « État »",
+                    ));
+                    cx.notify();
+                    return;
+                }
+            },
+        };
+
+        self.checkpoint();
+        let view = self.view_mut().expect("just borrowed");
+        if let Some(node) = view.root.at_mut(&selected) {
+            registry::write_binding(node, prop, expression.as_deref());
+        }
+        cx.notify();
+    }
+
+    /// Moves a bound property to the next state field.
+    pub fn cycle_binding(&mut self, prop: &'static crate::registry::Prop, cx: &mut Context<Self>) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        let selected = view.selected.clone();
+        let fields = view.state_fields();
+        if fields.is_empty() {
+            return;
+        }
+        let current = view
+            .root
+            .at(&selected)
+            .and_then(|node| registry::read_binding(node, prop));
+        let index = current
+            .and_then(|name| fields.iter().position(|field| field.name == name))
+            .map(|index| (index + 1) % fields.len())
+            .unwrap_or(0);
+        let expression = fields[index].read_expression();
+
+        self.checkpoint();
+        let view = self.view_mut().expect("just borrowed");
+        if let Some(node) = view.root.at_mut(&selected) {
+            registry::write_binding(node, prop, Some(&expression));
+        }
+        cx.notify();
+    }
+
+    /// Adds a field to the view's struct.
+    pub fn add_state_field(&mut self, cx: &mut Context<Self>) {
+        let Some(state) = self.state_name_input.as_ref() else {
+            return;
+        };
+        let name = state.read(cx).value().trim().to_string();
+        if name.is_empty() {
+            self.message = Some(SharedString::from("donnez un nom au champ"));
+            cx.notify();
+            return;
+        }
+        let (_, ty, initial) = crate::view::STATE_TYPES[self.state_type];
+
+        self.message = match self.view_mut() {
+            Some(view) => match view.add_state_field(&name, ty, initial) {
+                Ok(()) => Some(SharedString::from(format!("champ « {name} » ajouté"))),
+                Err(error) => Some(SharedString::from(error)),
+            },
+            None => None,
+        };
+        self.revision += 1;
+        cx.notify();
+    }
+
+    /// Steps through the kinds of field the state panel offers.
+    pub fn cycle_state_type(&mut self, cx: &mut Context<Self>) {
+        self.state_type = (self.state_type + 1) % crate::view::STATE_TYPES.len();
+        cx.notify();
+    }
+
+    /// The field-name box of the state panel.
+    pub(crate) fn state_name_input(&self) -> Option<&Entity<InputState>> {
+        self.state_name_input.as_ref()
+    }
+
+    /// Which kind of field the state panel will add.
+    pub(crate) fn state_type(&self) -> usize {
+        self.state_type
+    }
+
+    /// Opens the handler of a property in Zed, on its own line.
+    pub fn open_handler(&mut self, prop: &'static crate::registry::Prop, cx: &mut Context<Self>) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        let node = view.selected();
+        let Some(name) = registry::read(node, prop).filter(|name| !name.is_empty()) else {
+            self.message = Some(SharedString::from("aucune action sur ce nœud"));
+            cx.notify();
+            return;
+        };
+        match view.method_line(&name) {
+            Some(line) => crate::run::open_editor_at(&view.path, line),
+            None => {
+                self.message = Some(SharedString::from(format!(
+                    "« {name} » n'est pas encore écrite — ⌘S l'ajoute au fichier"
+                )));
+                cx.notify();
+            }
         }
     }
 

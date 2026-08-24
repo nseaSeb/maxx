@@ -215,6 +215,54 @@ pub const CATALOGUE: &[Spec] = &[
     },
 ];
 
+/// The state field a text property reads, when it reads one instead of a
+/// literal.
+pub fn read_binding(node: &Node, prop: &Prop) -> Option<String> {
+    if !matches!(prop.kind, Kind::Text) {
+        return None;
+    }
+    let source = match prop.target {
+        Target::BaseArg(index) => match &node.base {
+            Base::Known { args, .. } => args.get(index)?.to_source(),
+            Base::Opaque(_) => return None,
+        },
+        Target::Method(name) => node.call(name)?.args.first()?.to_source(),
+        _ => return None,
+    };
+    binding_field(&source)
+}
+
+/// `self.titre.clone()` and `self.clics.to_string()` both read `titre`/`clics`.
+fn binding_field(source: &str) -> Option<String> {
+    let inner = source.strip_prefix("self.")?;
+    let name = inner
+        .strip_suffix(".clone()")
+        .or_else(|| inner.strip_suffix(".to_string()"))?;
+    is_identifier(name).then(|| name.to_string())
+}
+
+/// Writes a text property as an expression reading the view's state, or back to
+/// a literal when `expression` is `None`.
+pub fn write_binding(node: &mut Node, prop: &Prop, expression: Option<&str>) {
+    let arg = match expression {
+        Some(expression) => Arg::Verbatim(expression.to_string()),
+        None => Arg::Str(String::new()),
+    };
+    match prop.target {
+        Target::BaseArg(index) => {
+            if let Base::Known { args, .. } = &mut node.base {
+                if index < args.len() {
+                    args[index] = arg;
+                } else {
+                    args.push(arg);
+                }
+            }
+        }
+        Target::Method(name) => node.set_call(name, arg),
+        _ => {}
+    }
+}
+
 /// Every property of a component: its own, then the shared style ones.
 pub fn props(spec: &'static Spec) -> Vec<&'static Prop> {
     spec.props.iter().chain(COMMON.iter()).collect()

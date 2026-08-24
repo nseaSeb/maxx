@@ -10,6 +10,34 @@ use std::path::{Path, PathBuf};
 use crate::model::{Base, Node};
 use crate::{codegen, parser, registry};
 
+/// A field declared on the view's struct.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StateField {
+    /// Field name.
+    pub name: String,
+    /// Type as written in the source.
+    pub ty: String,
+}
+
+impl StateField {
+    /// How a property reads this field: `SharedString` and `String` clone,
+    /// anything else is rendered.
+    pub fn read_expression(&self) -> String {
+        match self.ty.as_str() {
+            "SharedString" | "String" => format!("self.{}.clone()", self.name),
+            _ => format!("self.{}.to_string()", self.name),
+        }
+    }
+}
+
+/// The kinds of field the state panel can declare.
+pub const STATE_TYPES: &[(&str, &str, &str)] = &[
+    ("Texte", "SharedString", "\"\".into()"),
+    ("Nombre entier", "usize", "0"),
+    ("Nombre décimal", "f32", "0.0"),
+    ("Booléen", "bool", "false"),
+];
+
 /// A view file open in the workshop.
 pub struct View {
     /// Absolute path of the `.rs` file.
@@ -48,6 +76,86 @@ impl View {
     /// flagged, so undoing back to the saved state reports clean again.
     pub fn dirty(&self) -> bool {
         self.root != self.saved
+    }
+
+    /// The fields declared on the view's struct, read from the source.
+    ///
+    /// Parsed by scanning rather than through `syn`, for the same reason the
+    /// managed region is: the file must come back out as it went in.
+    pub fn state_fields(&self) -> Vec<StateField> {
+        let mut fields = Vec::new();
+        let Some(offset) = self.source.find("pub struct ") else {
+            return fields;
+        };
+        let Some(open) = self.source[offset..].find('{').map(|index| offset + index) else {
+            return fields;
+        };
+        let Some(close) = matching_brace(&self.source, open) else {
+            return fields;
+        };
+
+        for line in self.source[open + 1..close].lines() {
+            let line = line.trim().trim_end_matches(',');
+            if line.is_empty() || line.starts_with("//") || line.starts_with("#[") {
+                continue;
+            }
+            let declaration = line.strip_prefix("pub ").unwrap_or(line);
+            let Some((name, ty)) = declaration.split_once(':') else {
+                continue;
+            };
+            let name = name.trim();
+            if name.is_empty() || !name.chars().all(|c| c == '_' || c.is_alphanumeric()) {
+                continue;
+            }
+            fields.push(StateField {
+                name: name.to_string(),
+                ty: ty.trim().to_string(),
+            });
+        }
+        fields
+    }
+
+    /// Adds a field to the view's struct and initializes it in `new`.
+    pub fn add_state_field(&mut self, name: &str, ty: &str, initial: &str) -> Result<(), String> {
+        if !name
+            .chars()
+            .next()
+            .is_some_and(|first| first == '_' || first.is_alphabetic())
+            || !name.chars().all(|c| c == '_' || c.is_alphanumeric())
+        {
+            return Err(format!("« {name} » n'est pas un nom de champ valide"));
+        }
+        if self.state_fields().iter().any(|field| field.name == name) {
+            return Err(format!("le champ « {name} » existe déjà"));
+        }
+
+        let mut source = std::mem::take(&mut self.source);
+        if let Some(offset) = source.find("pub struct ")
+            && let Some(brace) = source[offset..].find('{').map(|index| offset + index)
+        {
+            source = insert_into_block(source, brace, &format!("    {name}: {ty},\n"));
+        }
+        if let Some(offset) = source.find("        Self {")
+            && let Some(brace) = source[offset..].find('{').map(|index| offset + index)
+        {
+            source = insert_into_block(source, brace, &format!("            {name}: {initial},\n"));
+        }
+        if ty == "SharedString" {
+            source = ensure_imports(source, &["use gpui::SharedString;"]);
+        }
+
+        self.source = source;
+        std::fs::write(&self.path, &self.source).map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    /// The line where a method is declared, for jumping to it in an editor.
+    pub fn method_line(&self, name: &str) -> Option<usize> {
+        let needle = format!("fn {name}(");
+        self.source
+            .lines()
+            .position(|line| line.contains(&needle))
+            .map(|index| index + 1)
     }
 
     /// The file name, for tabs and the status bar.

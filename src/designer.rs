@@ -151,6 +151,7 @@ impl Workspace {
                         v_flex()
                             .child(self.render_tree(cx))
                             .child(self.render_inspector(cx))
+                            .child(self.render_state(cx))
                             .child(self.render_palette(cx)),
                     ),
             )
@@ -307,11 +308,47 @@ impl Workspace {
             );
 
         match prop.kind {
+            Kind::Text if registry::read_binding(node, prop).is_some() => {
+                let field = registry::read_binding(node, prop).unwrap_or_default();
+                row.child(
+                    div()
+                        .id(SharedString::from(format!("bind-{}-{}", spec.id, prop.label)))
+                        .flex_1()
+                        .px_2()
+                        .rounded_sm()
+                        .cursor_pointer()
+                        .bg(rgb(theme::BG))
+                        .text_color(rgb(theme::ACCENT))
+                        .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                        .child(SharedString::from(field))
+                        .on_click(cx.listener(move |this, _, _, cx| this.cycle_binding(prop, cx))),
+                )
+                .child(binding_toggle(spec, prop, true, cx))
+            }
             Kind::Text | Kind::Field | Kind::Handler | Kind::Number | Kind::Color => {
                 match self.prop_input(prop) {
                 Some(state) => row.child(div().flex_1().child(Input::new(state).small())),
                 // No input yet this frame: the sync runs at the top of `render`,
                 // so this only shows for a frame after a selection change.
+                Some(state) if matches!(prop.kind, Kind::Handler) => row
+                    .child(div().flex_1().child(Input::new(state).small()))
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("goto-{}", prop.label)))
+                            .px_2()
+                            .rounded_sm()
+                            .text_xs()
+                            .cursor_pointer()
+                            .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                            .child("→ Zed")
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.open_handler(prop, cx)
+                            })),
+                    ),
+                Some(state) if matches!(prop.kind, Kind::Text) => row
+                    .child(div().flex_1().child(Input::new(state).small()))
+                    .child(binding_toggle(spec, prop, false, cx)),
+                Some(state) => row.child(div().flex_1().child(Input::new(state).small())),
                 None => row.child(
                     div()
                         .flex_1()
@@ -364,6 +401,65 @@ impl Workspace {
                 )
             }
         }
+    }
+
+    /// The fields of the view's struct, and a box to add one.
+    ///
+    /// A property can only read what exists, so declaring the field comes
+    /// first; binding a property to it is one click away in the inspector.
+    fn render_state(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let fields = self.view().map(|view| view.state_fields()).unwrap_or_default();
+        let (type_label, _, _) = crate::view::STATE_TYPES[self.state_type()];
+
+        v_flex()
+            .child(section_title("État"))
+            .children(fields.into_iter().map(|field| {
+                h_flex()
+                    .gap_2()
+                    .px_3()
+                    .py_1()
+                    .text_xs()
+                    .child(div().flex_1().child(SharedString::from(field.name)))
+                    .child(
+                        div()
+                            .text_color(rgb(theme::TEXT_MUTED))
+                            .font_family("Menlo")
+                            .child(SharedString::from(field.ty)),
+                    )
+            }))
+            .child(
+                h_flex()
+                    .gap_2()
+                    .px_3()
+                    .py_1()
+                    .when_some(self.state_name_input().cloned(), |this, state| {
+                        this.child(div().flex_1().child(Input::new(&state).small()))
+                    })
+                    .child(
+                        div()
+                            .id("state-type")
+                            .px_2()
+                            .rounded_sm()
+                            .text_xs()
+                            .cursor_pointer()
+                            .bg(rgb(theme::BG))
+                            .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                            .child(type_label)
+                            .on_click(cx.listener(|this, _, _, cx| this.cycle_state_type(cx))),
+                    )
+                    .child(
+                        div()
+                            .id("state-add")
+                            .px_2()
+                            .rounded_sm()
+                            .text_xs()
+                            .cursor_pointer()
+                            .bg(rgb(theme::ACCENT))
+                            .text_color(rgb(theme::ON_ACCENT))
+                            .child("Ajouter")
+                            .on_click(cx.listener(|this, _, _, cx| this.add_state_field(cx))),
+                    ),
+            )
     }
 
     /// The component palette. Clicking inserts into the selected container.
@@ -457,6 +553,27 @@ fn children_with_zones(
         out.push(drop_zone(path.to_vec(), index + 1, vertical, cx));
     }
     out
+}
+
+/// The button that switches a text property between a literal and a field of
+/// the view's state.
+fn binding_toggle(
+    spec: &'static Spec,
+    prop: &'static Prop,
+    bound: bool,
+    cx: &mut Context<Workspace>,
+) -> impl IntoElement {
+    div()
+        .id(SharedString::from(format!("toggle-{}-{}", spec.id, prop.label)))
+        .px_1()
+        .rounded_sm()
+        .text_xs()
+        .cursor_pointer()
+        .font_family("Menlo")
+        .text_color(rgb(if bound { theme::ACCENT } else { theme::TEXT_MUTED }))
+        .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+        .child(if bound { "{ }" } else { "abc" })
+        .on_click(cx.listener(move |this, _, _, cx| this.toggle_binding(prop, cx)))
 }
 
 /// Section header inside the right-hand panels.
