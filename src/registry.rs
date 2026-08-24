@@ -35,6 +35,10 @@ pub enum Kind {
     /// The name of a method of the view, written as `cx.listener(Self::<value>)`
     /// and backed by a stub inserted next to the view's other methods.
     Handler,
+    /// A length in pixels, written as `px(<value>.)`.
+    Number,
+    /// A colour, written as `rgb(0x<value>)`.
+    Color,
 }
 
 /// One editable property.
@@ -71,6 +75,25 @@ const GAPS: &[&str] = &["gap_0", "gap_1", "gap_2", "gap_3", "gap_4", "gap_6", "g
 const PADDINGS: &[&str] = &["p_0", "p_1", "p_2", "p_3", "p_4", "p_6", "p_8"];
 const ALIGNS: &[&str] = &["items_start", "items_center", "items_end"];
 const VARIANTS: &[&str] = &["primary", "danger", "outline", "ghost", "link"];
+const TEXT_SIZES: &[&str] = &["text_xs", "text_sm", "text_base", "text_lg", "text_xl", "text_2xl"];
+const WEIGHTS: &[&str] = &["font_normal", "font_medium", "font_semibold", "font_bold"];
+const ROUNDED: &[&str] = &["rounded_none", "rounded_sm", "rounded_md", "rounded_lg", "rounded_full"];
+
+/// Properties every component accepts.
+///
+/// Every widget of `gpui-component` implements `Styled`, so these are safe to
+/// emit on any of them — checked component by component before adding them
+/// here, because a style method on a type that does not implement `Styled`
+/// would only fail when the generated project is compiled.
+pub const COMMON: &[Prop] = &[
+    Prop { label: "Largeur", target: Target::Method("w"), kind: Kind::Number },
+    Prop { label: "Hauteur", target: Target::Method("h"), kind: Kind::Number },
+    Prop { label: "Fond", target: Target::Method("bg"), kind: Kind::Color },
+    Prop { label: "Couleur du texte", target: Target::Method("text_color"), kind: Kind::Color },
+    Prop { label: "Taille du texte", target: Target::Family(TEXT_SIZES), kind: Kind::Choice },
+    Prop { label: "Graisse", target: Target::Family(WEIGHTS), kind: Kind::Choice },
+    Prop { label: "Arrondi", target: Target::Family(ROUNDED), kind: Kind::Choice },
+];
 
 /// The catalogue. Adding a component means adding an entry here and a branch in
 /// [`crate::canvas::render_node`].
@@ -132,6 +155,8 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
             Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text },
             Prop { label: "Variante", target: Target::Family(VARIANTS), kind: Kind::Choice },
+            Prop { label: "Infobulle", target: Target::Method("tooltip"), kind: Kind::Text },
+            Prop { label: "Désactivé", target: Target::Method("disabled"), kind: Kind::Bool },
             Prop { label: "Action", target: Target::Method("on_click"), kind: Kind::Handler },
         ],
     },
@@ -190,6 +215,24 @@ pub const CATALOGUE: &[Spec] = &[
     },
 ];
 
+/// Every property of a component: its own, then the shared style ones.
+pub fn props(spec: &'static Spec) -> Vec<&'static Prop> {
+    spec.props.iter().chain(COMMON.iter()).collect()
+}
+
+/// Whether any property of `spec` owns the call named `name`.
+///
+/// What is not owned is shown as-is in the inspector's "other calls" section
+/// rather than being hidden: the model carries every call, so the panel should
+/// too.
+pub fn covers(spec: &'static Spec, name: &str) -> bool {
+    props(spec).into_iter().any(|prop| match prop.target {
+        Target::BaseArg(_) => false,
+        Target::Method(method) | Target::Flag(method) => method == name,
+        Target::Family(names) => names.contains(&name),
+    })
+}
+
 /// The catalogue entry with this identifier.
 pub fn by_id(id: &str) -> Option<&'static Spec> {
     CATALOGUE.iter().find(|spec| spec.id == id)
@@ -246,6 +289,7 @@ fn is_identifier(value: &str) -> bool {
 /// but not edited.
 pub fn editable(node: &Node, prop: &Prop) -> bool {
     match (prop.target, prop.kind) {
+        (Target::Method(_), Kind::Number | Kind::Color) => !node.is_opaque(),
         (Target::BaseArg(index), Kind::Text) => match &node.base {
             Base::Known { args, .. } => match args.get(index) {
                 None | Some(Arg::Str(_)) => true,
@@ -262,6 +306,18 @@ pub fn editable(node: &Node, prop: &Prop) -> bool {
         },
         _ => !node.is_opaque(),
     }
+}
+
+/// `px(240.)` reads back as `240`.
+fn number_value(source: &str) -> Option<String> {
+    let inner = source.strip_prefix("px(")?.strip_suffix(')')?;
+    Some(inner.trim_end_matches('.').to_string())
+}
+
+/// `rgb(0x1e2127)` reads back as `1e2127`.
+fn color_value(source: &str) -> Option<String> {
+    let inner = source.strip_prefix("rgb(0x")?.strip_suffix(')')?;
+    Some(inner.to_string())
 }
 
 /// The method name inside `cx.listener(Self::<name>)`, if that is the shape.
@@ -359,6 +415,13 @@ pub fn read(node: &Node, prop: &Prop) -> Option<String> {
             }),
             Base::Opaque(_) => None,
         },
+        Target::Method(name) if matches!(prop.kind, Kind::Number | Kind::Color) => {
+            let source = node.call(name)?.args.first()?.to_source();
+            match prop.kind {
+                Kind::Number => number_value(&source),
+                _ => color_value(&source),
+            }
+        }
         Target::Method(name) if matches!(prop.kind, Kind::Handler) => node
             .call(name)
             .and_then(|call| call.args.first())
@@ -408,6 +471,26 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
                 args.push(arg);
             }
         }
+        Target::Method(name) if matches!(prop.kind, Kind::Number) => {
+            if value.trim().is_empty() {
+                node.remove_call(name);
+            } else if let Ok(number) = value.trim().parse::<f32>() {
+                let literal = if value.contains('.') {
+                    format!("px({})", value.trim())
+                } else {
+                    format!("px({number}.)")
+                };
+                node.set_call(name, Arg::Verbatim(literal));
+            }
+        }
+        Target::Method(name) if matches!(prop.kind, Kind::Color) => {
+            let hex = value.trim().trim_start_matches('#');
+            if hex.is_empty() {
+                node.remove_call(name);
+            } else if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+                node.set_call(name, Arg::Verbatim(format!("rgb(0x{hex})")));
+            }
+        }
         Target::Method(name) if matches!(prop.kind, Kind::Handler) => {
             if value.is_empty() {
                 node.remove_call(name);
@@ -442,6 +525,18 @@ pub fn imports(root: &Node) -> Vec<&'static str> {
             && !lines.contains(&spec.import)
         {
             lines.push(spec.import);
+        }
+        // The style properties emit `px(..)` and `rgb(..)`, which are functions
+        // of `gpui`, not methods of the component.
+        for call in &node.calls {
+            for arg in &call.args {
+                let source = arg.to_source();
+                for (needle, line) in [("px(", "use gpui::px;"), ("rgb(0x", "use gpui::rgb;")] {
+                    if source.starts_with(needle) && !lines.contains(&line) {
+                        lines.push(line);
+                    }
+                }
+            }
         }
     });
     lines.sort_unstable();

@@ -237,9 +237,11 @@ impl Workspace {
             return;
         };
 
-        for prop in spec.props {
-            if !matches!(prop.kind, Kind::Text | Kind::Field)
-                || !crate::registry::editable(node, prop)
+        for prop in crate::registry::props(spec) {
+            if !matches!(
+                prop.kind,
+                Kind::Text | Kind::Field | Kind::Handler | Kind::Number | Kind::Color
+            ) || !crate::registry::editable(node, prop)
             {
                 continue;
             }
@@ -254,6 +256,23 @@ impl Workspace {
             .detach();
             self.prop_inputs.push((prop, state));
         }
+    }
+
+    /// Removes a call from the selected node.
+    pub fn remove_call_at_selection(&mut self, name: &str, cx: &mut Context<Self>) {
+        let Some(view) = self.view.as_ref() else {
+            return;
+        };
+        let selected = view.selected.clone();
+        if view.root.at(&selected).is_none() {
+            return;
+        }
+        self.checkpoint();
+        let view = self.view.as_mut().expect("just borrowed");
+        if let Some(node) = view.root.at_mut(&selected) {
+            node.remove_call(name);
+        }
+        cx.notify();
     }
 
     /// Writes a text property without disturbing the field being typed in: no

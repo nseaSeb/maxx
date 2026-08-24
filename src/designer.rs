@@ -124,8 +124,24 @@ impl Workspace {
         // `.children(map(..))` would need.
         let mut rows = Vec::new();
         if let Some(spec) = spec {
-            for prop in spec.props {
+            for prop in registry::props(spec) {
                 rows.push(self.render_prop(node, spec, prop, cx).into_any_element());
+            }
+
+            // Everything the model carries and no property owns. Shown rather
+            // than hidden: maxx preserves these faithfully, so it should at
+            // least admit they are there.
+            let extra: Vec<Call> = node
+                .calls
+                .iter()
+                .filter(|call| !registry::covers(spec, &call.name))
+                .cloned()
+                .collect();
+            if !extra.is_empty() {
+                rows.push(section_title("Autres appels").into_any_element());
+                for call in extra {
+                    rows.push(self.render_extra_call(&call, cx).into_any_element());
+                }
             }
         }
 
@@ -142,6 +158,45 @@ impl Workspace {
                 )
             })
             .children(rows)
+    }
+
+    /// One call the catalogue does not know about: shown, and removable.
+    fn render_extra_call(&self, call: &Call, cx: &mut Context<Self>) -> impl IntoElement {
+        let name = call.name.clone();
+        let mut text = format!(".{}(", call.name);
+        for (index, arg) in call.args.iter().enumerate() {
+            if index > 0 {
+                text.push_str(", ");
+            }
+            text.push_str(&arg.to_source());
+        }
+        text.push(')');
+
+        h_flex()
+            .items_center()
+            .gap_2()
+            .px_3()
+            .py_1()
+            .child(
+                div()
+                    .flex_1()
+                    .text_xs()
+                    .font_family("Menlo")
+                    .text_color(rgb(theme::TEXT_MUTED))
+                    .child(SharedString::from(text)),
+            )
+            .child(
+                div()
+                    .id(SharedString::from(format!("drop-call-{name}")))
+                    .px_2()
+                    .rounded_sm()
+                    .cursor_pointer()
+                    .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                    .child("×")
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.remove_call_at_selection(&name, cx);
+                    })),
+            )
     }
 
     /// One property row.
@@ -168,7 +223,8 @@ impl Workspace {
             );
 
         match prop.kind {
-            Kind::Text | Kind::Field | Kind::Handler => match self.prop_input(prop) {
+            Kind::Text | Kind::Field | Kind::Handler | Kind::Number | Kind::Color => {
+                match self.prop_input(prop) {
                 Some(state) => row.child(div().flex_1().child(Input::new(state).small())),
                 // No input yet this frame: the sync runs at the top of `render`,
                 // so this only shows for a frame after a selection change.
@@ -180,7 +236,8 @@ impl Workspace {
                         .bg(rgb(theme::BG))
                         .child(SharedString::from(current)),
                 ),
-            },
+                }
+            }
             Kind::Bool => {
                 let on = current == "true";
                 row.child(

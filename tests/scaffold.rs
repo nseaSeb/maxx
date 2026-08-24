@@ -224,3 +224,60 @@ fn the_runner_reports_a_failure_instead_of_hanging() {
         "la sortie de cargo doit remonter dans le panneau : {lines:?}"
     );
 }
+
+#[test]
+fn style_properties_reach_the_generated_file() {
+    let root = scratch("maxx_styles");
+    scaffold::create_project(&root, "essai").unwrap();
+    let path = root.join("src/ui/accueil.rs");
+
+    let mut view = View::load(&path).unwrap();
+    let mut button = maxx::registry::instantiate("button").unwrap();
+    let spec = maxx::registry::of(&button).unwrap();
+
+    for (label, value) in [
+        ("Largeur", "120"),
+        ("Fond", "#1e2127"),
+        ("Couleur du texte", "c8ccd4"),
+        ("Infobulle", "Enregistrer"),
+        ("Taille du texte", "text_sm"),
+    ] {
+        let prop = maxx::registry::props(spec)
+            .into_iter()
+            .find(|prop| prop.label == label)
+            .unwrap_or_else(|| panic!("propriété « {label} » absente"));
+        maxx::registry::write(&mut button, prop, value);
+    }
+    view.root.children.push(button);
+    view.save().unwrap();
+
+    let source = std::fs::read_to_string(&path).unwrap();
+    assert!(source.contains(".w(px(120.))"));
+    assert!(source.contains(".bg(rgb(0x1e2127))"));
+    assert!(source.contains(".text_color(rgb(0xc8ccd4))"));
+    assert!(source.contains(".tooltip(\"Enregistrer\")"));
+    assert!(source.contains(".text_sm()"));
+    // `px` and `rgb` are functions of gpui, not methods of the component.
+    assert!(source.contains("use gpui::px;"));
+    assert!(source.contains("use gpui::rgb;"));
+
+    // And they read back.
+    let reloaded = View::load(&path).unwrap();
+    let button = &reloaded.root.children[1];
+    let width = maxx::registry::props(spec)
+        .into_iter()
+        .find(|prop| prop.label == "Largeur")
+        .unwrap();
+    assert_eq!(maxx::registry::read(button, width).as_deref(), Some("120"));
+}
+
+#[test]
+fn an_uncatalogued_call_is_reported_as_such() {
+    let mut node = maxx::registry::instantiate("button").unwrap();
+    let spec = maxx::registry::of(&node).unwrap();
+    node.calls.push(maxx::model::Call::bare("shadow_lg"));
+
+    assert!(maxx::registry::covers(spec, "label"));
+    assert!(maxx::registry::covers(spec, "w"), "les styles communs comptent");
+    assert!(!maxx::registry::covers(spec, "shadow_lg"));
+}
