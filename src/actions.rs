@@ -50,6 +50,7 @@ actions!(
         RevealInFinder,
         OpenTerminal,
         OpenInZed,
+        OpenProjectInZed,
         // Window menu
         Minimize,
         Zoom,
@@ -155,6 +156,9 @@ pub fn register_handlers(cx: &mut App) {
         }
     });
     cx.on_action(|_: &OpenInZed, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.open_in_editor(cx));
+    });
+    cx.on_action(|_: &OpenProjectInZed, cx: &mut App| {
         if let Some(path) = active_workspace_path(cx) {
             crate::run::open_editor(&path);
         }

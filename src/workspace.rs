@@ -717,6 +717,28 @@ impl Workspace {
         self.state_type
     }
 
+    /// Opens what is being edited in Zed: the file if one is open, the project
+    /// otherwise.
+    ///
+    /// Opening the folder when a view is on screen means finding the file again
+    /// by hand, which is the whole gesture one wanted to avoid.
+    pub fn open_in_editor(&mut self, cx: &mut Context<Self>) {
+        let path = self
+            .menu_file
+            .as_ref()
+            .map(|menus| menus.path.clone())
+            .or_else(|| self.view().map(|view| view.path.clone()))
+            .or_else(|| self.project().map(|project| project.root.clone()));
+
+        match path {
+            Some(path) => crate::run::open_editor(&path),
+            None => {
+                self.message = Some(SharedString::from("aucun projet ouvert"));
+                cx.notify();
+            }
+        }
+    }
+
     /// Opens the handler of a property in Zed, on its own line.
     pub fn open_handler(&mut self, prop: &'static crate::registry::Prop, cx: &mut Context<Self>) {
         let Some(view) = self.view() else {

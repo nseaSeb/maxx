@@ -81,7 +81,8 @@ pub fn app_menus() -> Vec<Menu> {
             items: vec![
                 MenuItem::action("Révéler dans le Finder", RevealInFinder),
                 MenuItem::action("Ouvrir dans le Terminal", OpenTerminal),
-                MenuItem::action("Ouvrir dans Zed", OpenInZed),
+                MenuItem::action("Ouvrir le fichier dans Zed", OpenInZed),
+                MenuItem::action("Ouvrir le projet dans Zed", OpenProjectInZed),
             ],
         },
         Menu {
