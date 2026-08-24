@@ -13,6 +13,7 @@ use gpui_component::group_box::GroupBox;
 use gpui_component::input::Input;
 use gpui_component::label::Label;
 use gpui_component::switch::Switch;
+use gpui_component::scroll::Scrollbar;
 use gpui_component::{Sizable as _, h_flex, v_flex};
 
 use crate::model::{Call, Node, Path};
@@ -129,16 +130,38 @@ impl Workspace {
     }
 
     /// Tree, inspector and palette, stacked on the right.
+    ///
+    /// The three sections together are taller than the window as soon as a view
+    /// has a few nodes, so the column scrolls and carries a visible bar.
     fn render_side_panels(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
+        div()
+            .relative()
             .w(px(280.))
             .flex_none()
             .border_l_1()
             .border_color(rgb(theme::BORDER))
             .bg(rgb(theme::PANEL_BG))
-            .child(self.render_tree(cx))
-            .child(self.render_inspector(cx))
-            .child(self.render_palette(cx))
+            .child(
+                div()
+                    .id("side-panels")
+                    .size_full()
+                    .overflow_y_scroll()
+                    .track_scroll(&self.side_scroll)
+                    .child(
+                        v_flex()
+                            .child(self.render_tree(cx))
+                            .child(self.render_inspector(cx))
+                            .child(self.render_palette(cx)),
+                    ),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .right_0()
+                    .bottom_0()
+                    .child(Scrollbar::vertical(&self.side_scroll)),
+            )
     }
 
     /// The node tree, mirroring the canvas selection.

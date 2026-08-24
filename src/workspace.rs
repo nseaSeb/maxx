@@ -6,9 +6,12 @@ use gpui::{
     AnyElement, App, Bounds, Context, Entity, Global, SharedString, TitlebarOptions, WeakEntity,
     Window, WindowBounds, WindowId, WindowOptions, div, point, px, rgb, size, uniform_list,
 };
-use gpui::Task;
+use gpui::{ScrollHandle, ScrollStrategy, Task, UniformListScrollHandle};
 use gpui_component::Root;
 use gpui_component::input::{InputEvent, InputState};
+use gpui_component::scroll::Scrollbar;
+use gpui_component::spinner::Spinner;
+use gpui_component::Sizable as _;
 use std::collections::HashMap;
 
 /// Which workspace lives in which window.
@@ -110,6 +113,10 @@ pub struct Workspace {
     show_output: bool,
     /// The task draining the runner's channel. Dropping it stops the drain.
     run_task: Option<Task<()>>,
+    /// Scroll position of the right-hand panels.
+    pub(crate) side_scroll: ScrollHandle,
+    /// Scroll position of the output panel.
+    pub(crate) output_scroll: UniformListScrollHandle,
 }
 
 impl Workspace {
@@ -132,6 +139,8 @@ impl Workspace {
             run_pid: None,
             show_output: false,
             run_task: None,
+            side_scroll: ScrollHandle::new(),
+            output_scroll: UniformListScrollHandle::new(),
         };
         workspace.refresh_entries();
         workspace
@@ -501,6 +510,12 @@ impl Workspace {
                         if let Some(ok) = finished {
                             workspace.run_state = crate::run::State::Finished { ok };
                             workspace.run_pid = None;
+                        }
+                        // Follow the tail, the way a terminal does.
+                        if let Some(last) = workspace.run_output.len().checked_sub(1) {
+                            workspace
+                                .output_scroll
+                                .scroll_to_item(last, ScrollStrategy::Top);
                         }
                         cx.notify();
                     });
@@ -896,6 +911,14 @@ impl Workspace {
             crate::run::State::Finished { ok: false } => ("échec", 0xe06c75),
         };
         let lines = self.run_output.clone();
+        // What cargo is doing right now is more useful than a bar with no total.
+        let current = self
+            .run_output
+            .iter()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .cloned()
+            .unwrap_or_default();
 
         div()
             .flex()
@@ -913,8 +936,17 @@ impl Workspace {
                     .px_3()
                     .py_1()
                     .text_xs()
+                    .when(self.run_state == crate::run::State::Running, |this| {
+                        this.child(Spinner::new().small())
+                    })
                     .child(div().text_color(rgb(colour)).child(label))
-                    .child(div().flex_1())
+                    .child(
+                        div()
+                            .flex_1()
+                            .overflow_hidden()
+                            .text_color(rgb(theme::TEXT_MUTED))
+                            .child(current),
+                    )
                     .when(self.run_state == crate::run::State::Running, |this| {
                         this.child(
                             div()
@@ -939,7 +971,11 @@ impl Workspace {
                     ),
             )
             .child(
-                uniform_list(
+                div()
+                    .relative()
+                    .flex_1()
+                    .overflow_hidden()
+                    .child(uniform_list(
                     "run-output",
                     lines.len(),
                     cx.processor(move |this, range: std::ops::Range<usize>, _window, _cx| {
@@ -961,8 +997,17 @@ impl Workspace {
                             })
                             .collect::<Vec<_>>()
                     }),
-                )
-                .flex_1(),
+                    )
+                    .track_scroll(self.output_scroll.clone())
+                    .size_full())
+                    .child(
+                        div()
+                            .absolute()
+                            .top_0()
+                            .right_0()
+                            .bottom_0()
+                            .child(Scrollbar::vertical(&self.output_scroll)),
+                    ),
             )
     }
 
