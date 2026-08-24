@@ -21,32 +21,61 @@ struct Workspaces(HashMap<WindowId, WeakEntity<Workspace>>);
 
 impl Global for Workspaces {}
 
+use crate::actions::OpenFolder;
+use crate::model::Path as NodePath;
+use crate::project::{Entry, Project, flatten};
+use crate::registry;
+use crate::registry::Kind;
+use crate::theme;
+use crate::view::View;
+use std::collections::HashSet;
+use std::path::PathBuf;
+
+/// The workspace of the frontmost window, if there is one.
+fn active_workspace(cx: &App) -> Option<Entity<Workspace>> {
+    let handle = cx.active_window()?;
+    cx.try_global::<Workspaces>()?
+        .0
+        .get(&handle.window_id())?
+        .upgrade()
+}
+
 /// Runs `f` against the workspace of the frontmost window.
+///
+/// Only safe outside a window update — from an async task, typically. An
+/// action handler is dispatched *during* one, and GPUI refuses to re-enter it;
+/// use [`defer_active`] there.
 pub fn with_active<R>(
     cx: &mut App,
     f: impl FnOnce(&mut Workspace, &mut Window, &mut Context<Workspace>) -> R,
 ) -> Option<R> {
     let handle = cx.active_window()?;
-    let workspace = cx
-        .try_global::<Workspaces>()?
-        .0
-        .get(&handle.window_id())?
-        .upgrade()?;
+    let workspace = active_workspace(cx)?;
     cx.update_window(handle, |_, window, cx| {
         workspace.update(cx, |workspace, cx| f(workspace, window, cx))
     })
     .ok()
 }
-use std::collections::HashSet;
-use std::path::PathBuf;
 
-use crate::actions::OpenFolder;
-use crate::model::Path as NodePath;
-use crate::registry::Kind;
-use crate::project::{Entry, Project, flatten};
-use crate::registry;
-use crate::theme;
-use crate::view::View;
+/// Runs `f` against the frontmost workspace once the current update is over.
+///
+/// This is what an action handler must use: it is called from inside the
+/// window's own update, where `update_window` fails, and deferring puts the
+/// work just after it instead.
+pub fn defer_active(
+    cx: &mut App,
+    f: impl FnOnce(&mut Workspace, &mut Window, &mut Context<Workspace>) + 'static,
+) {
+    cx.defer(move |cx| {
+        with_active(cx, f);
+    });
+}
+
+/// Reads the frontmost workspace. Safe anywhere: it never updates a window.
+pub fn read_active<R>(cx: &App, f: impl FnOnce(&Workspace) -> R) -> Option<R> {
+    let workspace = active_workspace(cx)?;
+    Some(f(workspace.read(cx)))
+}
 
 /// Root view of a window. A workspace without a project shows the welcome
 /// screen and can be reused by the next `Open Folder…`.

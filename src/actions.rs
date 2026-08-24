@@ -213,16 +213,16 @@ fn new_project(_: &NewProject, cx: &mut App) {
 }
 
 /// Runs `f` against the workspace of the frontmost window, if there is one.
-fn with_active_workspace<R>(
+fn with_active_workspace(
     cx: &mut App,
-    f: impl FnOnce(&mut Workspace, &mut gpui::Window, &mut gpui::Context<Workspace>) -> R,
-) -> Option<R> {
-    workspace::with_active(cx, f)
+    f: impl FnOnce(&mut Workspace, &mut gpui::Window, &mut gpui::Context<Workspace>) + 'static,
+) {
+    workspace::defer_active(cx, f);
 }
 
 /// Absolute path of the frontmost window's project, if it has one.
 fn active_workspace_path(cx: &mut App) -> Option<std::path::PathBuf> {
-    workspace::with_active(cx, |workspace, _, _| {
+    workspace::read_active(cx, |workspace| {
         workspace.project().map(|project| project.root.clone())
     })
     .flatten()
