@@ -283,3 +283,46 @@ fn dropping_before_an_earlier_sibling_keeps_the_order() {
         .collect();
     assert_eq!(labels, ["c", "a", "b"]);
 }
+
+#[test]
+fn an_invalid_value_is_explained_not_swallowed() {
+    let node = maxx::registry::instantiate("button").unwrap();
+    let spec = maxx::registry::of(&node).unwrap();
+    let width = maxx::registry::props(spec)
+        .into_iter()
+        .find(|prop| prop.label == "Largeur")
+        .unwrap();
+    let colour = maxx::registry::props(spec)
+        .into_iter()
+        .find(|prop| prop.label == "Fond")
+        .unwrap();
+
+    assert!(maxx::registry::validate(width, "120").is_none());
+    assert!(maxx::registry::validate(width, "").is_none());
+    assert!(maxx::registry::validate(width, "large").is_some());
+
+    assert!(maxx::registry::validate(colour, "#1e2127").is_none());
+    assert!(maxx::registry::validate(colour, "1e2127").is_none());
+    assert!(maxx::registry::validate(colour, "").is_none());
+    assert!(maxx::registry::validate(colour, "rouge").is_some());
+    assert!(maxx::registry::validate(colour, "1e21").is_some());
+}
+
+#[test]
+fn the_selection_survives_an_undo() {
+    // Deleting the second child then undoing must not send the selection back
+    // to the root when the node it pointed at is there again.
+    let mut root = Node::known("v_flex");
+    root.children.push(Node::known("Label::new"));
+    root.children.push(Node::known("Label::new"));
+
+    let before = root.clone();
+    root.remove(&[1]).unwrap();
+    assert!(root.at(&[1]).is_none(), "le nœud a bien disparu");
+
+    root = before;
+    assert!(
+        root.at(&[1]).is_some(),
+        "et il est de retour après l'annulation, donc la sélection tient"
+    );
+}

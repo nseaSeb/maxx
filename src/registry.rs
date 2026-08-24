@@ -215,6 +215,31 @@ pub const CATALOGUE: &[Spec] = &[
     },
 ];
 
+/// Why a value was refused, for the inspector to say so.
+///
+/// `write` silently ignores what it cannot encode — which is the right
+/// behaviour for the file, and the wrong one for the person typing.
+pub fn validate(prop: &Prop, value: &str) -> Option<&'static str> {
+    let value = value.trim();
+    match prop.kind {
+        Kind::Number if !value.is_empty() && value.parse::<f32>().is_err() => {
+            Some("une longueur est un nombre de pixels, par exemple 120")
+        }
+        Kind::Color => {
+            let hex = value.trim_start_matches('#');
+            if hex.is_empty() || (hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit())) {
+                None
+            } else {
+                Some("une couleur s'écrit sur six chiffres hexadécimaux, par exemple 1e2127")
+            }
+        }
+        Kind::Field | Kind::Handler if !value.is_empty() && !is_identifier(value) => {
+            Some("lettres, chiffres et « _ » seulement, et pas de chiffre en tête")
+        }
+        _ => None,
+    }
+}
+
 /// The state field a text property reads, when it reads one instead of a
 /// literal.
 pub fn read_binding(node: &Node, prop: &Prop) -> Option<String> {

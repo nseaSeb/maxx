@@ -116,6 +116,15 @@ impl View {
         fields
     }
 
+    /// The fields that can back a text input.
+    pub fn input_state_fields(&self) -> Vec<String> {
+        self.state_fields()
+            .into_iter()
+            .filter(|field| field.ty == "Entity<InputState>")
+            .map(|field| field.name)
+            .collect()
+    }
+
     /// Adds a field to the view's struct and initializes it in `new`.
     pub fn add_state_field(&mut self, name: &str, ty: &str, initial: &str) -> Result<(), String> {
         if !name

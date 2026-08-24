@@ -25,7 +25,7 @@ struct Workspaces(HashMap<WindowId, WeakEntity<Workspace>>);
 impl Global for Workspaces {}
 
 use crate::actions::OpenFolder;
-use crate::model::Path as NodePath;
+use crate::model::{Node, Path as NodePath};
 use crate::project::{Entry, Project, flatten};
 use crate::registry;
 use crate::registry::Kind;
@@ -33,6 +33,16 @@ use crate::theme;
 use crate::view::View;
 use std::collections::HashSet;
 use std::path::PathBuf;
+
+/// Walks the selection back to the nearest node that still exists.
+///
+/// Undoing used to drop the selection to the root, which loses your place for
+/// no reason when the node is still there.
+fn clamp_selection(view: &mut View) {
+    while !view.selected.is_empty() && view.root.at(&view.selected).is_none() {
+        view.selected.pop();
+    }
+}
 
 /// The workspace of the frontmost window, if there is one.
 fn active_workspace(cx: &App) -> Option<Entity<Workspace>> {
@@ -117,6 +127,8 @@ pub struct Workspace {
     state_name_input: Option<Entity<InputState>>,
     /// Index into `view::STATE_TYPES` for the field about to be added.
     state_type: usize,
+    /// The tree as it was when the focused inspector field was entered.
+    edit_snapshot: Option<Node>,
     /// Views changed both on disk and in the designer, awaiting a decision.
     conflicts: HashSet<PathBuf>,
     /// Whether the window held the focus on the previous frame, to notice the
@@ -150,6 +162,7 @@ impl Workspace {
             run_task: None,
             state_name_input: None,
             state_type: 0,
+            edit_snapshot: None,
             conflicts: HashSet::new(),
             was_active: false,
             side_scroll: ScrollHandle::new(),
@@ -302,6 +315,13 @@ impl Workspace {
         }
     }
 
+    /// The fields of the view able to back a text input.
+    pub(crate) fn input_fields(&self) -> Vec<String> {
+        self.view()
+            .map(|view| view.input_state_fields())
+            .unwrap_or_default()
+    }
+
     /// The inspector field bound to `prop`, if it has been built.
     pub(crate) fn prop_input(
         &self,
@@ -351,11 +371,19 @@ impl Workspace {
             }
             let value = crate::registry::read(&node, prop).unwrap_or_default();
             let state = cx.new(|cx| InputState::new(window, cx).default_value(value));
-            cx.subscribe(&state, move |this, state, event: &InputEvent, cx| {
-                if matches!(event, InputEvent::Change) {
+            cx.subscribe(&state, move |this, state, event: &InputEvent, cx| match event {
+                InputEvent::Change => {
                     let value = state.read(cx).value().to_string();
                     this.edit_prop_text(prop, &value, cx);
                 }
+                // A checkpoint per keystroke would flood the undo stack and,
+                // through the revision counter, rebuild the field under the
+                // caret. One per visit to the field is the right grain.
+                InputEvent::Focus => {
+                    this.edit_snapshot = this.view().map(|view| view.root.clone());
+                }
+                InputEvent::Blur => this.close_text_edit(cx),
+                InputEvent::PressEnter { .. } => this.close_text_edit(cx),
             })
             .detach();
             self.prop_inputs.push((prop, state));
@@ -503,6 +531,55 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Closes an inspector text edit, turning it into a single undo step.
+    fn close_text_edit(&mut self, cx: &mut Context<Self>) {
+        let Some(before) = self.edit_snapshot.take() else {
+            return;
+        };
+        let Some(view) = self.view_mut() else {
+            return;
+        };
+        if view.root == before {
+            return;
+        }
+        view.past.push(before);
+        view.future.clear();
+        self.revision += 1;
+        cx.notify();
+    }
+
+    /// Moves a text input to the next field of the view able to back it.
+    pub fn cycle_input_field(
+        &mut self,
+        prop: &'static crate::registry::Prop,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        let fields = view.input_state_fields();
+        if fields.is_empty() {
+            return;
+        }
+        let selected = view.selected.clone();
+        let current = view
+            .root
+            .at(&selected)
+            .and_then(|node| registry::read(node, prop));
+        let index = current
+            .and_then(|name| fields.iter().position(|field| *field == name))
+            .map(|index| (index + 1) % fields.len())
+            .unwrap_or(0);
+        let next = fields[index].clone();
+
+        self.checkpoint();
+        let view = self.view_mut().expect("just borrowed");
+        if let Some(node) = view.root.at_mut(&selected) {
+            registry::write(node, prop, &next);
+        }
+        cx.notify();
+    }
+
     /// Writes a text property without disturbing the field being typed in: no
     /// undo checkpoint per keystroke, and no revision bump, so `sync` leaves the
     /// caret alone.
@@ -518,6 +595,7 @@ impl Workspace {
             }
             crate::registry::write(node, prop, value);
         }
+        self.message = crate::registry::validate(prop, value).map(SharedString::from);
         cx.notify();
     }
 
@@ -1000,7 +1078,7 @@ impl Workspace {
         if let Some(previous) = view.past.pop() {
             let replaced = std::mem::replace(&mut view.root, previous);
             view.future.push(replaced);
-            view.selected.clear();
+            clamp_selection(view);
             cx.notify();
         }
     }
@@ -1014,7 +1092,7 @@ impl Workspace {
         if let Some(next) = view.future.pop() {
             let replaced = std::mem::replace(&mut view.root, next);
             view.past.push(replaced);
-            view.selected.clear();
+            clamp_selection(view);
             cx.notify();
         }
     }

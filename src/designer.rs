@@ -308,6 +308,31 @@ impl Workspace {
             );
 
         match prop.kind {
+            // The state panel knows which fields can back an input; making the
+            // name be typed again when the answer is on screen is the tool
+            // contradicting itself.
+            Kind::Field if !self.input_fields().is_empty() => {
+                let current = current.clone();
+                row.child(
+                    div()
+                        .id(SharedString::from(format!("field-{}-{}", spec.id, prop.label)))
+                        .flex_1()
+                        .px_2()
+                        .rounded_sm()
+                        .cursor_pointer()
+                        .bg(rgb(theme::BG))
+                        .text_color(rgb(theme::ACCENT))
+                        .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                        .child(if current.is_empty() {
+                            SharedString::from("—")
+                        } else {
+                            SharedString::from(current)
+                        })
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.cycle_input_field(prop, cx)
+                        })),
+                )
+            }
             Kind::Text if registry::read_binding(node, prop).is_some() => {
                 let field = registry::read_binding(node, prop).unwrap_or_default();
                 row.child(
