@@ -727,3 +727,35 @@ fn a_view_named_menus_is_not_taken_for_the_menu_bar() {
         "/p/src/ui/menus.rs"
     )));
 }
+
+
+#[test]
+fn a_menu_action_points_at_its_handler() {
+    let root = scratch("maxx_menu_goto");
+    scaffold::create_project(&root, "essai").unwrap();
+    let path = root.join("src/menus.rs");
+
+    let mut menus = maxx::menufile::MenuFile::load(&path).unwrap();
+    // Wired by the template.
+    let line = menus.handler_line("Quit").expect("Quit a un gestionnaire");
+    let source = std::fs::read_to_string(&path).unwrap();
+    assert!(source.lines().nth(line - 1).unwrap().contains("&Quit,"));
+
+    // Not wired yet: the button must say so rather than open the wrong line.
+    assert_eq!(menus.handler_line("Preferences"), None);
+
+    menus.selected = Some(maxx::menufile::Selection::Menu(0));
+    menus.add_item(maxx::menu_model::ItemDef::Action {
+        label: "Préférences…".into(),
+        action: "Preferences".into(),
+        os_action: None,
+    });
+    menus.save(false).unwrap();
+
+    let reloaded = maxx::menufile::MenuFile::load(&path).unwrap();
+    let line = reloaded
+        .handler_line("Preferences")
+        .expect("l'enregistrement l'a câblée");
+    let source = std::fs::read_to_string(&path).unwrap();
+    assert!(source.lines().nth(line - 1).unwrap().contains("&Preferences,"));
+}

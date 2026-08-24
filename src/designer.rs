@@ -201,7 +201,7 @@ impl Workspace {
     }
 
     /// The fields of the selected menu or entry.
-    fn render_menu_inspector(&self, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_menu_inspector(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let menus = self.menu_file.as_ref().expect("checked by the caller");
         let fields: &[(MenuField, &str)] = match menus.selected {
             Some(Selection::Menu(_)) => &[(MenuField::Name, "Titre")],
@@ -231,6 +231,21 @@ impl Workspace {
                             .child(*label),
                     )
                     .child(div().flex_1().child(Input::new(state).small()))
+                    .when(*field == MenuField::Action, |this| {
+                        this.child(
+                            div()
+                                .id("menu-goto")
+                                .px_2()
+                                .rounded_sm()
+                                .text_xs()
+                                .cursor_pointer()
+                                .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                                .child("→ Zed")
+                                .on_click(
+                                    cx.listener(|this, _, _, cx| this.open_menu_handler(cx)),
+                                ),
+                        )
+                    })
                     .into_any_element(),
             );
         }

@@ -499,6 +499,43 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Opens the handler of the selected entry in Zed, on its own line.
+    pub fn open_menu_handler(&mut self, cx: &mut Context<Self>) {
+        let Some(menus) = self.menu_file.as_ref() else {
+            return;
+        };
+        let Some(ItemDef::Action {
+            action, os_action, ..
+        }) = menus.selected_item()
+        else {
+            return;
+        };
+        if os_action.is_some() {
+            self.message = Some(SharedString::from(
+                "cette entrée est déléguée au système — elle n'a pas de gestionnaire",
+            ));
+            cx.notify();
+            return;
+        }
+        if action.contains("::") {
+            self.message = Some(SharedString::from(format!(
+                "« {action} » vit dans un autre module — maxx ne sait pas où il est écrit"
+            )));
+            cx.notify();
+            return;
+        }
+
+        match menus.handler_line(action) {
+            Some(line) => crate::run::open_editor_at(&menus.path, line),
+            None => {
+                self.message = Some(SharedString::from(format!(
+                    "« {action} » n'est pas encore câblée — ⌘S l'ajoute au fichier"
+                )));
+                cx.notify();
+            }
+        }
+    }
+
     /// Selects a menu or one of its entries.
     pub fn select_menu(&mut self, selection: Selection, cx: &mut Context<Self>) {
         if let Some(menus) = self.menu_file.as_mut() {

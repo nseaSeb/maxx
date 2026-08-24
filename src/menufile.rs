@@ -148,6 +148,19 @@ impl MenuFile {
         Ok(())
     }
 
+    /// The line where an action's handler is registered.
+    ///
+    /// The handlers live in `register`, not in a method of a view, so the
+    /// anchor is the `cx.on_action(|_: &Nom,` the template and `ensure_action`
+    /// both write.
+    pub fn handler_line(&self, action: &str) -> Option<usize> {
+        let needle = format!("&{action},");
+        self.source
+            .lines()
+            .position(|line| line.contains(&needle))
+            .map(|index| index + 1)
+    }
+
     /// The selected menu, if a menu or one of its entries is selected.
     pub fn selected_menu(&self) -> Option<&MenuDef> {
         match self.selected? {
