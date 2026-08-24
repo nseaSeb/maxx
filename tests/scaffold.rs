@@ -193,3 +193,34 @@ fn a_button_action_writes_a_method_stub() {
     let twice = std::fs::read_to_string(&path).unwrap();
     assert_eq!(twice.matches("pub fn on_bouton(").count(), 1);
 }
+
+#[test]
+fn the_runner_reports_a_failure_instead_of_hanging() {
+    // A directory that is not a cargo project: `cargo run` exits at once, which
+    // exercises the whole thread-and-channel path without opening a window.
+    let root = scratch("maxx_runner");
+    std::fs::create_dir_all(&root).unwrap();
+
+    let receiver = maxx::run::start(root);
+    let mut lines = Vec::new();
+    let mut finished = None;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+
+    while finished.is_none() && std::time::Instant::now() < deadline {
+        match receiver.recv_timeout(std::time::Duration::from_millis(200)) {
+            Ok(maxx::run::Message::Line(line)) => lines.push(line),
+            Ok(maxx::run::Message::Started(pid)) => assert!(pid > 0),
+            Ok(maxx::run::Message::Finished(ok)) => finished = Some(ok),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+    }
+
+    assert_eq!(finished, Some(false), "cargo doit signaler l'échec");
+    assert!(
+        lines.iter().any(|line| line.contains("could not find")
+            || line.contains("Cargo.toml")
+            || line.contains("error")),
+        "la sortie de cargo doit remonter dans le panneau : {lines:?}"
+    );
+}

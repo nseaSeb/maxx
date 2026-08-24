@@ -59,7 +59,15 @@ pub fn app_menus() -> Vec<Menu> {
             name: "Affichage".into(),
             items: vec![
                 MenuItem::action("Panneau du projet", ToggleProjectPanel),
+                MenuItem::action("Sortie", ToggleOutput),
                 MenuItem::action("Barre d'état", ToggleStatusBar),
+            ],
+        },
+        Menu {
+            name: "Exécution".into(),
+            items: vec![
+                MenuItem::action("Lancer le projet", RunProject),
+                MenuItem::action("Arrêter", StopProject),
             ],
         },
         Menu {

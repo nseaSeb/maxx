@@ -8,6 +8,7 @@ pub mod menus;
 pub mod model;
 pub mod parser;
 pub mod project;
+pub mod run;
 pub mod registry;
 pub mod scaffold;
 pub mod view;

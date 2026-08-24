@@ -38,6 +38,10 @@ actions!(
         // View menu
         ToggleProjectPanel,
         ToggleStatusBar,
+        ToggleOutput,
+        // Run menu
+        RunProject,
+        StopProject,
         // Go menu
         RevealInFinder,
         // Window menu
@@ -96,6 +100,15 @@ pub fn register_handlers(cx: &mut App) {
     cx.on_action(|_: &ToggleProjectPanel, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.toggle_project_panel(cx));
     });
+    cx.on_action(|_: &RunProject, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.run_project(cx));
+    });
+    cx.on_action(|_: &StopProject, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.stop_project(cx));
+    });
+    cx.on_action(|_: &ToggleOutput, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.toggle_output(cx));
+    });
     cx.on_action(|_: &ToggleStatusBar, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.toggle_status_bar(cx));
     });
@@ -137,6 +150,9 @@ pub fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-v", Paste, None),
         KeyBinding::new("cmd-a", SelectAll, None),
         KeyBinding::new("cmd-b", ToggleProjectPanel, None),
+        KeyBinding::new("cmd-r", RunProject, None),
+        KeyBinding::new("cmd-.", StopProject, None),
+        KeyBinding::new("cmd-j", ToggleOutput, None),
         KeyBinding::new("cmd-alt-r", RevealInFinder, None),
         KeyBinding::new("cmd-m", Minimize, None),
     ]

@@ -6,6 +6,7 @@ use gpui::{
     AnyElement, App, Bounds, Context, Entity, Global, SharedString, TitlebarOptions, WeakEntity,
     Window, WindowBounds, WindowId, WindowOptions, div, point, px, rgb, size, uniform_list,
 };
+use gpui::Task;
 use gpui_component::Root;
 use gpui_component::input::{InputEvent, InputState};
 use std::collections::HashMap;
@@ -73,6 +74,16 @@ pub struct Workspace {
     revision: u64,
     /// The revision and selection the inspector fields were built for.
     synced: Option<(u64, NodePath)>,
+    /// Lines produced by the last `cargo run`, newest last.
+    run_output: Vec<SharedString>,
+    /// Where that run is in its life.
+    run_state: crate::run::State,
+    /// Pid of the running process, so it can be stopped.
+    run_pid: Option<u32>,
+    /// Whether the output panel is shown.
+    show_output: bool,
+    /// The task draining the runner's channel. Dropping it stops the drain.
+    run_task: Option<Task<()>>,
 }
 
 impl Workspace {
@@ -91,6 +102,11 @@ impl Workspace {
             prop_inputs: Vec::new(),
             revision: 0,
             synced: None,
+            run_output: Vec::new(),
+            run_state: crate::run::State::Idle,
+            run_pid: None,
+            show_output: false,
+            run_task: None,
         };
         workspace.refresh_entries();
         workspace
@@ -337,6 +353,89 @@ impl Workspace {
         if view.root.insert(&destination, node) {
             view.selected = destination;
         }
+        cx.notify();
+    }
+
+    /// Runs `cargo run` on the open project and streams its output into the
+    /// bottom panel.
+    pub fn run_project(&mut self, cx: &mut Context<Self>) {
+        let Some(project) = self.project.as_ref() else {
+            return;
+        };
+        if self.run_state == crate::run::State::Running {
+            self.message = Some(SharedString::from(
+                "une exécution est déjà en cours — ⌘. pour l'arrêter",
+            ));
+            cx.notify();
+            return;
+        }
+
+        let root = project.root.clone();
+        self.run_output.clear();
+        self.run_state = crate::run::State::Running;
+        self.run_pid = None;
+        self.show_output = true;
+        self.message = None;
+
+        let receiver = crate::run::start(root);
+        self.run_task = Some(cx.spawn(async move |workspace, cx| {
+            loop {
+                let mut lines = Vec::new();
+                let mut pid = None;
+                let mut finished = None;
+                while let Ok(message) = receiver.try_recv() {
+                    match message {
+                        crate::run::Message::Started(id) => pid = Some(id),
+                        crate::run::Message::Line(line) => lines.push(SharedString::from(line)),
+                        crate::run::Message::Finished(ok) => finished = Some(ok),
+                    }
+                }
+
+                if !lines.is_empty() || pid.is_some() || finished.is_some() {
+                    let updated = workspace.update(cx, |workspace, cx| {
+                        workspace.run_output.extend(lines);
+                        // The panel is a log, not a buffer: an application left
+                        // running for an hour must not grow the process.
+                        let overflow = workspace.run_output.len().saturating_sub(500);
+                        workspace.run_output.drain(..overflow);
+                        if let Some(pid) = pid {
+                            workspace.run_pid = Some(pid);
+                        }
+                        if let Some(ok) = finished {
+                            workspace.run_state = crate::run::State::Finished { ok };
+                            workspace.run_pid = None;
+                        }
+                        cx.notify();
+                    });
+                    if updated.is_err() {
+                        return;
+                    }
+                }
+
+                if finished.is_some() {
+                    return;
+                }
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(80))
+                    .await;
+            }
+        }));
+        cx.notify();
+    }
+
+    /// Stops the running process.
+    pub fn stop_project(&mut self, cx: &mut Context<Self>) {
+        let Some(pid) = self.run_pid.take() else {
+            return;
+        };
+        crate::run::stop(pid);
+        self.message = Some(SharedString::from("exécution interrompue"));
+        cx.notify();
+    }
+
+    /// Shows or hides the output panel.
+    pub fn toggle_output(&mut self, cx: &mut Context<Self>) {
+        self.show_output = !self.show_output;
         cx.notify();
     }
 
@@ -689,6 +788,85 @@ impl Workspace {
             .into_any_element()
     }
 
+    /// The output of the last run.
+    fn render_output(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let (label, colour) = match self.run_state {
+            crate::run::State::Idle => ("prêt", theme::TEXT_MUTED),
+            crate::run::State::Running => ("exécution…", theme::ACCENT),
+            crate::run::State::Finished { ok: true } => ("terminé", theme::TEXT_MUTED),
+            crate::run::State::Finished { ok: false } => ("échec", 0xe06c75),
+        };
+        let lines = self.run_output.clone();
+
+        div()
+            .flex()
+            .flex_col()
+            .h(px(200.))
+            .flex_none()
+            .bg(rgb(theme::PANEL_BG))
+            .border_t_1()
+            .border_color(rgb(theme::BORDER))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .px_3()
+                    .py_1()
+                    .text_xs()
+                    .child(div().text_color(rgb(colour)).child(label))
+                    .child(div().flex_1())
+                    .when(self.run_state == crate::run::State::Running, |this| {
+                        this.child(
+                            div()
+                                .id("run-stop")
+                                .px_2()
+                                .rounded_sm()
+                                .cursor_pointer()
+                                .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                                .child("Arrêter")
+                                .on_click(cx.listener(|this, _, _, cx| this.stop_project(cx))),
+                        )
+                    })
+                    .child(
+                        div()
+                            .id("run-close")
+                            .px_2()
+                            .rounded_sm()
+                            .cursor_pointer()
+                            .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                            .child("Fermer")
+                            .on_click(cx.listener(|this, _, _, cx| this.toggle_output(cx))),
+                    ),
+            )
+            .child(
+                uniform_list(
+                    "run-output",
+                    lines.len(),
+                    cx.processor(move |this, range: std::ops::Range<usize>, _window, _cx| {
+                        range
+                            .filter_map(|index| this.run_output.get(index).cloned())
+                            .map(|line| {
+                                div()
+                                    .px_3()
+                                    .text_xs()
+                                    .font_family("Menlo")
+                                    .text_color(rgb(if line.contains("error") {
+                                        0xe06c75
+                                    } else if line.contains("warning") {
+                                        0xe5c07b
+                                    } else {
+                                        theme::TEXT_MUTED
+                                    }))
+                                    .child(line)
+                            })
+                            .collect::<Vec<_>>()
+                    }),
+                )
+                .flex_1(),
+            )
+    }
+
     fn render_status_bar(&self) -> impl IntoElement {
         let label = match (&self.message, &self.view, &self.project) {
             (Some(message), _, _) => message.clone(),
@@ -742,6 +920,7 @@ impl Render for Workspace {
                     .when(show_panel, |this| this.child(self.render_project_panel(cx)))
                     .child(self.render_main(cx)),
             )
+            .when(self.show_output, |this| this.child(self.render_output(cx)))
             .when(self.show_status_bar, |this| {
                 this.child(self.render_status_bar())
             })
