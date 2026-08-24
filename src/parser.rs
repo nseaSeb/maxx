@@ -362,7 +362,7 @@ pub fn parse(source: &str) -> Result<(Node, Region), Error> {
 /// data and is left exactly as it is — `splice` does not indent it on the way
 /// out, and stripping it here would eat characters from the string on every
 /// save.
-fn dedent(source: &str, indent: &str) -> String {
+pub(crate) fn dedent(source: &str, indent: &str) -> String {
     let literals = string_ranges(source);
     let mut out = String::with_capacity(source.len());
     let mut offset = 0usize;

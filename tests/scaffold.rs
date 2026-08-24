@@ -608,7 +608,7 @@ fn a_generated_project_has_a_menu_bar() {
         os_action: None,
     });
     assert!(menus.dirty());
-    menus.save().expect("l'enregistrement doit réussir");
+    menus.save(false).expect("l'enregistrement doit réussir");
 
     let source = std::fs::read_to_string(&path).unwrap();
     assert!(source.contains("MenuItem::action(\"Préférences…\", OpenSettings)"));
@@ -618,7 +618,7 @@ fn a_generated_project_has_a_menu_bar() {
     // And it reads back, twice over, without drifting.
     let mut again = maxx::menufile::MenuFile::load(&path).unwrap();
     assert_eq!(again.menus, menus.menus);
-    again.save().unwrap();
+    again.save(false).unwrap();
     assert_eq!(std::fs::read_to_string(&path).unwrap(), source);
 }
 
@@ -641,11 +641,89 @@ fn an_unknown_menu_entry_is_carried_through() {
         .flat_map(|menu| &menu.items)
         .any(|item| matches!(item, maxx::menu_model::ItemDef::Opaque(_))));
 
-    menus.save().unwrap();
+    menus.save(false).unwrap();
     assert!(
         std::fs::read_to_string(&path)
             .unwrap()
             .contains("MenuItem::submenu(sous_menu())"),
         "ce que maxx ne comprend pas ressort tel quel"
     );
+}
+
+#[test]
+fn saving_untouched_menus_changes_nothing() {
+    let root = scratch("maxx_menus_noop");
+    scaffold::create_project(&root, "essai").unwrap();
+    let path = root.join("src/menus.rs");
+    let before = std::fs::read_to_string(&path).unwrap();
+
+    let mut menus = maxx::menufile::MenuFile::load(&path).unwrap();
+    // The Édition entries are `os_action`s: they belong to the system, and
+    // registering handlers of our own would shadow them.
+    assert!(!menus.actions().iter().any(|name| name == "Copy"));
+    menus.save(false).unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        before,
+        "un ⌘S sur une barre intacte ne doit rien réécrire"
+    );
+}
+
+#[test]
+fn a_menu_maxx_cannot_read_is_carried_through() {
+    let root = scratch("maxx_menus_odd");
+    scaffold::create_project(&root, "essai").unwrap();
+    let path = root.join("src/menus.rs");
+
+    let source = std::fs::read_to_string(&path).unwrap().replace(
+        "        Menu {\n            name: \"Fenêtre\".into(),",
+        "        Menu {\n            name: \"Dynamique\".into(),\n            items: construire(),\n        },\n        Menu {\n            name: \"Fenêtre\".into(),",
+    );
+    std::fs::write(&path, &source).unwrap();
+
+    let mut menus = maxx::menufile::MenuFile::load(&path).expect("le fichier reste ouvrable");
+    assert!(
+        menus.menus.iter().any(|menu| menu.is_opaque()),
+        "le menu illisible est conservé, pas fatal"
+    );
+    menus.add_menu();
+    menus.save(false).unwrap();
+    assert!(
+        std::fs::read_to_string(&path).unwrap().contains("items: construire()"),
+        "et il ressort tel quel"
+    );
+}
+
+#[test]
+fn a_qualified_action_keeps_its_path() {
+    let root = scratch("maxx_menus_path");
+    scaffold::create_project(&root, "essai").unwrap();
+    let path = root.join("src/menus.rs");
+
+    let source = std::fs::read_to_string(&path).unwrap().replace(
+        "MenuItem::action(\"À propos\", About),",
+        "MenuItem::action(\"À propos\", fichier::About),",
+    );
+    std::fs::write(&path, &source).unwrap();
+
+    let mut menus = maxx::menufile::MenuFile::load(&path).unwrap();
+    // Not ours to declare: it lives in another module.
+    assert!(!menus.actions().iter().any(|name| name.contains("About")));
+    menus.add_menu();
+    menus.save(false).unwrap();
+    assert!(
+        std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("MenuItem::action(\"À propos\", fichier::About)")
+    );
+}
+
+#[test]
+fn a_view_named_menus_is_not_taken_for_the_menu_bar() {
+    use maxx::menufile::MenuFile;
+    assert!(MenuFile::is_menu_file(std::path::Path::new("/p/src/menus.rs")));
+    assert!(!MenuFile::is_menu_file(std::path::Path::new(
+        "/p/src/ui/menus.rs"
+    )));
 }

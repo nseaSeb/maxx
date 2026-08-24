@@ -225,6 +225,12 @@ impl Workspace {
     /// Brings the view at `index` to the front.
     pub fn activate_view(&mut self, index: usize, cx: &mut Context<Self>) {
         self.edit_snapshot = None;
+        if self.discard_menu_edits(cx) {
+            return;
+        }
+        // The menu editor is a mode: clicking a tab has to leave it, or the tab
+        // strip stays without effect.
+        self.menu_file = None;
         if index < self.views.len() {
             self.active = Some(index);
             self.revision += 1;
@@ -265,6 +271,8 @@ impl Workspace {
 
     /// Loads `path` as this workspace's project, replacing any previous one.
     pub fn set_project(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        self.menu_file = None;
+        self.menu_synced = None;
         let project = Project::open(path);
         window.set_window_title(&project.name);
         self.project = Some(project);
@@ -319,6 +327,20 @@ impl Workspace {
     fn select_file(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         self.message = None;
         if MenuFile::is_menu_file(&path) {
+            // Already open and edited: reloading would drop those edits.
+            if self
+                .menu_file
+                .as_ref()
+                .is_some_and(|menus| menus.path == path)
+            {
+                self.selected = Some(path);
+                cx.notify();
+                return;
+            }
+            if self.discard_menu_edits(cx) {
+                return;
+            }
+            self.menu_file = None;
             match MenuFile::load(&path) {
                 Ok(menus) => {
                     self.menu_file = Some(menus);
@@ -328,6 +350,9 @@ impl Workspace {
             }
             self.selected = Some(path);
             cx.notify();
+            return;
+        }
+        if self.discard_menu_edits(cx) {
             return;
         }
         self.menu_file = None;
@@ -375,6 +400,20 @@ impl Workspace {
             .iter()
             .find(|(candidate, _)| std::ptr::eq(*candidate, prop))
             .map(|(_, state)| state)
+    }
+
+    /// Refuses to drop menu edits that have not been written.
+    ///
+    /// Returns `true` when the caller must stop.
+    fn discard_menu_edits(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.menu_file.as_ref().is_some_and(|menus| menus.dirty()) {
+            self.message = Some(SharedString::from(
+                "menus non enregistrés — ⌘S avant de changer de fichier",
+            ));
+            cx.notify();
+            return true;
+        }
+        false
     }
 
     /// The text box bound to a field of the menu panel.
@@ -466,6 +505,16 @@ impl Workspace {
             menus.selected = Some(selection);
             cx.notify();
         }
+    }
+
+    /// Leaves the menu editor.
+    pub fn close_menu_file(&mut self, cx: &mut Context<Self>) {
+        if self.discard_menu_edits(cx) {
+            return;
+        }
+        self.menu_file = None;
+        self.menu_synced = None;
+        cx.notify();
     }
 
     /// Adds a menu to the bar.
@@ -1121,7 +1170,7 @@ impl Workspace {
 
     fn write_view(&mut self, force: bool, cx: &mut Context<Self>) {
         if let Some(menus) = self.menu_file.as_mut() {
-            self.message = match menus.save() {
+            self.message = match menus.save(force) {
                 Ok(()) => Some(SharedString::from(format!("{} enregistré", menus.name()))),
                 Err(error) => Some(SharedString::from(error)),
             };

@@ -27,7 +27,13 @@ impl Workspace {
     /// The designer, or an invitation to open a view.
     pub(crate) fn render_designer(&self, cx: &mut Context<Self>) -> AnyElement {
         if self.menu_file.is_some() {
-            return self.render_menu_editor(cx);
+            // The tab strip stays: it is the way back to an open view.
+            return v_flex()
+                .flex_1()
+                .overflow_hidden()
+                .child(self.render_tabs(cx))
+                .child(self.render_menu_editor(cx))
+                .into_any_element();
         }
         if self.view().is_none() {
             return div()

@@ -34,15 +34,26 @@ pub struct MenuFile {
 
 impl MenuFile {
     /// Whether this path is a project's menu file.
+    ///
+    /// The basename alone would capture a view called `src/ui/menus.rs`, which
+    /// could then never be opened in the designer.
     pub fn is_menu_file(path: &Path) -> bool {
         path.file_name().is_some_and(|name| name == "menus.rs")
+            && path
+                .parent()
+                .and_then(|parent| parent.file_name())
+                .is_some_and(|parent| parent == "src")
     }
 
     /// Reads and parses a menu file.
     pub fn load(path: &Path) -> Result<Self, String> {
         let source = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
         let region = parser::locate(&source).map_err(|error| error.to_string())?;
-        let inner = source[region.start..region.end].trim();
+        // Dedented first, exactly as `parser::parse` does: an opaque entry kept
+        // with its file indentation gains a level on every save, because
+        // `splice` re-indents the whole block on the way out.
+        let dedented = parser::dedent(&source[region.start..region.end], &region.indent);
+        let inner = dedented.trim();
         let expr: syn::Expr = syn::parse_str(inner).map_err(|error| error.to_string())?;
         let menus = crate::menu_model::parse(&expr, inner)
             .ok_or("la zone gérée n'est pas un « vec![Menu { .. }] »")?;
@@ -87,12 +98,22 @@ impl MenuFile {
         Ok(())
     }
 
-    /// The actions the menus dispatch, in order of appearance.
+    /// The actions maxx must declare and wire.
+    ///
+    /// An `os_action` entry is handed to the system — registering a handler of
+    /// our own for `Copy` or `Undo` would shadow the very behaviour it exists to
+    /// delegate. A qualified path belongs to another module, so it is not ours
+    /// to declare either.
     pub fn actions(&self) -> Vec<String> {
         let mut names = Vec::new();
         for menu in &self.menus {
             for item in &menu.items {
-                if let ItemDef::Action { action, .. } = item
+                if let ItemDef::Action {
+                    action,
+                    os_action: None,
+                    ..
+                } = item
+                    && !action.contains("::")
                     && !names.contains(action)
                 {
                     names.push(action.clone());
@@ -103,9 +124,16 @@ impl MenuFile {
     }
 
     /// Writes the menus back, declaring and wiring any new action on the way.
-    pub fn save(&mut self) -> Result<(), String> {
-        if self.disk_changed() {
-            return Err("fichier modifié en dehors de maxx — rechargez d'abord".into());
+    pub fn save(&mut self, force: bool) -> Result<(), String> {
+        if !force && self.disk_changed() {
+            return Err(
+                "fichier modifié en dehors de maxx — Fichier > Recharger, ou Écraser".into(),
+            );
+        }
+        if !self.dirty() && !force {
+            // Nothing to write: rewriting would still add handlers and churn
+            // the file for a plain ⌘S on an untouched menu bar.
+            return Ok(());
         }
 
         let block = crate::menu_model::render(&self.menus);
@@ -137,10 +165,7 @@ impl MenuFile {
 
     /// Adds a menu at the end of the bar.
     pub fn add_menu(&mut self) {
-        self.menus.push(MenuDef {
-            name: "Menu".into(),
-            items: Vec::new(),
-        });
+        self.menus.push(MenuDef::named("Menu"));
         self.selected = Some(Selection::Menu(self.menus.len() - 1));
     }
 

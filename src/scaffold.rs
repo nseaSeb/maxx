@@ -144,6 +144,15 @@ pub fn register(cx: &mut App) {
     cx.on_action(|_: &HideOthers, cx: &mut App| cx.hide_other_apps());
     cx.on_action(|_: &ShowAll, cx: &mut App| cx.unhide_other_apps());
     cx.on_action(|_: &About, _cx: &mut App| println!("À propos"));
+    cx.on_action(|_: &Minimize, cx: &mut App| {
+        // Deferred: an action handler runs inside the window's own update, and
+        // gpui refuses to enter a second one.
+        cx.defer(|cx| {
+            if let Some(handle) = cx.active_window() {
+                let _ = handle.update(cx, |_, window, _| window.minimize_window());
+            }
+        });
+    });
     // maxx:handlers
 }
 

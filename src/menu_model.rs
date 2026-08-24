@@ -15,6 +15,28 @@ pub struct MenuDef {
     pub name: String,
     /// Entries, in order.
     pub items: Vec<ItemDef>,
+    /// Source text of a menu maxx did not understand, re-emitted unchanged.
+    ///
+    /// A menu whose `items` is not a literal `vec![..]` used to make the whole
+    /// file unopenable, which contradicted the carry-through promise the
+    /// entries already honoured.
+    pub opaque: Option<String>,
+}
+
+impl MenuDef {
+    /// A menu with a title and no entries.
+    pub fn named(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            items: Vec::new(),
+            opaque: None,
+        }
+    }
+
+    /// Whether maxx can edit this menu.
+    pub fn is_opaque(&self) -> bool {
+        self.opaque.is_some()
+    }
 }
 
 /// One entry of a menu.
@@ -52,18 +74,26 @@ impl ItemDef {
 /// source text, so it comes back out unchanged.
 pub fn parse(expr: &Expr, source: &str) -> Option<Vec<MenuDef>> {
     let entries = macro_elements(expr)?;
-    entries
-        .iter()
-        .map(|entry| parse_menu(entry, source))
-        .collect()
+    Some(
+        entries
+            .iter()
+            .map(|entry| parse_menu(entry, source))
+            .collect(),
+    )
 }
 
-fn parse_menu(expr: &Expr, source: &str) -> Option<MenuDef> {
+fn parse_menu(expr: &Expr, source: &str) -> MenuDef {
+    let opaque = |expr: &Expr| MenuDef {
+        name: "code Rust".into(),
+        items: Vec::new(),
+        opaque: Some(text(expr, source)),
+    };
+
     let Expr::Struct(structure) = expr else {
-        return None;
+        return opaque(expr);
     };
     if !path_ends_with(&structure.path, "Menu") {
-        return None;
+        return opaque(expr);
     }
 
     let mut name = String::new();
@@ -74,16 +104,21 @@ fn parse_menu(expr: &Expr, source: &str) -> Option<MenuDef> {
         };
         match ident.to_string().as_str() {
             "name" => name = string_of(&field.expr).unwrap_or_default(),
-            "items" => {
-                items = macro_elements(&field.expr)?
-                    .iter()
-                    .map(|item| parse_item(item, source))
-                    .collect()
-            }
+            "items" => match macro_elements(&field.expr) {
+                Some(entries) => {
+                    items = entries.iter().map(|item| parse_item(item, source)).collect()
+                }
+                // `items: build_items()` — readable, but not editable.
+                None => return opaque(expr),
+            },
             _ => {}
         }
     }
-    Some(MenuDef { name, items })
+    MenuDef {
+        name,
+        items,
+        opaque: None,
+    }
 }
 
 fn parse_item(expr: &Expr, source: &str) -> ItemDef {
@@ -106,7 +141,7 @@ fn parse_item(expr: &Expr, source: &str) -> ItemDef {
         "action" => match (args.next().and_then(string_of), args.next()) {
             (Some(label), Some(action)) => ItemDef::Action {
                 label,
-                action: last_segment(action).unwrap_or_else(|| text(action, source)),
+                action: path_text(action, source),
                 os_action: None,
             },
             _ => ItemDef::Opaque(text(expr, source)),
@@ -119,7 +154,7 @@ fn parse_item(expr: &Expr, source: &str) -> ItemDef {
             ) {
                 (Some(label), Some(action), Some(os)) => ItemDef::Action {
                     label,
-                    action: last_segment(action).unwrap_or_else(|| text(action, source)),
+                    action: path_text(action, source),
                     os_action: Some(last_segment(os).unwrap_or_else(|| text(os, source))),
                 },
                 _ => ItemDef::Opaque(text(expr, source)),
@@ -133,6 +168,12 @@ fn parse_item(expr: &Expr, source: &str) -> ItemDef {
 pub fn render(menus: &[MenuDef]) -> String {
     let mut out = String::from("vec![\n");
     for menu in menus {
+        if let Some(source) = &menu.opaque {
+            out.push_str("    ");
+            out.push_str(source);
+            out.push_str(",\n");
+            continue;
+        }
         out.push_str("    Menu {\n");
         out.push_str(&format!("        name: \"{}\".into(),\n", escape(&menu.name)));
         if menu.items.is_empty() {
@@ -203,6 +244,21 @@ fn string_of(expr: &Expr) -> Option<String> {
         Lit::Str(value) => Some(value.value()),
         _ => None,
     }
+}
+
+/// The action's path as written: `Open` stays `Open`, `file::Open` stays
+/// qualified — flattening it to `Open` stops the project compiling on the first
+/// save.
+fn path_text(expr: &Expr, source: &str) -> String {
+    let Expr::Path(path) = expr else {
+        return text(expr, source);
+    };
+    path.path
+        .segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect::<Vec<_>>()
+        .join("::")
 }
 
 fn last_segment(expr: &Expr) -> Option<String> {
