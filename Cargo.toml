@@ -1,0 +1,19 @@
+[package]
+name = "maxx"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# runtime_shaders avoids the build-time `metal` compiler, which Xcode 26 ships
+# as a separate downloadable component. Do not remove it on this machine.
+gpui = { version = "0.2.2", features = ["runtime_shaders"] }
+gpui-component = "0.5.1"
+syn = { version = "3", features = ["full", "extra-traits"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+quote = "1"
+
+[profile.dev]
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 2

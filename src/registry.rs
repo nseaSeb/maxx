@@ -1,0 +1,449 @@
+//! The component catalogue.
+//!
+//! One table, extended once per component. Each entry says how the component is
+//! written in Rust, which `use` it needs, and which properties the inspector may
+//! edit. The canvas renderer in [`crate::canvas`] reads the same table, so the
+//! preview and the generated code cannot drift apart.
+
+use crate::model::{Arg, Base, Node};
+
+/// How a property maps onto the builder chain.
+#[derive(Clone, Copy, Debug)]
+pub enum Target {
+    /// An argument of the constructor: `Label::new(<here>)`.
+    BaseArg(usize),
+    /// A method taking one argument: `.label(<here>)`.
+    Method(&'static str),
+    /// A method with no argument, present or absent: `.flex_1()`.
+    Flag(&'static str),
+    /// A family of no-argument methods of which at most one applies, e.g.
+    /// `gap_1` … `gap_8`. Setting one removes the others.
+    Family(&'static [&'static str]),
+}
+
+/// What kind of editor the inspector shows.
+#[derive(Clone, Copy, Debug)]
+pub enum Kind {
+    /// Free text, written as a string literal.
+    Text,
+    /// A checkbox.
+    Bool,
+    /// One of the family's methods, or none.
+    Choice,
+    /// Free text written as `&self.<value>`.
+    Field,
+    /// The name of a method of the view, written as `cx.listener(Self::<value>)`
+    /// and backed by a stub inserted next to the view's other methods.
+    Handler,
+}
+
+/// One editable property.
+#[derive(Clone, Copy, Debug)]
+pub struct Prop {
+    /// Label shown in the inspector.
+    pub label: &'static str,
+    /// Where the value lives in the chain.
+    pub target: Target,
+    /// Which editor to show.
+    pub kind: Kind,
+}
+
+/// One entry of the catalogue.
+#[derive(Clone, Copy, Debug)]
+pub struct Spec {
+    /// Stable identifier, used by the palette and the drag payloads.
+    pub id: &'static str,
+    /// Name shown in the palette and the tree.
+    pub label: &'static str,
+    /// Constructor path emitted in the generated code.
+    pub base: &'static str,
+    /// `use` line the generated file needs for this component.
+    pub import: &'static str,
+    /// Whether this component accepts children.
+    pub container: bool,
+    /// Constructor arguments used when the component is first dropped.
+    pub default_args: &'static [&'static str],
+    /// Properties the inspector exposes.
+    pub props: &'static [Prop],
+}
+
+const GAPS: &[&str] = &["gap_0", "gap_1", "gap_2", "gap_3", "gap_4", "gap_6", "gap_8"];
+const PADDINGS: &[&str] = &["p_0", "p_1", "p_2", "p_3", "p_4", "p_6", "p_8"];
+const ALIGNS: &[&str] = &["items_start", "items_center", "items_end"];
+const VARIANTS: &[&str] = &["primary", "danger", "outline", "ghost", "link"];
+
+/// The catalogue. Adding a component means adding an entry here and a branch in
+/// [`crate::canvas::render_node`].
+pub const CATALOGUE: &[Spec] = &[
+    Spec {
+        id: "column",
+        label: "Colonne",
+        base: "v_flex",
+        import: "use gpui_component::v_flex;",
+        container: true,
+        default_args: &[],
+        props: &[
+            Prop { label: "Espacement", target: Target::Family(GAPS), kind: Kind::Choice },
+            Prop { label: "Marge", target: Target::Family(PADDINGS), kind: Kind::Choice },
+            Prop { label: "Alignement", target: Target::Family(ALIGNS), kind: Kind::Choice },
+            Prop { label: "Élastique", target: Target::Flag("flex_1"), kind: Kind::Bool },
+        ],
+    },
+    Spec {
+        id: "row",
+        label: "Ligne",
+        base: "h_flex",
+        import: "use gpui_component::h_flex;",
+        container: true,
+        default_args: &[],
+        props: &[
+            Prop { label: "Espacement", target: Target::Family(GAPS), kind: Kind::Choice },
+            Prop { label: "Marge", target: Target::Family(PADDINGS), kind: Kind::Choice },
+            Prop { label: "Alignement", target: Target::Family(ALIGNS), kind: Kind::Choice },
+            Prop { label: "Élastique", target: Target::Flag("flex_1"), kind: Kind::Bool },
+        ],
+    },
+    Spec {
+        id: "label",
+        label: "Étiquette",
+        base: "Label::new",
+        import: "use gpui_component::label::Label;",
+        container: false,
+        default_args: &["Étiquette"],
+        props: &[Prop { label: "Texte", target: Target::BaseArg(0), kind: Kind::Text }],
+    },
+    Spec {
+        id: "input",
+        label: "Champ texte",
+        base: "Input::new",
+        import: "use gpui_component::input::Input;",
+        container: false,
+        default_args: &[],
+        props: &[Prop { label: "Champ lié", target: Target::BaseArg(0), kind: Kind::Field }],
+    },
+    Spec {
+        id: "button",
+        label: "Bouton",
+        base: "Button::new",
+        import: "use gpui_component::button::Button;",
+        container: false,
+        default_args: &["bouton"],
+        props: &[
+            Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
+            Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text },
+            Prop { label: "Variante", target: Target::Family(VARIANTS), kind: Kind::Choice },
+            Prop { label: "Action", target: Target::Method("on_click"), kind: Kind::Handler },
+        ],
+    },
+    Spec {
+        id: "checkbox",
+        label: "Case à cocher",
+        base: "Checkbox::new",
+        import: "use gpui_component::checkbox::Checkbox;",
+        container: false,
+        default_args: &["case"],
+        props: &[
+            Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
+            Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text },
+            Prop { label: "Cochée", target: Target::Method("checked"), kind: Kind::Bool },
+        ],
+    },
+    Spec {
+        id: "switch",
+        label: "Interrupteur",
+        base: "Switch::new",
+        import: "use gpui_component::switch::Switch;",
+        container: false,
+        default_args: &["interrupteur"],
+        props: &[
+            Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
+            Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text },
+            Prop { label: "Activé", target: Target::Method("checked"), kind: Kind::Bool },
+        ],
+    },
+    Spec {
+        id: "group_box",
+        label: "Cadre",
+        base: "GroupBox::new",
+        import: "use gpui_component::group_box::GroupBox;",
+        container: true,
+        default_args: &[],
+        props: &[Prop { label: "Titre", target: Target::Method("title"), kind: Kind::Text }],
+    },
+    Spec {
+        id: "divider",
+        label: "Séparateur",
+        base: "Divider::horizontal",
+        import: "use gpui_component::divider::Divider;",
+        container: false,
+        default_args: &[],
+        props: &[Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text }],
+    },
+    Spec {
+        id: "spacer",
+        label: "Espace élastique",
+        base: "div",
+        import: "use gpui::div;",
+        container: false,
+        default_args: &[],
+        props: &[Prop { label: "Élastique", target: Target::Flag("flex_1"), kind: Kind::Bool }],
+    },
+];
+
+/// The catalogue entry with this identifier.
+pub fn by_id(id: &str) -> Option<&'static Spec> {
+    CATALOGUE.iter().find(|spec| spec.id == id)
+}
+
+/// The catalogue entry a node was built from, matched on its constructor path.
+pub fn of(node: &Node) -> Option<&'static Spec> {
+    let path = node.base.path()?;
+    CATALOGUE.iter().find(|spec| spec.base == path)
+}
+
+/// Builds a fresh node for the component `id`.
+pub fn instantiate(id: &str) -> Option<Node> {
+    let spec = by_id(id)?;
+    let args = if spec.id == "input" {
+        // A text input needs an `InputState` on the view; the scaffold adds the
+        // field, the chain references it.
+        vec![Arg::Verbatim("&self.champ".into())]
+    } else {
+        spec.default_args
+            .iter()
+            .map(|value| Arg::Str((*value).into()))
+            .collect()
+    };
+
+    let mut node = Node::known(spec.base);
+    if let Base::Known { args: slot, .. } = &mut node.base {
+        *slot = args;
+    }
+    match spec.id {
+        "button" => node.set_call("label", Arg::Str("Bouton".into())),
+        "checkbox" => node.set_call("label", Arg::Str("Case à cocher".into())),
+        "switch" => node.set_call("label", Arg::Str("Interrupteur".into())),
+        "group_box" => node.set_call("title", Arg::Str("Cadre".into())),
+        // A spacer with no `flex_1` takes no room and cannot be found again.
+        "spacer" => node.set_flag("flex_1", true),
+        _ => {}
+    }
+    Some(node)
+}
+
+/// Whether a valid Rust identifier.
+fn is_identifier(value: &str) -> bool {
+    let mut chars = value.chars();
+    matches!(chars.next(), Some(first) if first == '_' || first.is_alphabetic())
+        && chars.all(|character| character == '_' || character.is_alphanumeric())
+}
+
+/// Whether the inspector may edit this property of this node.
+///
+/// A base argument that is not a string literal is a hand-written expression —
+/// `Button::new(cx.entity_id())`. Overwriting it with a string literal on the
+/// first keystroke would silently change what the code means, so it is shown
+/// but not edited.
+pub fn editable(node: &Node, prop: &Prop) -> bool {
+    match (prop.target, prop.kind) {
+        (Target::BaseArg(index), Kind::Text) => match &node.base {
+            Base::Known { args, .. } => match args.get(index) {
+                None | Some(Arg::Str(_)) => true,
+                Some(_) => false,
+            },
+            Base::Opaque(_) => false,
+        },
+        (Target::Method(name), Kind::Handler) => match node.call(name) {
+            Some(call) => call
+                .args
+                .first()
+                .is_some_and(|arg| handler_name(&arg.to_source()).is_some()),
+            None => true,
+        },
+        _ => !node.is_opaque(),
+    }
+}
+
+/// The method name inside `cx.listener(Self::<name>)`, if that is the shape.
+///
+/// Anything else — a closure written by hand, a call to something else — is
+/// left alone: the inspector shows it and refuses to rewrite it.
+pub fn handler_name(source: &str) -> Option<String> {
+    let inner = source
+        .strip_prefix("cx.listener(Self::")?
+        .strip_suffix(')')?;
+    is_identifier(inner).then(|| inner.to_string())
+}
+
+/// Every handler method the tree refers to, in tree order.
+pub fn handlers(root: &Node) -> Vec<String> {
+    let mut names = Vec::new();
+    root.walk(&mut |_, node| {
+        for call in &node.calls {
+            if let Some(arg) = call.args.first()
+                && let Some(name) = handler_name(&arg.to_source())
+                && !names.contains(&name)
+            {
+                names.push(name);
+            }
+        }
+    });
+    names
+}
+
+/// A handler name derived from a node, e.g. the button `valider` gives
+/// `on_valider`.
+pub fn suggested_handler(node: &Node) -> String {
+    let base = match &node.base {
+        Base::Known { args, .. } => args
+            .first()
+            .and_then(|arg| arg.as_str())
+            .unwrap_or("action")
+            .to_string(),
+        Base::Opaque(_) => "action".to_string(),
+    };
+    let cleaned: String = base
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    format!("on_{}", if cleaned.is_empty() { "action" } else { &cleaned })
+}
+
+/// A field name not already bound by another input in the tree.
+pub fn unique_input_field(root: &Node) -> String {
+    let mut used = Vec::new();
+    root.walk(&mut |_, node| {
+        if node.base.path() != Some("Input::new") {
+            return;
+        }
+        if let Base::Known { args, .. } = &node.base
+            && let Some(name) = args
+                .first()
+                .map(|arg| arg.to_source())
+                .and_then(|source| source.strip_prefix("&self.").map(str::to_string))
+        {
+            used.push(name);
+        }
+    });
+
+    let mut index = 1;
+    loop {
+        let candidate = if index == 1 {
+            "champ".to_string()
+        } else {
+            format!("champ_{index}")
+        };
+        if !used.contains(&candidate) {
+            return candidate;
+        }
+        index += 1;
+    }
+}
+
+/// Reads the current value of a property, as text for the inspector.
+pub fn read(node: &Node, prop: &Prop) -> Option<String> {
+    match prop.target {
+        Target::BaseArg(index) => match &node.base {
+            Base::Known { args, .. } => args.get(index).map(|arg| match (prop.kind, arg) {
+                (Kind::Field, Arg::Verbatim(source)) => {
+                    source.trim_start_matches("&self.").to_string()
+                }
+                (_, Arg::Str(value)) => value.clone(),
+                (_, other) => other.to_source(),
+            }),
+            Base::Opaque(_) => None,
+        },
+        Target::Method(name) if matches!(prop.kind, Kind::Handler) => node
+            .call(name)
+            .and_then(|call| call.args.first())
+            .map(|arg| arg.to_source())
+            .map(|source| handler_name(&source).unwrap_or(source)),
+        Target::Method(name) => match node.call(name) {
+            Some(call) => call
+                .args
+                .first()
+                .map(|arg| arg.as_str().map(str::to_string).unwrap_or(arg.to_source())),
+            None if matches!(prop.kind, Kind::Bool) => Some("false".into()),
+            None => None,
+        },
+        Target::Flag(name) => Some(node.call(name).is_some().to_string()),
+        Target::Family(names) => names
+            .iter()
+            .find(|name| node.call(name).is_some())
+            .map(|name| (*name).to_string()),
+    }
+}
+
+/// Writes a property. `value` is the raw text from the inspector; for a family,
+/// it is the chosen method name, or empty to clear the choice.
+pub fn write(node: &mut Node, prop: &Prop, value: &str) {
+    match prop.target {
+        Target::BaseArg(index) => {
+            // An empty or malformed field name would be written straight into
+            // the source as `&self.` and into the struct as `pub : Entity<..>`.
+            if matches!(prop.kind, Kind::Field) && !is_identifier(value) {
+                return;
+            }
+            let Base::Known { args, .. } = &mut node.base else {
+                return;
+            };
+            if !matches!(args.get(index), None | Some(Arg::Str(_)))
+                && !matches!(prop.kind, Kind::Field)
+            {
+                return;
+            }
+            let arg = match prop.kind {
+                Kind::Field => Arg::Verbatim(format!("&self.{value}")),
+                _ => Arg::Str(value.to_string()),
+            };
+            if index < args.len() {
+                args[index] = arg;
+            } else {
+                args.push(arg);
+            }
+        }
+        Target::Method(name) if matches!(prop.kind, Kind::Handler) => {
+            if value.is_empty() {
+                node.remove_call(name);
+            } else if is_identifier(value) {
+                node.set_call(name, Arg::Verbatim(format!("cx.listener(Self::{value})")));
+            }
+        }
+        Target::Method(name) => {
+            let arg = match prop.kind {
+                Kind::Bool => Arg::Bool(value == "true"),
+                _ => Arg::Str(value.to_string()),
+            };
+            node.set_call(name, arg);
+        }
+        Target::Flag(name) => node.set_flag(name, value == "true"),
+        Target::Family(names) => {
+            for name in names {
+                node.set_flag(name, false);
+            }
+            if !value.is_empty() {
+                node.set_flag(value, true);
+            }
+        }
+    }
+}
+
+/// Every `use` line the tree needs, in a stable order.
+pub fn imports(root: &Node) -> Vec<&'static str> {
+    let mut lines: Vec<&'static str> = Vec::new();
+    root.walk(&mut |_, node| {
+        if let Some(spec) = of(node)
+            && !lines.contains(&spec.import)
+        {
+            lines.push(spec.import);
+        }
+    });
+    lines.sort_unstable();
+    lines
+}
