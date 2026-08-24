@@ -24,6 +24,9 @@ actions!(
         NewProject,
         NewView,
         OpenFolder,
+        AdoptView,
+        ReloadView,
+        OverwriteFile,
         Save,
         DeleteNode,
         CloseFolder,
@@ -77,6 +80,15 @@ pub fn register_handlers(cx: &mut App) {
 
     cx.on_action(|_: &NewView, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.new_view(cx));
+    });
+    cx.on_action(|_: &AdoptView, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.adopt_view(cx));
+    });
+    cx.on_action(|_: &ReloadView, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.reload_view(cx));
+    });
+    cx.on_action(|_: &OverwriteFile, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.overwrite_view(cx));
     });
     cx.on_action(|_: &Save, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.save_view(cx));
@@ -163,6 +175,7 @@ pub fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-shift-p", NewProject, None),
         KeyBinding::new("cmd-n", NewView, None),
         KeyBinding::new("cmd-s", Save, None),
+        KeyBinding::new("cmd-shift-r", ReloadView, None),
         KeyBinding::new("cmd-shift-backspace", DeleteNode, None),
         KeyBinding::new("cmd-shift-w", CloseFolder, None),
         KeyBinding::new("cmd-w", CloseWindow, None),

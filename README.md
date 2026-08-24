@@ -85,6 +85,26 @@ bouton `→ Zed` à côté de la propriété Action ouvre l'éditeur sur la lign
 méthode. Et il ne faut pas oublier `cx.notify()` — sans lui le champ change et
 l'écran ne bouge pas.
 
+## Fichiers modifiés en dehors de maxx
+
+maxx tient une copie du fichier en mémoire, donc écrire sans regarder le disque
+écraserait ce qui a été tapé dans Zed entre-temps. Au retour du focus, et de
+nouveau avant chaque enregistrement, maxx compare :
+
+* le disque a changé et l'arbre n'a pas été touché ici — rechargement
+  automatique, comme un éditeur le fait pour un tampon non modifié ;
+* les deux côtés ont changé — refus d'écrire, la barre d'état le signale, et
+  `Fichier > Recharger la vue` (⌘⇧R) ou `Fichier > Écraser le fichier`
+  tranchent.
+
+## Ouvrir une vue que maxx n'a pas écrite
+
+`Fichier > Adopter cette vue` pose les marqueurs autour de l'expression que
+retourne un `fn render` écrit à la main. Rien d'autre n'est touché, et les
+instructions qui précèdent l'expression finale sont laissées telles quelles.
+Si le corps ne se termine pas par une expression, l'adoption échoue et le dit :
+maxx ne saurait pas où couper.
+
 ## Compilation des projets générés
 
 `gpui` et `gpui-component` représentent environ 750 crates. Un projet qui a son

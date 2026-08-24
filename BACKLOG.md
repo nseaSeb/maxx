@@ -2,17 +2,8 @@
 
 Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
 
-## Sécurité des fichiers — reporté (usage personnel pour l'instant)
-
-- **Détection d'une modification extérieure.** `⌘S` réécrit le fichier sans
-  regarder s'il a changé sur disque depuis son ouverture. Si la vue est éditée
-  dans Zed pendant que maxx la tient ouverte, l'enregistrement écrase ce
-  travail. Correction prévue : comparer le contenu du disque avec `View::source`
-  avant d'écrire, refuser et proposer « Recharger » (`⌘R`).
-- **Adopter une vue existante.** maxx n'ouvre que les vues qu'il a écrites,
-  puisqu'il exige les marqueurs `// maxx:begin` / `// maxx:end`. Une action qui
-  insère ces marqueurs autour du corps d'un `render` déjà écrit à la main
-  permettrait d'ouvrir un projet GPUI que maxx n'a pas généré.
+La sécurité des fichiers — détection d'une modification extérieure et adoption
+d'une vue existante — est faite ; voir le README.
 
 ## Composants
 

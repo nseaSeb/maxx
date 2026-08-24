@@ -8,6 +8,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::model::{Base, Node};
+use crate::parser::matching_brace;
 use crate::{codegen, parser, registry};
 
 /// A field declared on the view's struct.
@@ -146,6 +147,27 @@ impl View {
 
         self.source = source;
         std::fs::write(&self.path, &self.source).map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    /// Whether the file on disk differs from the copy this view was built from.
+    pub fn disk_changed(&self) -> bool {
+        match std::fs::read_to_string(&self.path) {
+            Ok(text) => text != self.source,
+            // Unreadable is not "changed": refusing to save would not help.
+            Err(_) => false,
+        }
+    }
+
+    /// Re-reads the file, dropping whatever the designer held.
+    pub fn reload(&mut self) -> Result<(), String> {
+        let reloaded = View::load(&self.path)?;
+        self.source = reloaded.source;
+        self.root = reloaded.root;
+        self.saved = reloaded.saved;
+        self.selected.clear();
+        self.past.clear();
+        self.future.clear();
         Ok(())
     }
 
@@ -340,24 +362,6 @@ fn view_type_name(source: &str) -> Option<String> {
     let rest = &source[offset..];
     let end = rest.find(|character: char| !character.is_alphanumeric() && character != '_')?;
     Some(rest[..end].to_string())
-}
-
-/// The offset of the `}` closing the `{` at `open`.
-fn matching_brace(source: &str, open: usize) -> Option<usize> {
-    let mut depth = 0usize;
-    for (offset, character) in source[open..].char_indices() {
-        match character {
-            '{' => depth += 1,
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(open + offset);
-                }
-            }
-            _ => {}
-        }
-    }
-    None
 }
 
 /// Inserts `line` just inside the block opening at `brace`, collapsing `{}`

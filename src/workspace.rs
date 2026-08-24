@@ -117,6 +117,11 @@ pub struct Workspace {
     state_name_input: Option<Entity<InputState>>,
     /// Index into `view::STATE_TYPES` for the field about to be added.
     state_type: usize,
+    /// Views changed both on disk and in the designer, awaiting a decision.
+    conflicts: HashSet<PathBuf>,
+    /// Whether the window held the focus on the previous frame, to notice the
+    /// moment it comes back.
+    was_active: bool,
     /// Scroll position of the right-hand panels.
     pub(crate) side_scroll: ScrollHandle,
     /// Scroll position of the output panel.
@@ -145,6 +150,8 @@ impl Workspace {
             run_task: None,
             state_name_input: None,
             state_type: 0,
+            conflicts: HashSet::new(),
+            was_active: false,
             side_scroll: ScrollHandle::new(),
             output_scroll: UniformListScrollHandle::new(),
         };
@@ -844,15 +851,143 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Writes the view back to its file.
+    /// Writes the view back to its file, refusing when the file changed
+    /// underneath.
     pub fn save_view(&mut self, cx: &mut Context<Self>) {
-        let Some(view) = self.view_mut() else {
+        self.write_view(false, cx);
+    }
+
+    /// Writes the view even though the file changed on disk, losing what was
+    /// written there.
+    pub fn overwrite_view(&mut self, cx: &mut Context<Self>) {
+        self.write_view(true, cx);
+    }
+
+    fn write_view(&mut self, force: bool, cx: &mut Context<Self>) {
+        let Some(view) = self.view() else {
             return;
         };
+        let path = view.path.clone();
+
+        if !force && view.disk_changed() {
+            if !view.dirty() {
+                // Nothing to lose on this side: take what is on disk.
+                self.reload_view(cx);
+                return;
+            }
+            self.conflicts.insert(path);
+            self.message = Some(SharedString::from(
+                "fichier modifié en dehors de maxx — Fichier > Recharger, ou Écraser",
+            ));
+            cx.notify();
+            return;
+        }
+
+        let view = self.view_mut().expect("just borrowed");
         self.message = match view.save() {
             Ok(()) => Some(SharedString::from(format!("{} enregistré", view.name()))),
             Err(error) => Some(SharedString::from(error)),
         };
+        self.conflicts.remove(&path);
+        self.revision += 1;
+        cx.notify();
+    }
+
+    /// Drops what the designer holds and re-reads the file.
+    pub fn reload_view(&mut self, cx: &mut Context<Self>) {
+        let Some(view) = self.view_mut() else {
+            return;
+        };
+        let path = view.path.clone();
+        let name = view.name();
+        self.message = match view.reload() {
+            Ok(()) => Some(SharedString::from(format!("{name} rechargé"))),
+            Err(error) => Some(SharedString::from(error)),
+        };
+        self.conflicts.remove(&path);
+        self.revision += 1;
+        cx.notify();
+    }
+
+    /// Notices files changed outside maxx.
+    ///
+    /// A view the designer has not touched is reloaded without asking — the
+    /// habit every editor gives you for an unmodified buffer. One changed on
+    /// both sides is a real conflict and waits for a decision.
+    fn check_disk(&mut self, cx: &mut Context<Self>) {
+        let mut reloaded = Vec::new();
+        let mut conflicted = Vec::new();
+
+        for index in 0..self.views.len() {
+            let view = &self.views[index];
+            if !view.disk_changed() {
+                continue;
+            }
+            if view.dirty() {
+                conflicted.push(view.path.clone());
+            } else {
+                reloaded.push(index);
+            }
+        }
+
+        for index in reloaded {
+            let view = &mut self.views[index];
+            let name = view.name();
+            if view.reload().is_ok() {
+                self.message = Some(SharedString::from(format!(
+                    "{name} rechargé — modifié en dehors de maxx"
+                )));
+                self.revision += 1;
+            }
+        }
+        for path in conflicted {
+            if self.conflicts.insert(path) {
+                self.message = Some(SharedString::from(
+                    "modifié des deux côtés — Fichier > Recharger, ou Écraser",
+                ));
+                self.revision += 1;
+            }
+        }
+        cx.notify();
+    }
+
+    /// Puts maxx's markers around the expression a hand-written `render`
+    /// returns, then opens the view.
+    pub fn adopt_view(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = self
+            .selected
+            .clone()
+            .filter(|path| path.extension().is_some_and(|extension| extension == "rs"))
+        else {
+            self.message = Some(SharedString::from(
+                "sélectionnez un fichier .rs dans l'explorateur",
+            ));
+            cx.notify();
+            return;
+        };
+
+        let source = match std::fs::read_to_string(&path) {
+            Ok(source) => source,
+            Err(error) => {
+                self.message = Some(SharedString::from(error.to_string()));
+                cx.notify();
+                return;
+            }
+        };
+
+        match crate::parser::adopt(&source) {
+            Ok(adopted) => match std::fs::write(&path, &adopted) {
+                Ok(()) => {
+                    self.message = None;
+                    self.select_file(path, cx);
+                    if self.message.is_none() {
+                        self.message = Some(SharedString::from("vue adoptée"));
+                    }
+                }
+                Err(error) => self.message = Some(SharedString::from(error.to_string())),
+            },
+            Err(error) => self.message = Some(SharedString::from(error.to_string())),
+        }
         cx.notify();
     }
 
@@ -1161,12 +1296,16 @@ impl Workspace {
     }
 
     fn render_status_bar(&self) -> impl IntoElement {
+        let conflict = self
+            .view()
+            .is_some_and(|view| self.conflicts.contains(&view.path));
         let label = match (&self.message, &self.view(), &self.project) {
             (Some(message), _, _) => message.clone(),
             (None, Some(view), _) => SharedString::from(format!(
-                "{}{} · {} nœuds",
+                "{}{}{} · {} nœuds",
                 view.name(),
                 if view.dirty() { " •" } else { "" },
+                if conflict { " ⚠ modifié en dehors de maxx" } else { "" },
                 view.root.count()
             )),
             (None, None, Some(project)) => SharedString::from(format!(
@@ -1194,6 +1333,13 @@ impl Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Coming back from Zed is the moment to notice what changed there.
+        let active = window.is_window_active();
+        if active && !self.was_active {
+            self.check_disk(cx);
+        }
+        self.was_active = active;
+
         self.sync_prop_inputs(window, cx);
         let show_panel = self.show_panel && self.project.is_some();
 

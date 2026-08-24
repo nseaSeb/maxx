@@ -16,9 +16,88 @@ pub const BEGIN: &str = "// maxx:begin";
 /// Closing marker of the region `maxx` owns.
 pub const END: &str = "// maxx:end";
 
+/// The offset of the `}` closing the `{` at `open`.
+pub(crate) fn matching_brace(source: &str, open: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    for (offset, character) in source[open..].char_indices() {
+        match character {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(open + offset);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Wraps the expression a hand-written `render` returns in maxx's markers, so
+/// the view can be opened in the designer.
+///
+/// Nothing else in the file is touched. Statements before the final expression
+/// are left alone — only the expression itself becomes the managed region.
+pub fn adopt(source: &str) -> Result<String, Error> {
+    if locate(source).is_ok() {
+        return Err(Error::AlreadyManaged);
+    }
+
+    let offset = source.find("fn render(").ok_or(Error::NoRender)?;
+    let open = source[offset..]
+        .find('{')
+        .map(|index| offset + index)
+        .ok_or(Error::NoRender)?;
+    // The first `{` after `fn render(` closes the argument list's type
+    // parameters in no case we generate, but a return type like `impl
+    // IntoElement` has none either, so this is the body.
+    let close = matching_brace(source, open).ok_or(Error::NoRender)?;
+
+    let block: syn::Block = syn::parse_str(&source[open..=close]).map_err(Error::Syntax)?;
+    let last = block.stmts.last().ok_or(Error::NoTrailingExpression)?;
+    let syn::Stmt::Expr(expression, None) = last else {
+        return Err(Error::NoTrailingExpression);
+    };
+
+    // Spans are relative to the string handed to `parse_str`, which started at
+    // `open`.
+    let range = expression.span().byte_range();
+    let start = open + range.start;
+    let end = open + range.end;
+    if start >= source.len() || end > source.len() {
+        return Err(Error::NoTrailingExpression);
+    }
+
+    let line_start = source[..start].rfind('\n').map_or(0, |index| index + 1);
+    let indent = &source[line_start..start];
+    let indent = if indent.trim().is_empty() { indent } else { "        " };
+    let line_end = source[end..]
+        .find('\n')
+        .map_or(source.len(), |index| end + index + 1);
+
+    let mut out = String::with_capacity(source.len() + 48);
+    out.push_str(&source[..line_start]);
+    out.push_str(indent);
+    out.push_str(BEGIN);
+    out.push('\n');
+    out.push_str(&source[line_start..line_end]);
+    out.push_str(indent);
+    out.push_str(END);
+    out.push('\n');
+    out.push_str(&source[line_end..]);
+    Ok(out)
+}
+
 /// Why a file could not be read as a `maxx` view.
 #[derive(Debug)]
 pub enum Error {
+    /// The file already carries markers.
+    AlreadyManaged,
+    /// No `fn render` to adopt.
+    NoRender,
+    /// The body of `render` does not end on an expression.
+    NoTrailingExpression,
     /// The file carries no managed region.
     NoMarkers,
     /// The markers are present but in the wrong order.
@@ -30,6 +109,13 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Error::AlreadyManaged => write!(f, "cette vue est déjà gérée par maxx"),
+            Error::NoRender => write!(f, "aucun « fn render » dans ce fichier"),
+            Error::NoTrailingExpression => write!(
+                f,
+                "le corps de « render » ne se termine pas par une expression — \
+                 maxx ne saurait pas où poser ses marqueurs"
+            ),
             Error::NoMarkers => write!(f, "aucune zone « {BEGIN} » dans ce fichier"),
             Error::MarkersOutOfOrder => write!(f, "« {END} » apparaît avant « {BEGIN} »"),
             Error::Syntax(error) => write!(f, "la zone gérée n'est pas une expression : {error}"),

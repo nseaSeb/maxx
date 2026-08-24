@@ -385,3 +385,85 @@ fn the_demo_view_reads_as_a_binding() {
     );
     assert!(view.method_line("on_changer").is_some());
 }
+
+#[test]
+fn a_hand_written_view_can_be_adopted() {
+    let root = scratch("maxx_adopt");
+    std::fs::create_dir_all(root.join("src/ui")).unwrap();
+    let path = root.join("src/ui/ecrit_a_la_main.rs");
+    let source = "\
+use gpui::{Context, Window, prelude::*};
+use gpui_component::v_flex;
+use gpui_component::label::Label;
+
+pub struct Ecrit {}
+
+impl Render for Ecrit {
+    /// Un commentaire qui doit survivre.
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex().gap_2().child(Label::new(\"Écrit à la main\"))
+    }
+}
+";
+    std::fs::write(&path, source).unwrap();
+    assert!(View::load(&path).is_err(), "sans marqueurs, maxx refuse");
+
+    let adopted = maxx::parser::adopt(source).expect("l'adoption doit réussir");
+    std::fs::write(&path, &adopted).unwrap();
+
+    assert!(adopted.contains("Un commentaire qui doit survivre"));
+    let view = View::load(&path).expect("la vue adoptée doit s'ouvrir");
+    assert_eq!(view.root.base.path(), Some("v_flex"));
+    assert_eq!(view.root.children.len(), 1);
+
+    // Adopting twice is refused rather than nesting a second pair of markers.
+    assert!(maxx::parser::adopt(&adopted).is_err());
+}
+
+#[test]
+fn a_render_without_a_trailing_expression_is_refused() {
+    let source = "\
+impl Render for Ecrit {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        let element = v_flex();
+        return element;
+    }
+}
+";
+    assert!(matches!(
+        maxx::parser::adopt(source),
+        Err(maxx::parser::Error::NoTrailingExpression)
+    ));
+}
+
+#[test]
+fn an_outside_change_is_noticed() {
+    let root = scratch("maxx_conflict");
+    scaffold::create_project(&root, "essai").unwrap();
+    let path = root.join("src/ui/accueil.rs");
+
+    let view = View::load(&path).unwrap();
+    assert!(!view.disk_changed());
+
+    // Someone edits the file in Zed.
+    let outside = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("Bienvenue", "Modifié dans Zed");
+    std::fs::write(&path, &outside).unwrap();
+    assert!(view.disk_changed());
+
+    // With nothing to lose on this side, reloading takes what is on disk.
+    let mut view = view;
+    view.reload().unwrap();
+    assert!(!view.disk_changed());
+    assert!(!view.dirty());
+    let label = &view.root.children[0];
+    assert_eq!(
+        maxx::registry::read(
+            label,
+            maxx::registry::of(label).unwrap().props.iter().next().unwrap()
+        )
+        .as_deref(),
+        Some("Modifié dans Zed")
+    );
+}
