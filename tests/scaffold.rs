@@ -270,9 +270,17 @@ fn a_generated_project_shares_the_build_cache() {
     let root = scratch("maxx_cache_a");
     scaffold::create_project(&root, "cache_a").unwrap();
 
+    // Le chemin est comparé après lecture du TOML, jamais par sous-chaîne : un
+    // chemin Windows y est écrit échappé — `C:\\Users\\…` — et le chercher
+    // brut échouait sur Windows alors que le fichier était juste. C'est ce test
+    // qui a fait rougir la matrice après la correction de l'échappement.
     let config = std::fs::read_to_string(root.join(".cargo/config.toml")).unwrap();
     assert!(config.contains("[build]"));
-    assert!(config.contains(&maxx::run::shared_target_dir().display().to_string()));
+    let parsed: toml::Value = toml::from_str(&config).expect("le fichier doit rester du TOML");
+    assert_eq!(
+        std::path::PathBuf::from(parsed["build"]["target-dir"].as_str().unwrap()),
+        maxx::run::shared_target_dir()
+    );
 
     // The cache is machine-local, so it must not follow the project into git.
     let ignore = std::fs::read_to_string(root.join(".gitignore")).unwrap();
