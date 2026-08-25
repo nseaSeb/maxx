@@ -233,6 +233,18 @@ impl Workspace {
                             .child(menu_button("menu-del", "Supprimer", cx, |this, cx| {
                                 this.remove_menu_selection(cx)
                             })),
+                    )
+                    .child(section_title("Ordre"))
+                    .child(
+                        h_flex()
+                            .gap_1()
+                            .p_2()
+                            .child(menu_button("menu-up", "↑ Monter", cx, |this, cx| {
+                                this.move_menu_selection(true, cx)
+                            }))
+                            .child(menu_button("menu-down", "↓ Descendre", cx, |this, cx| {
+                                this.move_menu_selection(false, cx)
+                            })),
                     ),
             )
             .into_any_element()

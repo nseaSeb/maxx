@@ -169,6 +169,8 @@ Une application GPUI n'a aucune barre de menus tant qu'elle n'appelle pas
 `src/menus.rs`, avec les gestes que macOS attend : À propos, Masquer, Quitter,
 un menu Édition câblé sur les actions système, et Réduire.
 
+Les entrées se réordonnent avec `⌘⌃↑` et `⌘⌃↓`.
+
 Ce fichier a sa propre zone marquée : ouvrez-le depuis l'explorateur et maxx
 affiche un éditeur de menus. Ajouter une entrée avec une action inconnue
 déclare cette action dans `actions!` et lui écrit un gestionnaire vide, comme le

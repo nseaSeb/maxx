@@ -47,6 +47,8 @@ actions!(
         AddMenu,
         AddMenuEntry,
         AddMenuSeparator,
+        MoveMenuUp,
+        MoveMenuDown,
         // View menu
         ToggleProjectPanel,
         ToggleStatusBar,
@@ -149,6 +151,12 @@ pub fn register_handlers(cx: &mut App) {
     });
     cx.on_action(|_: &AddMenuSeparator, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.add_menu_item(true, cx));
+    });
+    cx.on_action(|_: &MoveMenuUp, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.move_menu_selection(true, cx));
+    });
+    cx.on_action(|_: &MoveMenuDown, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.move_menu_selection(false, cx));
     });
     cx.on_action(|_: &Undo, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.undo(cx));
@@ -259,6 +267,8 @@ pub fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-n", NewView, None),
         KeyBinding::new("cmd-s", Save, None),
         KeyBinding::new("cmd-shift-r", ReloadView, None),
+        KeyBinding::new("cmd-ctrl-up", MoveMenuUp, None),
+        KeyBinding::new("cmd-ctrl-down", MoveMenuDown, None),
         KeyBinding::new("cmd-shift-backspace", DeleteNode, None),
         KeyBinding::new("cmd-shift-w", CloseFolder, None),
         KeyBinding::new("cmd-w", CloseWindow, None),

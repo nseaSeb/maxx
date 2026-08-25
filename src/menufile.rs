@@ -9,6 +9,15 @@ use std::path::{Path, PathBuf};
 use crate::menu_model::{ItemDef, MenuDef};
 use crate::parser;
 
+/// The index one step away, or nothing when there is no room.
+///
+/// A separate function because the same arithmetic serves menus and entries,
+/// and because `index - 1` on a `usize` at zero is the kind of subtraction that
+/// interrupts a process.
+fn step(index: usize, up: bool, length: usize) -> Option<usize> {
+    if up { index.checked_sub(1) } else { Some(index + 1).filter(|target| *target < length) }
+}
+
 /// Where a menu file's editing cursor sits.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Selection {
@@ -48,6 +57,15 @@ impl MenuFile {
     /// Reads and parses a menu file.
     pub fn load(path: &Path) -> Result<Self, String> {
         let source = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
+        Self::from_source(path.to_path_buf(), source)
+    }
+
+    /// Parses a menu file already in hand.
+    ///
+    /// Split out from [`load`](Self::load) so the parsing can be exercised
+    /// without a file on disk — and so a source obtained some other way can be
+    /// read the same way.
+    pub fn from_source(path: PathBuf, source: String) -> Result<Self, String> {
         let region = parser::locate(&source).map_err(|error| error.to_string())?;
         // Dedented first, exactly as `parser::parse` does: an opaque entry kept
         // with its file indentation gains a level on every save, because
@@ -58,7 +76,7 @@ impl MenuFile {
         let menus = crate::menu_model::parse(&expr, inner)
             .ok_or("la zone gérée n'est pas un « vec![Menu { .. }] »")?;
 
-        Ok(Self { path: path.to_path_buf(), source, saved: menus.clone(), menus, selected: None })
+        Ok(Self { path, source, saved: menus.clone(), menus, selected: None })
     }
 
     /// The file name, for the tab.
@@ -181,6 +199,43 @@ impl MenuFile {
         let at = at.min(menu.items.len());
         menu.items.insert(at, item);
         self.selected = Some(Selection::Item(menu_index, at));
+    }
+
+    /// Moves the selection one place up, or down.
+    ///
+    /// A menu moves among the menus, an entry among the entries of its own
+    /// menu — never from one menu to another. Crossing that boundary is what a
+    /// drag would be for, and a drag is a different gesture with a different
+    /// affordance; two keys that only ever reorder within one list can be held
+    /// down without ever surprising anyone.
+    ///
+    /// Answers whether anything moved, so the caller can stay quiet when the
+    /// selection is already at the end of its list.
+    pub fn move_selected(&mut self, up: bool) -> bool {
+        let Some(selection) = self.selected else {
+            return false;
+        };
+        match selection {
+            Selection::Menu(index) => {
+                let Some(target) = step(index, up, self.menus.len()) else {
+                    return false;
+                };
+                self.menus.swap(index, target);
+                self.selected = Some(Selection::Menu(target));
+                true
+            }
+            Selection::Item(menu_index, item) => {
+                let Some(menu) = self.menus.get_mut(menu_index) else {
+                    return false;
+                };
+                let Some(target) = step(item, up, menu.items.len()) else {
+                    return false;
+                };
+                menu.items.swap(item, target);
+                self.selected = Some(Selection::Item(menu_index, target));
+                true
+            }
+        }
     }
 
     /// Removes what is selected.

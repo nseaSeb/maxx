@@ -818,6 +818,28 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Moves the selected menu or entry one place up, or down.
+    pub fn move_menu_selection(&mut self, up: bool, cx: &mut Context<Self>) {
+        let Some(menus) = self.menu_file.as_mut() else {
+            return;
+        };
+        if menus.selected.is_none() {
+            self.message = Some(SharedString::from("sélectionnez d'abord une entrée"));
+            cx.notify();
+            return;
+        }
+        if !menus.move_selected(up) {
+            // Already at the end of its list: saying so beats a click that
+            // looks broken.
+            self.message = Some(SharedString::from(if up {
+                "déjà en premier"
+            } else {
+                "déjà en dernier"
+            }));
+        }
+        cx.notify();
+    }
+
     /// Removes the selected menu or entry.
     pub fn remove_menu_selection(&mut self, cx: &mut Context<Self>) {
         if let Some(menus) = self.menu_file.as_mut() {

@@ -17,8 +17,11 @@ Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
 - **Sous-menus et raccourcis.** L'éditeur gère les menus, les entrées et les
   séparateurs ; un `MenuItem::submenu(..)` est conservé mais pas modifiable, et
   le raccourci d'une entrée se déclare encore à la main dans `key_bindings`.
-- **Ni réordonnancement ni glisser-déposer** dans l'éditeur de menus : une
-  entrée s'ajoute après la sélection et se supprime, c'est tout.
+- **Réordonner** est fait : Monter et Descendre, ⌘⌃↑ et ⌘⌃↓, dans la barre de
+  menus comme dans le panneau. Une entrée reste dans son menu et un menu parmi
+  les menus — franchir cette limite est ce qu'un glisser-déposer ferait, et
+  c'est un geste différent avec ses propres affordances. Le glisser-déposer,
+  lui, reste à faire.
 
 ## Confort
 
