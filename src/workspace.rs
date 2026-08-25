@@ -1835,8 +1835,11 @@ impl Workspace {
         div()
             .flex()
             .flex_col()
-            .w(px(240.))
-            .flex_none()
+            // Pas de largeur ici : c'est le volet redimensionnable qui la
+            // donne. Une largeur fixe à l'intérieur laissait l'arborescence à
+            // 240 px dans un volet plus large, et la bande vide entre les deux
+            // se voyait.
+            .size_full()
             .bg(rgb(theme::PANEL_BG))
             .border_r_1()
             .border_color(rgb(theme::BORDER))

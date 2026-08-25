@@ -307,9 +307,14 @@ impl Workspace {
     /// The drawing surface: the tree rendered with real components.
     fn render_canvas(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let view = self.view().expect("checked by the caller");
-        div().flex().flex_1().p_6().justify_center().child(
+        div().flex().flex_1().p_6().justify_center().overflow_x_hidden().child(
             div()
-                .w(px(520.))
+                // Une largeur plafonnée et non figée : la planche fait 520 px
+                // quand il y a la place, et rétrécit plutôt que d'être coupée
+                // quand la fenêtre se resserre. Coupée et centrée, elle
+                // perdait ses deux bords à la fois.
+                .w_full()
+                .max_w(px(520.))
                 .p_2()
                 .rounded_md()
                 .border_1()
