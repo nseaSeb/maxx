@@ -133,7 +133,10 @@ target-dir = "{}"
 /// A GPUI application gets no menu bar of its own — not even a Quit — unless it
 /// calls `set_menus`, so the template ships a usable one and maxx edits it.
 fn menus_rs() -> String {
-    r#"use gpui::{App, Menu, MenuItem, OsAction, actions};
+    r#"use gpui::{
+    App, Bounds, Context, Menu, MenuItem, OsAction, SharedString, TitlebarOptions, Window,
+    WindowBounds, WindowOptions, actions, div, prelude::*, px, rgb, size,
+};
 
 actions!(app, [About, Quit, HideApp, HideOthers, ShowAll, Undo, Redo, Cut, Copy, Paste, SelectAll, Minimize]);
 
@@ -143,7 +146,7 @@ pub fn register(cx: &mut App) {
     cx.on_action(|_: &HideApp, cx: &mut App| cx.hide());
     cx.on_action(|_: &HideOthers, cx: &mut App| cx.hide_other_apps());
     cx.on_action(|_: &ShowAll, cx: &mut App| cx.unhide_other_apps());
-    cx.on_action(|_: &About, _cx: &mut App| println!("À propos"));
+    cx.on_action(|_: &About, cx: &mut App| open_about(cx));
     cx.on_action(|_: &Minimize, cx: &mut App| {
         // Deferred: an action handler runs inside the window's own update, and
         // gpui refuses to enter a second one.
@@ -171,6 +174,78 @@ pub fn key_bindings() -> Vec<gpui::KeyBinding> {
         KeyBinding::new("cmd-a", SelectAll, None),
         KeyBinding::new("cmd-m", Minimize, None),
     ]
+}
+
+/// What the About window shows.
+///
+/// Name and version are read from Cargo.toml at build time: `[package]` is the
+/// one place a version number should live, and `cargo set-version` or a hand
+/// edit there is enough to change what this window says.
+struct AboutWindow {
+    name: SharedString,
+    version: SharedString,
+}
+
+impl Render for AboutWindow {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap_2()
+            .size_full()
+            .bg(rgb(0x1e2127))
+            .text_color(rgb(0xc8ccd4))
+            .child(div().text_2xl().child(self.name.clone()))
+            .child(
+                div()
+                    .text_color(rgb(0x7f8896))
+                    .child(format!("version {}", self.version)),
+            )
+    }
+}
+
+/// Opens the About window, or brings it forward when it is already up.
+///
+/// Plain gpui, no `gpui_component`: a window drawing a component widget has to
+/// be rooted in `gpui_component::Root`, and this one does not need it.
+///
+/// Deferred for the same reason as Minimize above: an action handler runs
+/// inside the update of a window, and gpui refuses to enter a second one.
+fn open_about(cx: &mut App) {
+    cx.defer(open_about_now);
+}
+
+fn open_about_now(cx: &mut App) {
+    if let Some(existing) = cx
+        .windows()
+        .into_iter()
+        .find(|handle| handle.downcast::<AboutWindow>().is_some())
+    {
+        let _ = existing.update(cx, |_, window, _| window.activate_window());
+        return;
+    }
+
+    let bounds = Bounds::centered(None, size(px(320.), px(180.)), cx);
+    let options = WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(bounds)),
+        titlebar: Some(TitlebarOptions {
+            title: Some(SharedString::from("À propos")),
+            ..Default::default()
+        }),
+        is_resizable: false,
+        is_minimizable: false,
+        ..Default::default()
+    };
+
+    cx.open_window(options, |_window, cx| {
+        cx.new(|_| AboutWindow {
+            name: SharedString::from(env!("CARGO_PKG_NAME")),
+            version: SharedString::from(env!("CARGO_PKG_VERSION")),
+        })
+    })
+    .ok();
 }
 
 /// The menu bar itself.

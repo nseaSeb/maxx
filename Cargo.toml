@@ -2,6 +2,9 @@
 name = "maxx"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+description = "Atelier visuel qui dessine des vues GPUI et les écrit en Rust"
+repository = "https://github.com/nseaSeb/maxx"
 
 [dependencies]
 # runtime_shaders avoids the build-time `metal` compiler, which Xcode 26 ships

@@ -147,5 +147,18 @@ relance à la demande.
 | `src/scaffold.rs` | gabarits de projet et de vue |
 | `src/designer.rs` | canvas, structure, inspecteur, palette |
 | `src/workspace.rs` | la fenêtre, l'état, les commandes |
+| `src/about.rs` | la fenêtre « À propos » |
 
 Ce qui est connu et reporté est dans [`BACKLOG.md`](BACKLOG.md).
+
+## Licence
+
+maxx est sous licence MIT — voir [`LICENSE`](LICENSE).
+
+GPUI et gpui-component sont sous Apache-2.0, ce qui n'impose rien de plus que
+de joindre leur licence et de conserver leurs mentions de copyright. Un crate
+transitif, `option-ext`, est sous MPL-2.0. Le détail et ce que la distribution
+d'un binaire demande sont dans [`THIRD-PARTY.md`](THIRD-PARTY.md).
+
+Les projets générés n'héritent d'aucune licence : maxx écrit du Rust ordinaire,
+qui vous appartient.

@@ -1,0 +1,44 @@
+# Dépendances et licences
+
+maxx est sous licence MIT (voir `LICENSE`). Les bibliothèques qu'il utilise
+restent sous la leur : ce fichier récapitule ce que leur redistribution
+demande. Il décrit l'état du graphe de dépendances tel que `Cargo.lock` le fige
+pour la cible macOS ; il est à revoir après toute mise à jour du verrou.
+
+La liste complète et à jour se lit avec :
+
+```
+cargo tree -e normal --target aarch64-apple-darwin
+```
+
+## Apache-2.0
+
+- **gpui 0.2.2** — Zed Industries. Le moteur d'interface.
+- **gpui-component 0.5.1** — les composants construits dessus.
+
+Ni l'un ni l'autre ne livre de fichier `NOTICE`, il n'y a donc rien à propager
+à ce titre. Distribuer un binaire de maxx demande de joindre le texte de la
+licence Apache-2.0 et de conserver les mentions de copyright. maxx ne modifie
+aucun fichier de ces deux crates : la clause sur la signalisation des
+modifications ne s'applique pas.
+
+Environ un quart des crates transitives sont sous Apache-2.0 seule ; la grande
+majorité du reste est sous MIT, ou au choix MIT ou Apache-2.0.
+
+## MPL-2.0
+
+- **option-ext 0.2.0**, tiré par `dirs` ▸ `dirs-sys` ▸ `zed-font-kit` ▸ `gpui`.
+
+La MPL-2.0 est un copyleft par fichier : elle n'atteint pas le code de maxx,
+mais distribuer un binaire qui la contient oblige à indiquer aux destinataires
+où obtenir la source de ce crate — <https://crates.io/crates/option-ext>.
+
+`cbindgen` (MPL-2.0), `dwrote` (MPL-2.0) et `self_cell` (Apache-2.0 ou
+GPL-2.0) figurent dans `Cargo.lock` mais ne sont pas dans le graphe de
+compilation macOS : dépendances de compilation ou d'une autre plateforme.
+
+## Autres licences présentes
+
+Unicode-3.0, BSD-2-Clause, BSD-3-Clause, ISC, Zlib, 0BSD, CC0-1.0, Unlicense.
+Toutes permissives, toutes satisfaites par la conservation des mentions de
+copyright dans une page d'attributions.

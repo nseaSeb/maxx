@@ -74,9 +74,7 @@ pub fn register_handlers(cx: &mut App) {
     cx.on_action(|_: &HideApp, cx: &mut App| cx.hide());
     cx.on_action(|_: &HideOthers, cx: &mut App| cx.hide_other_apps());
     cx.on_action(|_: &ShowAll, cx: &mut App| cx.unhide_other_apps());
-    cx.on_action(|_: &About, cx: &mut App| {
-        log_about(cx);
-    });
+    cx.on_action(|_: &About, cx: &mut App| crate::about::open(cx));
     cx.on_action(|_: &OpenDocs, cx: &mut App| cx.open_url(DOCS_URL));
 
     cx.on_action(|_: &NewWindow, cx: &mut App| {
@@ -304,11 +302,3 @@ fn active_workspace_path(cx: &mut App) -> Option<std::path::PathBuf> {
     .flatten()
 }
 
-fn log_about(cx: &mut App) {
-    let _ = cx;
-    println!(
-        "maxx {} — built on GPUI {}",
-        env!("CARGO_PKG_VERSION"),
-        "0.2.2"
-    );
-}

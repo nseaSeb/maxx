@@ -1,6 +1,7 @@
 //! maxx — a visual workshop that builds GPUI views and writes them out as real
 //! Rust source.
 
+pub mod about;
 pub mod actions;
 pub mod codegen;
 pub mod designer;
