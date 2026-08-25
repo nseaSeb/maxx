@@ -10,7 +10,7 @@
 use gpui::prelude::*;
 use gpui::{
     App, Bounds, Context, SharedString, TitlebarOptions, Window, WindowBounds, WindowOptions, div,
-    point, px, rgb, size,
+    point, px, size,
 };
 
 use crate::theme;
@@ -37,23 +37,18 @@ impl Render for About {
             .justify_center()
             .gap_2()
             .size_full()
-            .bg(rgb(theme::BG))
-            .text_color(rgb(theme::TEXT))
+            .bg(theme::bg())
+            .text_color(theme::text())
             .child(div().text_2xl().child(self.name.clone()))
-            .child(
-                div().text_color(rgb(theme::TEXT_MUTED)).child(format!("version {}", self.version)),
-            )
+            .child(div().text_color(theme::text_muted()).child(format!("version {}", self.version)))
             .child(
                 div()
                     .text_xs()
-                    .text_color(rgb(theme::TEXT_MUTED))
+                    .text_color(theme::text_muted())
                     .child(format!("GPUI {}", self.gpui)),
             )
             .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(theme::TEXT_MUTED))
-                    .child(crate::tr("about.licence")),
+                div().text_xs().text_color(theme::text_muted()).child(crate::tr("about.licence")),
             )
     }
 }

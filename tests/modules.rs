@@ -21,8 +21,11 @@ fn scratch(name: &str) -> PathBuf {
 /// échouer ce test, ce qui oblige à décider si la version doit monter. Sans
 /// lui, une correction n'atteindrait jamais les projets déjà écrits — et
 /// personne ne s'en apercevrait.
-const EMPREINTES: &[(&str, u32, &str)] =
-    &[("system", 1, "c2efcda0672f77c9"), ("settings", 1, "f3e4f7d28ee2ba66")];
+const EMPREINTES: &[(&str, u32, &str)] = &[
+    ("system", 1, "c2efcda0672f77c9"),
+    ("settings", 1, "f3e4f7d28ee2ba66"),
+    ("theme", 1, "d4768642faff2027"),
+];
 
 #[test]
 fn changing_a_template_forces_a_decision_about_its_version() {

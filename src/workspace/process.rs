@@ -101,12 +101,12 @@ impl Workspace {
     /// The output of the last run.
     pub(super) fn render_output(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let (label, colour) = match self.run_state {
-            crate::run::State::Idle => (crate::tr("run.idle"), theme::TEXT_MUTED),
-            crate::run::State::Running => (crate::tr("run.running"), theme::ACCENT),
+            crate::run::State::Idle => (crate::tr("run.idle"), theme::text_muted()),
+            crate::run::State::Running => (crate::tr("run.running"), theme::accent()),
             crate::run::State::Finished { ok: true } => {
-                (crate::tr("run.finished"), theme::TEXT_MUTED)
+                (crate::tr("run.finished"), theme::text_muted())
             }
-            crate::run::State::Finished { ok: false } => (crate::tr("run.failed"), 0xe06c75),
+            crate::run::State::Finished { ok: false } => (crate::tr("run.failed"), theme::danger()),
         };
         let lines = self.run_output.clone();
         // What cargo is doing right now is more useful than a bar with no total.
@@ -123,9 +123,9 @@ impl Workspace {
             .flex_col()
             .h(px(200.))
             .flex_none()
-            .bg(rgb(theme::PANEL_BG))
+            .bg(theme::panel_bg())
             .border_t_1()
-            .border_color(rgb(theme::BORDER))
+            .border_color(theme::border())
             .child(
                 div()
                     .flex()
@@ -137,12 +137,12 @@ impl Workspace {
                     .when(self.run_state == crate::run::State::Running, |this| {
                         this.child(Spinner::new().small())
                     })
-                    .child(div().text_color(rgb(colour)).child(label))
+                    .child(div().text_color(colour).child(label))
                     .child(
                         div()
                             .flex_1()
                             .overflow_hidden()
-                            .text_color(rgb(theme::TEXT_MUTED))
+                            .text_color(theme::text_muted())
                             .child(current),
                     )
                     .when(self.run_state == crate::run::State::Running, |this| {
@@ -152,7 +152,7 @@ impl Workspace {
                                 .px_2()
                                 .rounded_sm()
                                 .cursor_pointer()
-                                .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                                .hover(|this| this.bg(theme::hover_bg()))
                                 .child(crate::tr("run.stop"))
                                 .on_click(cx.listener(|this, _, _, cx| this.stop_project(cx))),
                         )
@@ -163,7 +163,7 @@ impl Workspace {
                             .px_2()
                             .rounded_sm()
                             .cursor_pointer()
-                            .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                            .hover(|this| this.bg(theme::hover_bg()))
                             .child("Fermer")
                             .on_click(cx.listener(|this, _, _, cx| this.toggle_output(cx))),
                     ),
@@ -186,13 +186,13 @@ impl Workspace {
                                                 .px_3()
                                                 .text_xs()
                                                 .font_family("Menlo")
-                                                .text_color(rgb(if line.contains("error") {
-                                                    0xe06c75
+                                                .text_color(if line.contains("error") {
+                                                    theme::danger()
                                                 } else if line.contains("warning") {
-                                                    0xe5c07b
+                                                    gpui::rgb(0xe5c07b)
                                                 } else {
-                                                    theme::TEXT_MUTED
-                                                }))
+                                                    theme::text_muted()
+                                                })
                                                 .child(line)
                                         })
                                         .collect::<Vec<_>>()

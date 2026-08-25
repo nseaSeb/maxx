@@ -46,6 +46,8 @@ pub struct Preferences {
     pub format_on_save: bool,
     /// The interface language: `system`, or a language code maxx translates.
     pub language: String,
+    /// The palette: `system`, `light` or `dark`.
+    pub theme: String,
 }
 
 impl Default for Preferences {
@@ -66,6 +68,7 @@ impl Default for Preferences {
             // l'éditeur appliquerait de toute façon.
             format_on_save: true,
             language: "system".into(),
+            theme: "system".into(),
         }
     }
 }
@@ -244,7 +247,11 @@ pub fn documented_defaults() -> String {
   // The interface language. "system" follows what the system reports and falls
   // back to English; "en" and "fr" pin it. Anything maxx has not translated
   // shows in English.
-  "language": "{}"
+  "language": "{}",
+
+  // The palette maxx draws with, and the one the canvas previews the
+  // components in. "system" follows the appearance the window reports.
+  "theme": "{}"
 }}
 "#,
         defaults.show_project_panel,
@@ -253,7 +260,8 @@ pub fn documented_defaults() -> String {
         defaults.editor,
         defaults.terminal,
         defaults.format_on_save,
-        defaults.language
+        defaults.language,
+        defaults.theme
     )
 }
 

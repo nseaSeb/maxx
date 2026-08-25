@@ -56,6 +56,28 @@ pub fn apply_locale(cx: &App) {
     gpui_component::set_locale(&locale);
 }
 
+/// The palette maxx draws with, from the preferences.
+///
+/// One switch for two things: maxx's own chrome, painted from [`crate::theme`],
+/// and `gpui_component`'s widgets, which carry their own theme. They have to
+/// agree — half the window in one mode is worse than either mode.
+pub fn apply_theme(cx: &mut App) {
+    let chosen = settings::prefs(cx).theme.clone();
+    let dark = match chosen.as_str() {
+        "light" => false,
+        "dark" => true,
+        // `system`, and anything a hand-written file put there.
+        _ => matches!(
+            cx.window_appearance(),
+            gpui::WindowAppearance::Dark | gpui::WindowAppearance::VibrantDark
+        ),
+    };
+    theme::set_dark(dark);
+    let mode =
+        if dark { gpui_component::ThemeMode::Dark } else { gpui_component::ThemeMode::Light };
+    gpui_component::Theme::change(mode, None, cx);
+}
+
 /// The language the system reports, from the usual environment variables.
 ///
 /// No dependency for this: `LANG=fr_FR.UTF-8` is the whole of what has to be
@@ -86,6 +108,7 @@ pub fn run() {
         // Before the menus and the first window: both are built from strings
         // that have to be in the right language already.
         apply_locale(cx);
+        apply_theme(cx);
         // The window geometry is only staged in memory as it moves; this is
         // where it is written. `detach` because the subscription has to outlive
         // this closure, and the application ends right after it fires.

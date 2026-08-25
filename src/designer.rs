@@ -5,7 +5,7 @@
 //! on each frame — a panel can never hold a stale copy of the model.
 
 use gpui::prelude::*;
-use gpui::{AnyElement, Context, Div, SharedString, div, px, rgb};
+use gpui::{AnyElement, Context, Div, SharedString, div, px};
 use gpui_component::alert::Alert;
 use gpui_component::button::Button;
 use gpui_component::checkbox::Checkbox;
@@ -71,7 +71,7 @@ impl Workspace {
                 .flex_1()
                 .items_center()
                 .justify_center()
-                .text_color(rgb(theme::TEXT_MUTED))
+                .text_color(theme::text_muted())
                 .child(crate::tr("designer.open_a_view"))
                 .into_any_element();
         }
@@ -125,20 +125,20 @@ impl Workspace {
             .flex_row()
             .h(px(28.))
             .flex_none()
-            .bg(rgb(theme::PANEL_BG))
+            .bg(theme::panel_bg())
             .border_b_1()
-            .border_color(rgb(theme::BORDER))
+            .border_color(theme::border())
             .children(tabs.into_iter().map(|(index, name, active, dirty)| {
                 h_flex()
                     .id(SharedString::from(format!("tab-{index}")))
                     .gap_1()
                     .px_3()
                     .cursor_pointer()
-                    .bg(rgb(if active { theme::BG } else { theme::PANEL_BG }))
+                    .bg(if active { theme::bg() } else { theme::panel_bg() })
                     .border_r_1()
-                    .border_color(rgb(theme::BORDER))
+                    .border_color(theme::border())
                     .text_xs()
-                    .text_color(rgb(if active { theme::TEXT } else { theme::TEXT_MUTED }))
+                    .text_color(if active { theme::text() } else { theme::text_muted() })
                     .child(name)
                     .when(dirty, |this| this.child("•"))
                     .child(
@@ -146,7 +146,7 @@ impl Workspace {
                             .id(SharedString::from(format!("tab-close-{index}")))
                             .px_1()
                             .rounded_sm()
-                            .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                            .hover(|this| this.bg(theme::hover_bg()))
                             .child("×")
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 cx.stop_propagation();
@@ -235,7 +235,7 @@ impl Workspace {
                     .child(
                         div()
                             .text_xs()
-                            .text_color(rgb(theme::TEXT_MUTED))
+                            .text_color(theme::text_muted())
                             .child(crate::tr("designer.project_menu_bar")),
                     )
                     .children(rows),
@@ -245,8 +245,8 @@ impl Workspace {
                     .w(px(280.))
                     .flex_none()
                     .border_l_1()
-                    .border_color(rgb(theme::BORDER))
-                    .bg(rgb(theme::PANEL_BG))
+                    .border_color(theme::border())
+                    .bg(theme::panel_bg())
                     .child(self.render_menu_inspector(cx))
                     .child(section_title("designer.add"))
                     .child(
@@ -336,7 +336,7 @@ impl Workspace {
                             .w(px(70.))
                             .flex_none()
                             .text_xs()
-                            .text_color(rgb(theme::TEXT_MUTED))
+                            .text_color(theme::text_muted())
                             .child(crate::tr(label)),
                     )
                     .child(div().flex_1().child(Input::new(state).small()))
@@ -348,7 +348,7 @@ impl Workspace {
                                 .rounded_sm()
                                 .text_xs()
                                 .cursor_pointer()
-                                .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                                .hover(|this| this.bg(theme::hover_bg()))
                                 .child(SharedString::from(format!(
                                     "→ {}",
                                     crate::tools::editor_label(cx)
@@ -368,7 +368,7 @@ impl Workspace {
                         .px_3()
                         .py_2()
                         .text_xs()
-                        .text_color(rgb(theme::TEXT_MUTED))
+                        .text_color(theme::text_muted())
                         .child(crate::tr("designer.select_menu_or_entry")),
                 )
             })
@@ -389,8 +389,8 @@ impl Workspace {
                 .p_2()
                 .rounded_md()
                 .border_1()
-                .border_color(rgb(theme::BORDER))
-                .bg(rgb(theme::PANEL_BG))
+                .border_color(theme::border())
+                .bg(theme::panel_bg())
                 .child(node_element(&view.root, &[], &view.selected, cx)),
         )
     }
@@ -407,8 +407,8 @@ impl Workspace {
             // poignée.
             .size_full()
             .border_l_1()
-            .border_color(rgb(theme::BORDER))
-            .bg(rgb(theme::PANEL_BG))
+            .border_color(theme::border())
+            .bg(theme::panel_bg())
             .child(
                 div()
                     .id("side-panels")
@@ -457,8 +457,8 @@ impl Workspace {
                     .pr_2()
                     .pl(px(8. + 12. * depth as f32))
                     .cursor_pointer()
-                    .when(selected, |this| this.bg(rgb(theme::SELECTED_BG)))
-                    .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                    .when(selected, |this| this.bg(theme::selected_bg()))
+                    .hover(|this| this.bg(theme::hover_bg()))
                     .child(label)
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.select(target.clone(), cx);
@@ -508,7 +508,7 @@ impl Workspace {
                         .px_3()
                         .py_2()
                         .text_xs()
-                        .text_color(rgb(theme::TEXT_MUTED))
+                        .text_color(theme::text_muted())
                         .child(crate::tr("designer.opaque")),
                 )
             })
@@ -537,7 +537,7 @@ impl Workspace {
                     .flex_1()
                     .text_xs()
                     .font_family("Menlo")
-                    .text_color(rgb(theme::TEXT_MUTED))
+                    .text_color(theme::text_muted())
                     .child(SharedString::from(text)),
             )
             .child(
@@ -546,7 +546,7 @@ impl Workspace {
                     .px_2()
                     .rounded_sm()
                     .cursor_pointer()
-                    .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                    .hover(|this| this.bg(theme::hover_bg()))
                     .child("×")
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.remove_call_at_selection(&name, cx);
@@ -568,7 +568,7 @@ impl Workspace {
                 .w(px(90.))
                 .flex_none()
                 .text_xs()
-                .text_color(rgb(theme::TEXT_MUTED))
+                .text_color(theme::text_muted())
                 .child(crate::tr(prop.label)),
         );
 
@@ -585,9 +585,9 @@ impl Workspace {
                         .px_2()
                         .rounded_sm()
                         .cursor_pointer()
-                        .bg(rgb(theme::BG))
-                        .text_color(rgb(theme::ACCENT))
-                        .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                        .bg(theme::bg())
+                        .text_color(theme::accent())
+                        .hover(|this| this.bg(theme::hover_bg()))
                         .child(if current.is_empty() {
                             SharedString::from("—")
                         } else {
@@ -607,9 +607,9 @@ impl Workspace {
                         .px_2()
                         .rounded_sm()
                         .cursor_pointer()
-                        .bg(rgb(theme::BG))
-                        .text_color(rgb(theme::ACCENT))
-                        .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                        .bg(theme::bg())
+                        .text_color(theme::accent())
+                        .hover(|this| this.bg(theme::hover_bg()))
                         .child(SharedString::from(field))
                         .on_click(cx.listener(move |this, _, _, cx| this.cycle_binding(prop, cx))),
                 )
@@ -625,7 +625,7 @@ impl Workspace {
                                 .rounded_sm()
                                 .text_xs()
                                 .cursor_pointer()
-                                .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                                .hover(|this| this.bg(theme::hover_bg()))
                                 .child("→ Zed")
                                 .on_click(
                                     cx.listener(move |this, _, _, cx| this.open_handler(prop, cx)),
@@ -643,7 +643,7 @@ impl Workspace {
                             .flex_1()
                             .px_2()
                             .rounded_sm()
-                            .bg(rgb(theme::BG))
+                            .bg(theme::bg())
                             .child(SharedString::from(current)),
                     ),
                 }
@@ -656,8 +656,8 @@ impl Workspace {
                         .px_2()
                         .rounded_sm()
                         .cursor_pointer()
-                        .bg(rgb(if on { theme::ACCENT } else { theme::BG }))
-                        .text_color(rgb(if on { theme::ON_ACCENT } else { theme::TEXT }))
+                        .bg(if on { theme::accent() } else { theme::bg() })
+                        .text_color(if on { theme::on_accent() } else { theme::text() })
                         .child(crate::tr(if on { "designer.yes" } else { "designer.no" }))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.edit_prop(prop, if on { "false" } else { "true" }, cx);
@@ -677,8 +677,8 @@ impl Workspace {
                         .px_2()
                         .rounded_sm()
                         .cursor_pointer()
-                        .bg(rgb(theme::BG))
-                        .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                        .bg(theme::bg())
+                        .hover(|this| this.bg(theme::hover_bg()))
                         .child(if current.is_empty() {
                             crate::tr("designer.default")
                         } else {
@@ -712,7 +712,7 @@ impl Workspace {
                     .child(div().flex_1().child(SharedString::from(field.name)))
                     .child(
                         div()
-                            .text_color(rgb(theme::TEXT_MUTED))
+                            .text_color(theme::text_muted())
                             .font_family("Menlo")
                             .child(SharedString::from(field.ty)),
                     )
@@ -732,8 +732,8 @@ impl Workspace {
                             .rounded_sm()
                             .text_xs()
                             .cursor_pointer()
-                            .bg(rgb(theme::BG))
-                            .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                            .bg(theme::bg())
+                            .hover(|this| this.bg(theme::hover_bg()))
                             .child(type_label)
                             .on_click(cx.listener(|this, _, _, cx| this.cycle_state_type(cx))),
                     )
@@ -744,8 +744,8 @@ impl Workspace {
                             .rounded_sm()
                             .text_xs()
                             .cursor_pointer()
-                            .bg(rgb(theme::ACCENT))
-                            .text_color(rgb(theme::ON_ACCENT))
+                            .bg(theme::accent())
+                            .text_color(theme::on_accent())
                             .child("Ajouter")
                             .on_click(cx.listener(|this, _, _, cx| this.add_state_field(cx))),
                     ),
@@ -772,7 +772,7 @@ impl Workspace {
                         .px_3()
                         .py_1()
                         .text_xs()
-                        .text_color(rgb(theme::TEXT_MUTED))
+                        .text_color(theme::text_muted())
                         .child(crate::tr("designer.no_component")),
                 )
             })
@@ -782,7 +782,7 @@ impl Workspace {
                     .px_3()
                     .py_1()
                     .cursor_pointer()
-                    .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                    .hover(|this| this.bg(theme::hover_bg()))
                     .child(crate::tr(spec.label))
                     .on_drag(Dragged::Component(spec.id), move |_, _: Point<Pixels>, _, cx| {
                         cx.new(|_| DragGhost { label: crate::tr(spec.label) })
@@ -849,8 +849,8 @@ impl Render for DragGhost {
             .px_2()
             .py_1()
             .rounded_sm()
-            .bg(rgb(theme::ACCENT))
-            .text_color(rgb(theme::ON_ACCENT))
+            .bg(theme::accent())
+            .text_color(theme::on_accent())
             .text_xs()
             .child(self.label.clone())
     }
@@ -872,7 +872,7 @@ fn drop_zone(
         .flex_none()
         .when(vertical, |this| this.h(px(8.)).w_full())
         .when(!vertical, |this| this.w(px(8.)).h_full().min_h(px(16.)))
-        .drag_over::<Dragged>(|style, _, _, _| style.bg(rgb(theme::ACCENT)))
+        .drag_over::<Dragged>(|style, _, _, _| style.bg(theme::accent()))
         .on_drop(cx.listener(move |this, dragged: &Dragged, _, cx| {
             this.drop_at(&parent, index, dragged.clone(), cx);
         }))
@@ -913,8 +913,8 @@ fn binding_toggle(
         .text_xs()
         .cursor_pointer()
         .font_family("Menlo")
-        .text_color(rgb(if bound { theme::ACCENT } else { theme::TEXT_MUTED }))
-        .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+        .text_color(if bound { theme::accent() } else { theme::text_muted() })
+        .hover(|this| this.bg(theme::hover_bg()))
         .child(if bound { "{ }" } else { "abc" })
         .on_click(cx.listener(move |this, _, _, cx| this.toggle_binding(prop, cx)))
 }
@@ -930,7 +930,7 @@ fn menu_zone(to: MenuDrop, cx: &mut Context<Workspace>) -> AnyElement {
         .flex_none()
         .h(px(6.))
         .w_full()
-        .drag_over::<Selection>(|style, _, _, _| style.bg(rgb(theme::ACCENT)))
+        .drag_over::<Selection>(|style, _, _, _| style.bg(theme::accent()))
         .on_drop(cx.listener(move |this, from: &Selection, _, cx| {
             this.drop_menu_row(*from, to, cx);
         }))
@@ -957,8 +957,8 @@ fn menu_row(
         .pl(px(8. + 16. * depth as f32))
         .rounded_sm()
         .cursor_pointer()
-        .when(selected, |this| this.bg(rgb(theme::SELECTED_BG)))
-        .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+        .when(selected, |this| this.bg(theme::selected_bg()))
+        .hover(|this| this.bg(theme::hover_bg()))
         .child(label)
         .on_click(cx.listener(move |this, _, _, cx| this.select_menu(target, cx)))
 }
@@ -978,8 +978,8 @@ fn menu_button(
         .rounded_sm()
         .text_xs()
         .cursor_pointer()
-        .bg(rgb(theme::BG))
-        .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+        .bg(theme::bg())
+        .hover(|this| this.bg(theme::hover_bg()))
         .child(crate::tr(key))
         .on_click(cx.listener(move |this, _, _, cx| action(this, cx)))
 }
@@ -990,9 +990,9 @@ fn section_title(title: &'static str) -> impl IntoElement {
         .px_3()
         .py_2()
         .text_xs()
-        .text_color(rgb(theme::TEXT_MUTED))
+        .text_color(theme::text_muted())
         .border_t_1()
-        .border_color(rgb(theme::BORDER))
+        .border_color(theme::border())
         .child(title)
 }
 
@@ -1053,7 +1053,7 @@ fn node_element(
             })
         })
         .border_1()
-        .border_color(rgb(if is_selected { theme::ACCENT } else { theme::BG }))
+        .border_color(if is_selected { theme::accent() } else { theme::bg() })
         .rounded_sm()
         .cursor_pointer()
         .child(preview(node, path, selected, cx))
@@ -1163,18 +1163,18 @@ fn preview(
             .items_center()
             .rounded_md()
             .border_1()
-            .border_color(rgb(theme::BORDER))
-            .bg(rgb(theme::BG))
-            .text_color(rgb(theme::TEXT_MUTED))
+            .border_color(theme::border())
+            .bg(theme::bg())
+            .text_color(theme::text_muted())
             .child(SharedString::from(format!("{}", text(0))))
             .into_any_element(),
         _ => div()
             .px_2()
             .py_1()
             .rounded_sm()
-            .bg(rgb(theme::HOVER_BG))
+            .bg(theme::hover_bg())
             .text_xs()
-            .text_color(rgb(theme::TEXT_MUTED))
+            .text_color(theme::text_muted())
             .child(crate::tr("designer.rust_code"))
             .into_any_element(),
     }

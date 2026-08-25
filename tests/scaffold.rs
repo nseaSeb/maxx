@@ -1078,3 +1078,31 @@ fn a_dropdown_declares_the_field_it_needs() {
     let source = std::fs::read_to_string(&path).unwrap();
     assert_eq!(source.matches("pub pays:").count(), 1, "{source}");
 }
+
+/// Le gestionnaire écrit suit la forme du composant, pas celle du bouton.
+///
+/// `Button::on_click` tend un `&ClickEvent`, `Switch::on_click` tend l'état
+/// vers lequel il vient de basculer. Un seul gabarit pour les deux laisserait
+/// un projet qui ne compile pas, sur une ligne que maxx a écrite lui-même.
+#[test]
+fn a_handler_matches_the_component_it_hangs_on() {
+    let root = scratch("maxx_gestionnaire_forme");
+    scaffold::create_project(&root, "essai").unwrap();
+    let path = root.join("src/ui/home.rs");
+
+    let mut view = View::load(&path).unwrap();
+    for (id, name) in [("button", "on_press"), ("switch", "on_flip")] {
+        let mut node = maxx::registry::instantiate(id).unwrap();
+        let spec = maxx::registry::of(&node).unwrap();
+        let action = spec.props.iter().find(|prop| prop.label == "prop.action").unwrap();
+        maxx::registry::write(&mut node, action, name);
+        view.root.push_child(node);
+    }
+    view.save().expect("l'enregistrement doit réussir");
+
+    let source = std::fs::read_to_string(&path).unwrap();
+    assert!(source.contains("_event: &ClickEvent,"), "le bouton garde sa forme :\n{source}");
+    assert!(source.contains("_on: &bool,"), "l'interrupteur a la sienne :\n{source}");
+    assert!(source.contains("use gpui::ClickEvent;"), "et l'import ne vient qu'avec le bouton");
+    assert_eq!(source.matches("use gpui::ClickEvent;").count(), 1, "{source}");
+}

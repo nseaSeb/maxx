@@ -14,12 +14,7 @@ impl Workspace {
     /// write a third time. Copied source, not a dependency: a generated
     /// project owes nothing to maxx.
     pub fn add_system_module(&mut self, cx: &mut Context<Self>) {
-        self.add_module(
-            "system",
-            crate::scaffold::add_system_module,
-            "system module added to the project and declared in main.rs",
-            cx,
-        );
+        self.add_module("system", crate::scaffold::add_system_module, "message.system_added", cx);
     }
 
     /// Copies a module into the project, declares it, and points at it.
@@ -32,10 +27,11 @@ impl Workspace {
         module: &str,
         add: fn(&std::path::Path) -> std::io::Result<()>,
         added: &'static str,
+        // `added` est une clé de traduction, comme partout ailleurs.
         cx: &mut Context<Self>,
     ) {
         let Some(project) = self.project.as_ref() else {
-            self.message = Some(SharedString::from("aucun projet ouvert"));
+            self.message = Some(crate::tr("message.no_project"));
             cx.notify();
             return;
         };
@@ -68,9 +64,19 @@ impl Workspace {
             // The file was there but nothing declared it — which is exactly
             // the state a half-finished delete leaves behind.
             (true, false) => t!("message.module_now_declared", module = module).into_owned(),
-            _ => added.to_string(),
+            _ => crate::tr(added).to_string(),
         }));
         cx.notify();
+    }
+
+    /// Copies the palette into the project.
+    ///
+    /// Two modes from the start, because the choice belongs to whoever reads
+    /// the screen and not to whoever wrote it — and because retrofitting a
+    /// second mode onto colours already scattered through the views is the kind
+    /// of work nobody does twice.
+    pub fn add_theme_module(&mut self, cx: &mut Context<Self>) {
+        self.add_module("theme", crate::scaffold::add_theme_module, "message.theme_added", cx);
     }
 
     /// Copies the settings module into the project.
@@ -82,7 +88,7 @@ impl Workspace {
         self.add_module(
             "settings",
             crate::scaffold::add_settings_module,
-            "settings added to the project, with the system module and their two crates",
+            "message.settings_added",
             cx,
         );
     }
@@ -93,7 +99,7 @@ impl Workspace {
     /// developer, and maxx says so rather than deciding for them.
     pub fn update_modules(&mut self, cx: &mut Context<Self>) {
         let Some(project) = self.project.as_ref() else {
-            self.message = Some(SharedString::from("aucun projet ouvert"));
+            self.message = Some(crate::tr("message.no_project"));
             cx.notify();
             return;
         };

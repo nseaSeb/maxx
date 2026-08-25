@@ -18,7 +18,7 @@ use rust_i18n::t;
 use gpui::prelude::*;
 use gpui::{
     AnyElement, App, Bounds, Context, Entity, Global, SharedString, TitlebarOptions, WeakEntity,
-    Window, WindowBounds, WindowId, WindowOptions, div, point, px, rgb, size, uniform_list,
+    Window, WindowBounds, WindowId, WindowOptions, div, point, px, size, uniform_list,
 };
 use gpui::{ScrollHandle, ScrollStrategy, Task, UniformListScrollHandle};
 use gpui_component::Root;

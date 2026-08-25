@@ -25,6 +25,7 @@ actions!(
         NewView,
         AddSystemModule,
         AddSettingsModule,
+        AddThemeModule,
         UpdateModules,
         NoRecentProject,
         ClearRecentProjects,
@@ -44,6 +45,7 @@ actions!(
         Copy,
         Paste,
         SelectAll,
+        ToggleTheme,
         TogglePalette,
         PaletteUp,
         PaletteDown,
@@ -143,6 +145,20 @@ pub fn register_handlers(cx: &mut App) {
     });
     cx.on_action(|_: &Save, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.save_view(cx));
+    });
+    cx.on_action(|_: &AddThemeModule, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.add_theme_module(cx));
+    });
+    cx.on_action(|_: &ToggleTheme, cx: &mut App| {
+        // Depuis le menu, la bascule est un aller-retour entre les deux modes,
+        // et elle quitte « système » : demander explicitement l'un des deux,
+        // c'est ne plus vouloir suivre.
+        let dark = !crate::theme::is_dark();
+        crate::settings::update_prefs(cx, |prefs| {
+            prefs.theme = if dark { "dark".into() } else { "light".into() };
+        });
+        crate::apply_theme(cx);
+        crate::workspace::notify_all(cx);
     });
     cx.on_action(|_: &TogglePalette, cx: &mut App| {
         with_active_workspace(cx, |workspace, window, cx| workspace.toggle_palette(window, cx));

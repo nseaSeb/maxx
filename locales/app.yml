@@ -221,6 +221,9 @@ menu.add_settings:
 menu.add_system:
   en: "The system module"
   fr: "Le module système"
+menu.add_theme:
+  en: "The palette"
+  fr: "La palette"
 menu.add_to_project:
   en: "Add to project"
   fr: "Ajouter au projet"
@@ -377,6 +380,9 @@ menu.status_bar:
 menu.stop:
   en: "Stop"
   fr: "Arrêter"
+menu.theme:
+  en: "Light or dark"
+  fr: "Clair ou sombre"
 menu.title:
   en: "Title"
   fr: "Titre"
@@ -455,6 +461,9 @@ message.modules_updated:
 message.no_action:
   en: "no action on this node"
   fr: "aucune action sur ce nœud"
+message.no_project:
+  en: "no project open"
+  fr: "aucun projet ouvert"
 message.no_state_field:
   en: "no state field — add one under “State”"
   fr: "aucun champ d'état — ajoutez-en un dans « État »"
@@ -500,6 +509,15 @@ message.select_menu_not_submenu:
 message.select_rs_file:
   en: "select a .rs file in the explorer"
   fr: "sélectionnez un fichier .rs dans l'explorateur"
+message.settings_added:
+  en: "settings added to the project, with the system module and their two crates"
+  fr: "réglages ajoutés au projet, avec le module système et leurs deux crates"
+message.system_added:
+  en: "system module added to the project and declared in main.rs"
+  fr: "module système ajouté au projet et déclaré dans main.rs"
+message.theme_added:
+  en: "palette added to the project and declared in main.rs"
+  fr: "palette ajoutée au projet et déclarée dans main.rs"
 message.trashed:
   en: "%{name} moved to the trash"
   fr: "%{name} déplacé vers la corbeille"
@@ -617,6 +635,21 @@ prefs.terminal:
 prefs.terminal_desc:
   en: "What ⌘⌥T opens, on the project's folder."
   fr: "Ce qu'ouvre ⌘⌥T, sur le dossier du projet."
+prefs.theme:
+  en: "Theme"
+  fr: "Thème"
+prefs.theme_dark:
+  en: "Dark"
+  fr: "Sombre"
+prefs.theme_desc:
+  en: "The palette maxx draws with, and the one the canvas previews the components in."
+  fr: "La palette avec laquelle maxx dessine, et celle dans laquelle le canvas montre les composants."
+prefs.theme_light:
+  en: "Light"
+  fr: "Clair"
+prefs.theme_system:
+  en: "System"
+  fr: "Système"
 prefs.tools:
   en: "Tools"
   fr: "Outils"

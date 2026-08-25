@@ -20,7 +20,8 @@ fn writing_a_key_leaves_every_other_byte_alone() {
   "editor": "auto",
   "terminal": "auto",
   "format_on_save": true,
-  "language": "system"
+  "language": "system",
+  "theme": "system"
 }
 "#;
 

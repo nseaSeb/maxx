@@ -27,6 +27,12 @@ nothing warns you about at the moment you fall into them:
   missing. The About window, which uses nothing but bare gpui, is the only one
   that does without it.
 
+**A palette in two modes** — `src/theme.rs`, written by maxx: roles rather than
+colours, two values each, and the switch labelled "Dark" moves the whole window
+because it goes through `gpui_component`'s own theme. Note the handler's shape:
+`Switch::on_click` hands the state it moved to, not a click event, and that is
+what maxx writes for a switch.
+
 **An editable menu bar.** Open `demo/` in maxx and click `src/menus.rs`: the
 menu editor appears.
 

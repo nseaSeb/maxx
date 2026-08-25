@@ -14,7 +14,7 @@
 use rust_i18n::t;
 
 use gpui::prelude::*;
-use gpui::{AnyElement, Context, SharedString, div, px, rgb};
+use gpui::{AnyElement, Context, SharedString, div, px};
 use gpui_component::setting::{
     SettingField, SettingGroup, SettingItem, SettingPage, Settings as SettingsView,
 };
@@ -81,6 +81,27 @@ fn appearance_page() -> SettingPage {
                     )
                     .description(crate::tr("prefs.output_panel_desc")),
                 ),
+        )
+        .group(
+            SettingGroup::new().title(crate::tr("prefs.theme")).item(
+                SettingItem::new(
+                    crate::tr("prefs.theme"),
+                    SettingField::dropdown(
+                        vec![
+                            (SharedString::from("system"), crate::tr("prefs.theme_system")),
+                            (SharedString::from("light"), crate::tr("prefs.theme_light")),
+                            (SharedString::from("dark"), crate::tr("prefs.theme_dark")),
+                        ],
+                        |cx| SharedString::from(settings::prefs(cx).theme.clone()),
+                        |value, cx| {
+                            settings::update_prefs(cx, |prefs| prefs.theme = value.to_string());
+                            crate::apply_theme(cx);
+                            crate::workspace::notify_all(cx);
+                        },
+                    ),
+                )
+                .description(crate::tr("prefs.theme_desc")),
+            ),
         )
         .group(
             SettingGroup::new().title(crate::tr("prefs.language")).item(
@@ -213,7 +234,7 @@ fn projects_page(cx: &mut Context<Workspace>) -> SettingPage {
                 let rows = recent.iter().map(|path| {
                     div()
                         .text_xs()
-                        .text_color(rgb(theme::TEXT_MUTED))
+                        .text_color(theme::text_muted())
                         .child(SharedString::from(path.to_string_lossy().into_owned()))
                 });
                 div().flex().flex_col().gap_1().children(rows)
@@ -244,7 +265,7 @@ fn file_page(cx: &mut Context<Workspace>) -> SettingPage {
             .item(SettingItem::render(move |_, _, _| {
                 div()
                     .text_xs()
-                    .text_color(rgb(theme::TEXT_MUTED))
+                    .text_color(theme::text_muted())
                     .child(SharedString::from(shown.clone()))
             }))
             .item(SettingItem::render(move |_, _, _| {
@@ -274,11 +295,11 @@ fn action_button(
         .py_1()
         .rounded_sm()
         .text_xs()
-        .bg(rgb(theme::BG))
+        .bg(theme::bg())
         .when(disabled, |this| this.opacity(0.4))
         .when(!disabled, |this| {
             this.cursor_pointer()
-                .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                .hover(|this| this.bg(theme::hover_bg()))
                 .on_click(move |_, _window, cx| action(cx))
         })
         .child(crate::tr(key))

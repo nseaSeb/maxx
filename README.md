@@ -159,6 +159,7 @@ a dependency on maxx: what is copied is yours.
 - **The menu bar** — `src/menus.rs`, editable afterwards in maxx.
 - **The system module** — `src/system.rs`.
 - **The settings** — `src/settings.rs`, which brings the system module with it.
+- **The palette** — `src/theme.rs`, light and dark from the start.
 
 What was copied is recorded in `maxx.toml`, to be committed with the project:
 which module, in which version, and the fingerprint it had on the way out. When
@@ -176,6 +177,23 @@ damaged file never stops the application from starting.
 Add your fields to `Settings`, one line in `documented_defaults`, and that is it.
 Two crates are declared along the way, `serde` and `serde_json_lenient`; both
 are already compiled in the tree by gpui, so the build does not grow.
+
+### The palette
+
+Roles rather than colours, and two values for each: `BACKGROUND` says where it
+goes and survives a change of palette, `0x1e2127` says what it looks like in one
+of the two modes and does not.
+
+Two modes and not one, because the choice is not the developer's to make:
+someone reading in a dark room and someone in the sun want opposite things, and
+the system already knows which. `theme::follow_system` reads that answer at
+startup, `theme::toggle` moves it, and both go through `gpui_component`'s own
+theme so the components follow in the same gesture rather than keeping a second
+mode that could disagree.
+
+maxx itself works the same way, and `View > Light or dark` switches both what it
+draws and what the canvas shows the components in — the preview is only worth
+having if it can be seen in the mode the reader will use.
 
 ## The system module
 

@@ -158,9 +158,9 @@ impl Workspace {
             // 240 px dans un volet plus large, et la bande vide entre les deux
             // se voyait.
             .size_full()
-            .bg(rgb(theme::PANEL_BG))
+            .bg(theme::panel_bg())
             .border_r_1()
-            .border_color(rgb(theme::BORDER))
+            .border_color(theme::border())
             .child(
                 div()
                     .flex()
@@ -172,7 +172,7 @@ impl Workspace {
                         div()
                             .flex_1()
                             .text_xs()
-                            .text_color(rgb(theme::TEXT_MUTED))
+                            .text_color(theme::text_muted())
                             .child("EXPLORATEUR"),
                     )
                     .child(panel_icon("panel-new-view", "＋", "Nouvelle vue", cx, |this, cx| {
@@ -225,19 +225,19 @@ impl Workspace {
             .pr_2()
             .pl(px(8. + 12. * entry.depth as f32))
             .cursor_pointer()
-            .when(is_selected, |this| this.bg(rgb(theme::SELECTED_BG)))
-            .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+            .when(is_selected, |this| this.bg(theme::selected_bg()))
+            .hover(|this| this.bg(theme::hover_bg()))
             .child(
                 div()
                     .w(px(12.))
                     .flex_none()
                     .text_xs()
-                    .text_color(rgb(theme::TEXT_MUTED))
+                    .text_color(theme::text_muted())
                     .child(marker),
             )
             .child(
                 div()
-                    .when(is_dir, |this| this.text_color(rgb(theme::ACCENT)))
+                    .when(is_dir, |this| this.text_color(theme::accent()))
                     .child(entry.name.clone()),
             )
             .on_click(cx.listener(move |this, _, _window, cx| {
@@ -374,8 +374,8 @@ fn panel_icon(
         .rounded_sm()
         .text_xs()
         .cursor_pointer()
-        .text_color(rgb(theme::TEXT_MUTED))
-        .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+        .text_color(theme::text_muted())
+        .hover(|this| this.bg(theme::hover_bg()))
         .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tooltip).build(window, cx))
         .child(glyph)
         .on_click(cx.listener(move |this, _, _window, cx| action(this, cx)))

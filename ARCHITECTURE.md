@@ -46,7 +46,7 @@ parseur servent à garantir.
 | `menus.rs` | la barre de menus de maxx |
 | `tools.rs` | le catalogue des éditeurs et des terminaux, leur détection |
 | `run.rs` | tout ce qui suppose un système : `cargo`, terminal, éditeur, corbeille |
-| `theme.rs` | la palette, en `const` |
+| `theme.rs` | la palette, en deux modes |
 | `palette.rs` | la palette ⌘K : la barre de menus, aplatie |
 | `locales/app.yml` | les traductions, une entrée par clé |
 

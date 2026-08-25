@@ -28,6 +28,15 @@ impl Home {
         }
     }
 
+    /// Switches the palette, from the switch below.
+    ///
+    /// `Switch::on_click` hands the state it has just moved to, not a click
+    /// event — that is the shape maxx writes for a switch, and it is not the
+    /// one it writes for a button.
+    pub fn on_theme(&mut self, _on: &bool, window: &mut Window, cx: &mut Context<Self>) {
+        crate::theme::toggle(window, cx);
+    }
+
     /// Opens the inspector, like the menu entry of the same name.
     ///
     /// maxx writes the empty handler and leaves you the body. Without
@@ -61,7 +70,12 @@ impl Render for Home {
                             h_flex()
                                 .gap_4()
                                 .child(Checkbox::new("reread").label("Read back before writing"))
-                                .child(Switch::new("watch").label("Watch the disk")),
+                                .child(
+                                    Switch::new("theme")
+                                        .label("Dark")
+                                        .checked(crate::theme::is_dark(cx))
+                                        .on_click(cx.listener(Self::on_theme)),
+                                ),
                         )
                         .child(
                             h_flex()

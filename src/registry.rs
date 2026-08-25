@@ -78,6 +78,8 @@ pub struct Spec {
     pub default_args: &'static [&'static str],
     /// Properties the inspector exposes.
     pub props: &'static [Prop],
+    /// The shape of the method its action property calls, when it has one.
+    pub handler: Option<HandlerSpec>,
     /// The field this component needs on the view, when it needs one.
     ///
     /// A text input and a dropdown are not values but entities the view owns:
@@ -86,6 +88,26 @@ pub struct Spec {
     /// declare, and with what.
     pub state: Option<StateSpec>,
 }
+
+/// The shape of the method a component's action calls.
+///
+/// `Button::on_click` hands a `&ClickEvent`, `Switch::on_click` hands a `&bool`
+/// — the state it has just moved to. Writing one stub for both would leave a
+/// project that does not compile, and the error would point at generated code.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HandlerSpec {
+    /// The second parameter of the method, declaration included.
+    pub argument: &'static str,
+    /// The `use` lines that parameter needs.
+    pub imports: &'static [&'static str],
+}
+
+/// What a `Button` hands its handler.
+const CLICK: HandlerSpec =
+    HandlerSpec { argument: "_event: &ClickEvent", imports: &["use gpui::ClickEvent;"] };
+
+/// What a switch, a checkbox or a radio hands its handler: the new state.
+const TOGGLED: HandlerSpec = HandlerSpec { argument: "_on: &bool", imports: &[] };
 
 /// The field a stateful component binds to.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -139,6 +161,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.align", target: Target::Family(ALIGNS), kind: Kind::Choice },
             Prop { label: "prop.flex", target: Target::Flag("flex_1"), kind: Kind::Bool },
         ],
+        handler: None,
         state: None,
     },
     Spec {
@@ -154,6 +177,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.align", target: Target::Family(ALIGNS), kind: Kind::Choice },
             Prop { label: "prop.flex", target: Target::Flag("flex_1"), kind: Kind::Bool },
         ],
+        handler: None,
         state: None,
     },
     Spec {
@@ -164,6 +188,7 @@ pub const CATALOGUE: &[Spec] = &[
         container: false,
         default_args: &["Label"],
         props: &[Prop { label: "prop.text", target: Target::BaseArg(0), kind: Kind::Text }],
+        handler: None,
         state: None,
     },
     Spec {
@@ -174,6 +199,7 @@ pub const CATALOGUE: &[Spec] = &[
         container: false,
         default_args: &[],
         props: &[Prop { label: "prop.bound_field", target: Target::BaseArg(0), kind: Kind::Field }],
+        handler: None,
         state: Some(StateSpec {
             ty: "Entity<InputState>",
             imports: &["use gpui::Entity;", "use gpui_component::input::InputState;"],
@@ -191,6 +217,7 @@ pub const CATALOGUE: &[Spec] = &[
         // Le contenu de la liste est dans l'initialiseur, donc dans le code que
         // vous éditez à la main : maxx pose deux entrées pour que quelque chose
         // s'affiche, et ne prétend pas gérer la source des données.
+        handler: None,
         state: Some(StateSpec {
             ty: "Entity<SelectState<SearchableVec<SharedString>>>",
             imports: &[
@@ -217,6 +244,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.disabled", target: Target::Method("disabled"), kind: Kind::Bool },
             Prop { label: "prop.action", target: Target::Method("on_click"), kind: Kind::Handler },
         ],
+        handler: Some(CLICK),
         state: None,
     },
     Spec {
@@ -230,7 +258,9 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.id", target: Target::BaseArg(0), kind: Kind::Text },
             Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text },
             Prop { label: "prop.checked", target: Target::Method("checked"), kind: Kind::Bool },
+            Prop { label: "prop.action", target: Target::Method("on_click"), kind: Kind::Handler },
         ],
+        handler: Some(TOGGLED),
         state: None,
     },
     Spec {
@@ -244,7 +274,9 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.id", target: Target::BaseArg(0), kind: Kind::Text },
             Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text },
             Prop { label: "prop.on", target: Target::Method("checked"), kind: Kind::Bool },
+            Prop { label: "prop.action", target: Target::Method("on_click"), kind: Kind::Handler },
         ],
+        handler: Some(TOGGLED),
         state: None,
     },
     Spec {
@@ -255,6 +287,7 @@ pub const CATALOGUE: &[Spec] = &[
         container: true,
         default_args: &[],
         props: &[Prop { label: "prop.title", target: Target::Method("title"), kind: Kind::Text }],
+        handler: None,
         state: None,
     },
     Spec {
@@ -265,6 +298,7 @@ pub const CATALOGUE: &[Spec] = &[
         container: false,
         default_args: &[],
         props: &[Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text }],
+        handler: None,
         state: None,
     },
     Spec {
@@ -279,7 +313,9 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text },
             Prop { label: "prop.selected", target: Target::Method("checked"), kind: Kind::Bool },
             Prop { label: "prop.disabled", target: Target::Method("disabled"), kind: Kind::Bool },
+            Prop { label: "prop.action", target: Target::Method("on_click"), kind: Kind::Handler },
         ],
+        handler: Some(TOGGLED),
         state: None,
     },
     Spec {
@@ -296,6 +332,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.href", target: Target::Method("href"), kind: Kind::Text },
             Prop { label: "prop.disabled", target: Target::Method("disabled"), kind: Kind::Bool },
         ],
+        handler: None,
         state: None,
     },
     Spec {
@@ -310,6 +347,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.message", target: Target::BaseArg(1), kind: Kind::Text },
             Prop { label: "prop.title", target: Target::Method("title"), kind: Kind::Text },
         ],
+        handler: None,
         state: None,
     },
     Spec {
@@ -327,6 +365,7 @@ pub const CATALOGUE: &[Spec] = &[
                 kind: Kind::Bool,
             },
         ],
+        handler: None,
         state: None,
     },
     Spec {
@@ -337,6 +376,7 @@ pub const CATALOGUE: &[Spec] = &[
         container: false,
         default_args: &[],
         props: &[Prop { label: "prop.value", target: Target::Method("value"), kind: Kind::Ratio }],
+        handler: None,
         state: None,
     },
     Spec {
@@ -347,6 +387,7 @@ pub const CATALOGUE: &[Spec] = &[
         container: false,
         default_args: &[],
         props: &[Prop { label: "prop.flex", target: Target::Flag("flex_1"), kind: Kind::Bool }],
+        handler: None,
         state: None,
     },
 ];
@@ -567,15 +608,19 @@ pub fn handler_name(source: &str) -> Option<String> {
 }
 
 /// Every handler method the tree refers to, in tree order.
-pub fn handlers(root: &Node) -> Vec<String> {
-    let mut names = Vec::new();
+pub fn handlers(root: &Node) -> Vec<(String, HandlerSpec)> {
+    let mut names: Vec<(String, HandlerSpec)> = Vec::new();
     root.walk(&mut |_, node| {
+        // The shape comes from the component the call sits on, not from the
+        // call's name: `on_click` means a `&ClickEvent` on a button and a
+        // `&bool` on a switch.
+        let shape = of(node).and_then(|spec| spec.handler).unwrap_or(CLICK);
         for call in &node.calls {
             if let Some(arg) = call.args.first()
                 && let Some(name) = handler_name(&arg.to_source())
-                && !names.contains(&name)
+                && !names.iter().any(|(known, _)| *known == name)
             {
-                names.push(name);
+                names.push((name, shape));
             }
         }
     });

@@ -2,6 +2,36 @@
 
 Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
 
+## Le thème
+
+Fait, dans les deux sens.
+
+**Le projet généré** reçoit `src/theme.rs` par `Fichier ▸ Ajouter au projet ▸ La
+palette` : des rôles plutôt que des couleurs, deux valeurs chacun, et le mode lu
+dans le thème de `gpui-component` plutôt que tenu à côté — deux modes qui
+peuvent diverger, c'est la fenêtre dans l'un et ses boutons dans l'autre. La
+démo le porte et le montre, donc la CI prouve qu'il compile.
+
+**maxx lui-même** a les deux palettes, et `Affichage ▸ Clair ou sombre` bascule
+à la fois ce qu'il dessine et ce que le canvas montre des composants. Les
+constantes sont devenues des accesseurs sans argument : la mode est une valeur
+unique pour tout le processus, comme la langue, et une couleur se demande depuis
+des fermetures et des fonctions libres qui n'ont pas de `cx` à donner.
+
+Ce que ce lot a demandé au passage : **le gestionnaire écrit doit suivre la
+forme du composant**. `Button::on_click` tend un `&ClickEvent`, `Switch::on_click`
+tend l'état vers lequel il vient de basculer. Un seul gabarit laissait un projet
+qui ne compile pas, sur une ligne écrite par maxx — d'où `HandlerSpec`, et une
+propriété Action sur l'interrupteur, la case à cocher et le bouton radio.
+
+Ce qui reste de ce côté :
+
+- **Éditer la palette dans maxx.** `src/theme.rs` est un module copié, pas une
+  zone gérée : maxx l'écrit et ne le relit pas. Lui donner des marqueurs, comme
+  `src/menus.rs` en a, en ferait un écran de plus.
+- **Une palette par projet.** Aujourd'hui les valeurs du gabarit sont les mêmes
+  pour tout le monde ; c'est un point de départ, pas une identité.
+
 ## Composants
 
 - ~~Élargir le catalogue~~ — fait, cinq entrées de plus : bouton radio, lien,

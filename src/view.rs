@@ -229,8 +229,8 @@ impl View {
         for (field, state) in state_fields_needed(&self.root) {
             source = ensure_state_field(source, &field, &state);
         }
-        for handler in registry::handlers(&self.root) {
-            source = ensure_handler(source, &handler);
+        for (handler, shape) in registry::handlers(&self.root) {
+            source = ensure_handler(source, &handler, shape);
         }
 
         std::fs::write(&self.path, &source).map_err(|error| error.to_string())?;
@@ -382,12 +382,16 @@ fn ensure_state_field(source: String, field: &str, state: &registry::StateSpec) 
     source
 }
 
-/// Makes sure the view has a `fn <name>(&mut self, _: &ClickEvent, ..)` stub,
-/// inserted at the end of the view's own `impl` block.
+/// Makes sure the view has a `fn <name>(&mut self, ..)` stub, inserted at the
+/// end of the view's own `impl` block.
+///
+/// `shape` says what the component hands the method — a `&ClickEvent` from a
+/// button, the new state from a switch — because a stub that does not match
+/// leaves a project that will not compile, on a line maxx wrote.
 ///
 /// An existing method is never touched — the stub is a starting point, and what
 /// the developer wrote in it is the whole point of the file.
-fn ensure_handler(source: String, name: &str) -> String {
+fn ensure_handler(source: String, name: &str, shape: registry::HandlerSpec) -> String {
     // `cx.listener(..)` needs the parameter the template leaves unused. Done
     // before the early return below: a handler written by hand still needs the
     // signature fixed, or the generated call does not compile.
@@ -402,7 +406,7 @@ fn ensure_handler(source: String, name: &str) -> String {
 
     // `Context` and `Window` already come from the template's braced import;
     // adding them again would be a duplicate-import error.
-    source = ensure_imports(source, &["use gpui::ClickEvent;"]);
+    source = ensure_imports(source, shape.imports);
 
     let Some(type_name) = view_type_name(&source) else {
         return source;
@@ -419,7 +423,8 @@ fn ensure_handler(source: String, name: &str) -> String {
     };
 
     let stub = format!(
-        "\n    /// Written by maxx; the body is yours.\n         \x20   pub fn {name}(\n         \x20       &mut self,\n         \x20       _event: &ClickEvent,\n         \x20       _window: &mut Window,\n         \x20       _cx: &mut Context<Self>,\n         \x20   ) {{\n    }}\n"
+        "\n    /// Written by maxx; the body is yours.\n         \x20   pub fn {name}(\n         \x20       &mut self,\n         \x20       {},\n         \x20       _window: &mut Window,\n         \x20       _cx: &mut Context<Self>,\n         \x20   ) {{\n    }}\n",
+        shape.argument
     );
     source.insert_str(close, &stub);
     source
