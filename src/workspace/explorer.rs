@@ -37,8 +37,7 @@ impl Workspace {
         };
         let root = project.root.clone();
         let Some(path) = self.selected.clone() else {
-            self.message =
-                Some(SharedString::from("sélectionnez d'abord un élément dans l'explorateur"));
+            self.message = Some(crate::tr("message.select_entry_first"));
             cx.notify();
             return;
         };
@@ -125,7 +124,7 @@ impl Workspace {
         self.selected = None;
         self.expanded.retain(|expanded| !gone(expanded));
         self.refresh_entries();
-        self.message = Some(SharedString::from(format!("{name} déplacé vers la corbeille")));
+        self.message = Some(SharedString::from(t!("message.trashed", name = name).into_owned()));
         cx.notify();
     }
 
@@ -197,11 +196,14 @@ impl Workspace {
                 .flex_1(),
             )
             .context_menu(move |menu, _window, _cx| {
-                menu.menu("Nouvelle vue", Box::new(crate::actions::NewView))
-                    .menu("Supprimer", Box::new(crate::actions::DeleteFile))
+                menu.menu(crate::tr("context.new_view"), Box::new(crate::actions::NewView))
+                    .menu(crate::tr("context.delete"), Box::new(crate::actions::DeleteFile))
                     .separator()
-                    .menu("Révéler dans le Finder", Box::new(crate::actions::RevealInFinder))
-                    .menu(format!("Ouvrir dans {editor}"), Box::new(crate::actions::OpenInZed))
+                    .menu(crate::tr("context.reveal"), Box::new(crate::actions::RevealInFinder))
+                    .menu(
+                        t!("context.open_in", editor = editor).into_owned(),
+                        Box::new(crate::actions::OpenInZed),
+                    )
             })
     }
 

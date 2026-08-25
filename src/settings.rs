@@ -44,6 +44,8 @@ pub struct Preferences {
     pub terminal: String,
     /// Whether `rustfmt` is run on a file after maxx writes it.
     pub format_on_save: bool,
+    /// The interface language: `system`, or a language code maxx translates.
+    pub language: String,
 }
 
 impl Default for Preferences {
@@ -63,6 +65,7 @@ impl Default for Preferences {
             // diff parasite à chaque tour. maxx applique donc lui-même ce que
             // l'éditeur appliquerait de toute façon.
             format_on_save: true,
+            language: "system".into(),
         }
     }
 }
@@ -198,40 +201,50 @@ fn write_atomically(path: &Path, body: &str) -> std::io::Result<()> {
 /// Every key, with its default and a line saying what it does — the file is its
 /// own documentation, which is the part of Zed's settings worth copying before
 /// any question of format.
+///
+/// In English whatever the interface speaks. The file is written once, keeps
+/// whatever the user then writes in it, and is read by hand years later; a
+/// comment that depends on the language selected on the day of the first launch
+/// would be a strange thing to find in it.
 pub fn documented_defaults() -> String {
     let defaults = Preferences::default();
     format!(
-        r#"// Réglages de maxx.
+        r#"// maxx settings.
 //
-// Ce fichier est à vous. maxx ne réécrit que la clé qu'il change : vos
-// commentaires et votre mise en forme restent en place. Les commentaires et
-// les virgules finales sont acceptés à la lecture.
+// This file is yours. maxx only rewrites the key it changes: your comments and
+// your layout stay where they are. Comments and trailing commas are accepted
+// when reading.
 {{
   "$schema": "./settings-schema.json",
 
-  // L'explorateur, à gauche. ⌘B fait la même chose.
+  // The explorer, on the left. ⌘B does the same thing.
   "show_project_panel": {},
 
-  // La ligne du bas : nom de la vue, messages, conflits.
+  // The bottom line: the view's name, messages, conflicts.
   "show_status_bar": {},
 
-  // Ce que cargo écrit pendant un lancement. ⌘J le bascule.
+  // What cargo writes during a run. ⌘J toggles it.
   "show_output": {},
 
-  // L'éditeur qui reçoit les fichiers, et le terminal qui s'ouvre sur le
-  // projet. « auto » prend le premier installé — pour l'éditeur, $VISUAL et
-  // $EDITOR passent d'abord. Les valeurs possibles sont listées dans le schéma.
+  // The editor files are handed to, and the terminal opened on the project.
+  // "auto" takes the first one installed — for the editor, $VISUAL and $EDITOR
+  // come first. The possible values are listed in the schema.
   "editor": "{}",
   "terminal": "{}",
 
-  // Passer rustfmt sur le fichier après chaque enregistrement, pour que ce que
-  // maxx écrit suive les conventions du projet — son rustfmt.toml compris.
+  // Run rustfmt on the file after every save, so that what maxx writes follows
+  // the project's conventions — its rustfmt.toml included.
   //
-  // Allumé : un éditeur Rust formate à l'enregistrement, et ce que maxx écrit
-  // n'est pas ce que rustfmt écrirait. Sans cela, l'éditeur et maxx se
-  // reformatent mutuellement la zone gérée à chaque tour. Éteignez-le si votre
-  // projet n'utilise pas rustfmt — il met en forme le fichier entier.
-  "format_on_save": {}
+  // On: a Rust editor formats on save, and what maxx writes is not what rustfmt
+  // would write. Without this, the editor and maxx reformat the managed region
+  // at each other every round. Turn it off if your project does not use
+  // rustfmt — it formats the whole file.
+  "format_on_save": {},
+
+  // The interface language. "system" follows what the system reports and falls
+  // back to English; "en" and "fr" pin it. Anything maxx has not translated
+  // shows in English.
+  "language": "{}"
 }}
 "#,
         defaults.show_project_panel,
@@ -239,7 +252,8 @@ pub fn documented_defaults() -> String {
         defaults.show_output,
         defaults.editor,
         defaults.terminal,
-        defaults.format_on_save
+        defaults.format_on_save,
+        defaults.language
     )
 }
 
@@ -585,7 +599,7 @@ pub fn update_prefs(cx: &mut App, change: impl FnOnce(&mut Preferences)) {
         return;
     }
     if let Err(error) = save_preferences(&preferences) {
-        eprintln!("réglages non enregistrés : {error}");
+        eprintln!("settings not saved: {error}");
     }
     cx.global_mut::<Store>().preferences = preferences;
 }
@@ -598,7 +612,7 @@ pub fn update_state(cx: &mut App, change: impl FnOnce(&mut State)) {
         return;
     }
     if let Err(error) = save_state(&state) {
-        eprintln!("état non enregistré : {error}");
+        eprintln!("state not saved: {error}");
     }
     cx.global_mut::<Store>().state = state;
 }
@@ -618,6 +632,6 @@ pub fn stage_state(cx: &mut App, change: impl FnOnce(&mut State)) {
 /// Writes whatever [`stage_state`] left in memory.
 pub fn flush(cx: &App) {
     if let Err(error) = save_state(&cx.global::<Store>().state) {
-        eprintln!("état non enregistré : {error}");
+        eprintln!("state not saved: {error}");
     }
 }

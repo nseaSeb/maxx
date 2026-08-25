@@ -1,0 +1,751 @@
+_version: 2
+about.licence:
+  en: "MIT · the dependencies keep their own licences"
+  fr: "MIT · les dépendances restent sous leur licence"
+about.title:
+  en: "About maxx"
+  fr: "À propos de maxx"
+component.alert:
+  en: "Alert"
+  fr: "Alerte"
+component.button:
+  en: "Button"
+  fr: "Bouton"
+component.checkbox:
+  en: "Checkbox"
+  fr: "Case à cocher"
+component.column:
+  en: "Column"
+  fr: "Colonne"
+component.divider:
+  en: "Divider"
+  fr: "Séparateur"
+component.group_box:
+  en: "Group box"
+  fr: "Cadre"
+component.input:
+  en: "Text field"
+  fr: "Champ texte"
+component.label:
+  en: "Label"
+  fr: "Étiquette"
+component.link:
+  en: "Link"
+  fr: "Lien"
+component.progress:
+  en: "Progress bar"
+  fr: "Barre de progression"
+component.radio:
+  en: "Radio button"
+  fr: "Bouton radio"
+component.row:
+  en: "Row"
+  fr: "Ligne"
+component.select:
+  en: "Dropdown"
+  fr: "Liste déroulante"
+component.spacer:
+  en: "Elastic space"
+  fr: "Espace élastique"
+component.switch:
+  en: "Switch"
+  fr: "Interrupteur"
+component.tag:
+  en: "Tag"
+  fr: "Pastille"
+context.delete:
+  en: "Delete"
+  fr: "Supprimer"
+context.new_view:
+  en: "New view"
+  fr: "Nouvelle vue"
+context.open_in:
+  en: "Open in %{editor}"
+  fr: "Ouvrir dans %{editor}"
+context.reveal:
+  en: "Reveal in the Finder"
+  fr: "Révéler dans le Finder"
+designer.add:
+  en: "Add"
+  fr: "Ajouter"
+designer.components:
+  en: "Components"
+  fr: "Composants"
+designer.default:
+  en: "default"
+  fr: "par défaut"
+designer.delete:
+  en: "Delete"
+  fr: "Supprimer"
+designer.entry:
+  en: "Entry"
+  fr: "Entrée"
+designer.field_name:
+  en: "field name"
+  fr: "nom du champ"
+designer.inspector:
+  en: "inspector"
+  fr: "inspecteur"
+designer.menu:
+  en: "Menu"
+  fr: "Menu"
+designer.move_down:
+  en: "↓ Move down"
+  fr: "↓ Descendre"
+designer.move_up:
+  en: "↑ Move up"
+  fr: "↑ Monter"
+designer.no:
+  en: "no"
+  fr: "non"
+designer.no_component:
+  en: "no component by that name"
+  fr: "aucun composant de ce nom"
+designer.opaque:
+  en: "Rust code kept as it stands — not editable here."
+  fr: "Code Rust conservé tel quel — non modifiable ici."
+designer.open_a_view:
+  en: "Open a view from src/ui/ to draw it"
+  fr: "Ouvrez une vue de src/ui/ pour la dessiner"
+designer.order:
+  en: "Order"
+  fr: "Ordre"
+designer.other_calls:
+  en: "Other calls"
+  fr: "Autres appels"
+designer.project_menu_bar:
+  en: "The project's menu bar"
+  fr: "Barre de menus du projet"
+designer.properties:
+  en: "Properties"
+  fr: "Propriétés"
+designer.rust_code:
+  en: "Rust code"
+  fr: "code Rust"
+designer.search:
+  en: "Search"
+  fr: "Chercher"
+designer.select_menu_or_entry:
+  en: "Select a menu or an entry."
+  fr: "Sélectionnez un menu ou une entrée."
+designer.separator:
+  en: "Separator"
+  fr: "Séparateur"
+designer.state:
+  en: "State"
+  fr: "État"
+designer.structure:
+  en: "Structure"
+  fr: "Structure"
+designer.submenu:
+  en: "Submenu"
+  fr: "Sous-menu"
+designer.yes:
+  en: "yes"
+  fr: "oui"
+error.already_managed:
+  en: "this view is already managed by maxx"
+  fr: "cette vue est déjà gérée par maxx"
+error.bad_field_name:
+  en: "“%{name}” is not a valid field name"
+  fr: "« %{name} » n'est pas un nom de champ valide"
+error.changed_on_disk:
+  en: "changed outside maxx — File > Reload, or Overwrite"
+  fr: "fichier modifié en dehors de maxx — Fichier > Recharger, ou Écraser"
+error.changed_on_disk_reload:
+  en: "changed outside maxx — reload first"
+  fr: "fichier modifié en dehors de maxx — rechargez d'abord"
+error.colour:
+  en: "a colour is six hexadecimal digits, for example 1e2127"
+  fr: "une couleur s'écrit sur six chiffres hexadécimaux, par exemple 1e2127"
+error.comment_in_region:
+  en: "a comment sits in the managed region — saving would lose it"
+  fr: "un commentaire se trouve dans la zone gérée — l'enregistrement le perdrait"
+error.env_missing:
+  en: "%{name} is not set"
+  fr: "%{name} n'est pas défini"
+error.field_exists:
+  en: "the field “%{name}” already exists"
+  fr: "le champ « %{name} » existe déjà"
+error.identifier:
+  en: "letters, digits and “_” only, and never a leading digit"
+  fr: "lettres, chiffres et « _ » seulement, et pas de chiffre en tête"
+error.length:
+  en: "a length is a number of pixels, for example 120"
+  fr: "une longueur est un nombre de pixels, par exemple 120"
+error.markers_order:
+  en: "“%{end}” comes before “%{begin}”"
+  fr: "« %{end} » apparaît avant « %{begin} »"
+error.no_markers:
+  en: "no “%{begin}” region in this file"
+  fr: "aucune zone « %{begin} » dans ce fichier"
+error.no_render:
+  en: "no “fn render” in this file"
+  fr: "aucun « fn render » dans ce fichier"
+error.no_trailing_expression:
+  en: "the body of “render” does not end on an expression — maxx would not know where to put its markers"
+  fr: "le corps de « render » ne se termine pas par une expression — maxx ne saurait pas où poser ses marqueurs"
+error.number:
+  en: "a number, for example 50 or 12.5"
+  fr: "un nombre, par exemple 50 ou 12.5"
+error.region_not_expression:
+  en: "the managed region is not an expression: %{error}"
+  fr: "la zone gérée n'est pas une expression : %{error}"
+error.region_not_menus:
+  en: "the managed region is not a “vec![Menu { .. }]”"
+  fr: "la zone gérée n'est pas un « vec![Menu { .. }] »"
+error.rustfmt:
+  en: "rustfmt refused %{name} — the file does not read as Rust"
+  fr: "rustfmt a refusé %{name} — le fichier ne se lit pas comme du Rust"
+error.trash_refused:
+  en: "move to the trash refused: %{error}"
+  fr: "déplacement vers la corbeille refusé : %{error}"
+menu.about:
+  en: "About maxx"
+  fr: "À propos de maxx"
+menu.add_entry:
+  en: "Add an entry"
+  fr: "Ajouter une entrée"
+menu.add_menu:
+  en: "Add a menu"
+  fr: "Ajouter un menu"
+menu.add_menu_bar:
+  en: "The menu bar"
+  fr: "La barre de menus"
+menu.add_separator:
+  en: "Add a separator"
+  fr: "Ajouter un séparateur"
+menu.add_settings:
+  en: "The settings"
+  fr: "Les réglages"
+menu.add_system:
+  en: "The system module"
+  fr: "Le module système"
+menu.add_to_project:
+  en: "Add to project"
+  fr: "Ajouter au projet"
+menu.adopt_view:
+  en: "Adopt this view"
+  fr: "Adopter cette vue"
+menu.clear_recent:
+  en: "Clear the list"
+  fr: "Vider la liste"
+menu.close_project:
+  en: "Close the project"
+  fr: "Fermer le projet"
+menu.close_view:
+  en: "Close the view"
+  fr: "Fermer la vue"
+menu.copy:
+  en: "Copy"
+  fr: "Copier"
+menu.copy_node:
+  en: "Copy the node"
+  fr: "Copier le nœud"
+menu.cut:
+  en: "Cut"
+  fr: "Couper"
+menu.delete_file:
+  en: "Delete the file"
+  fr: "Supprimer le fichier"
+menu.delete_node:
+  en: "Delete the node"
+  fr: "Supprimer le nœud"
+menu.duplicate_node:
+  en: "Duplicate the node"
+  fr: "Dupliquer le nœud"
+menu.edit:
+  en: "Edit"
+  fr: "Édition"
+menu.file:
+  en: "File"
+  fr: "Fichier"
+menu.go:
+  en: "Go"
+  fr: "Aller"
+menu.gpui_docs:
+  en: "GPUI documentation"
+  fr: "Documentation GPUI"
+menu.help:
+  en: "Help"
+  fr: "Aide"
+menu.hide:
+  en: "Hide maxx"
+  fr: "Masquer maxx"
+menu.hide_others:
+  en: "Hide Others"
+  fr: "Masquer les autres"
+menu.minimize:
+  en: "Minimize"
+  fr: "Réduire"
+menu.move_down:
+  en: "Move down"
+  fr: "Descendre"
+menu.move_up:
+  en: "Move up"
+  fr: "Monter"
+menu.new_entry_label:
+  en: "Entry"
+  fr: "Entrée"
+menu.new_project:
+  en: "New project…"
+  fr: "Nouveau projet…"
+menu.new_view:
+  en: "New view…"
+  fr: "Nouvelle vue…"
+menu.new_window:
+  en: "New window"
+  fr: "Nouvelle fenêtre"
+menu.no_recent:
+  en: "No recent project"
+  fr: "Aucun projet récent"
+menu.open_file_in:
+  en: "Open the file in %{editor}"
+  fr: "Ouvrir le fichier dans %{editor}"
+menu.open_folder:
+  en: "Open folder…"
+  fr: "Ouvrir un dossier…"
+menu.open_project_in:
+  en: "Open the project in %{editor}"
+  fr: "Ouvrir le projet dans %{editor}"
+menu.open_recent:
+  en: "Open recent"
+  fr: "Ouvrir un élément récent"
+menu.open_terminal:
+  en: "Open in the Terminal"
+  fr: "Ouvrir dans le Terminal"
+menu.output:
+  en: "Output"
+  fr: "Sortie"
+menu.overwrite:
+  en: "Overwrite the file"
+  fr: "Écraser le fichier"
+menu.paste:
+  en: "Paste"
+  fr: "Coller"
+menu.paste_node:
+  en: "Paste the node"
+  fr: "Coller le nœud"
+menu.preferences:
+  en: "Settings…"
+  fr: "Réglages…"
+menu.prewarm:
+  en: "Prepare the dependencies"
+  fr: "Préparer les dépendances"
+menu.project_menu_bar:
+  en: "The project's menu bar"
+  fr: "Barre de menus du projet"
+menu.project_panel:
+  en: "Project panel"
+  fr: "Panneau du projet"
+menu.quit:
+  en: "Quit maxx"
+  fr: "Quitter maxx"
+menu.redo:
+  en: "Redo"
+  fr: "Rétablir"
+menu.reload_view:
+  en: "Reload the view"
+  fr: "Recharger la vue"
+menu.remove_menu_bar:
+  en: "Remove the menu bar"
+  fr: "Retirer la barre de menus"
+menu.reveal:
+  en: "Reveal in the Finder"
+  fr: "Révéler dans le Finder"
+menu.run:
+  en: "Run"
+  fr: "Exécution"
+menu.run_project:
+  en: "Run the project"
+  fr: "Lancer le projet"
+menu.save:
+  en: "Save"
+  fr: "Enregistrer"
+menu.select_all:
+  en: "Select All"
+  fr: "Tout sélectionner"
+menu.shortcut:
+  en: "Shortcut"
+  fr: "Raccourci"
+menu.show_all:
+  en: "Show All"
+  fr: "Tout afficher"
+menu.status_bar:
+  en: "Status bar"
+  fr: "Barre d'état"
+menu.stop:
+  en: "Stop"
+  fr: "Arrêter"
+menu.title:
+  en: "Title"
+  fr: "Titre"
+menu.undo:
+  en: "Undo"
+  fr: "Annuler"
+menu.update_modules:
+  en: "Update the modules"
+  fr: "Mettre à jour les modules"
+menu.view:
+  en: "View"
+  fr: "Affichage"
+menu.window:
+  en: "Window"
+  fr: "Fenêtre"
+menu.zoom:
+  en: "Zoom"
+  fr: "Zoom"
+message.action_elsewhere:
+  en: "“%{action}” lives in another module — maxx does not know where it is written"
+  fr: "« %{action} » vit dans un autre module — maxx ne sait pas où il est écrit"
+message.action_unwired:
+  en: "“%{action}” is not wired yet — ⌘S adds it to the file"
+  fr: "« %{action} » n'est pas encore câblée — ⌘S l'ajoute au fichier"
+message.action_written:
+  en: "action “%{name}” — ⌘S writes the method into the file"
+  fr: "action « %{name} » — ⌘S écrit la méthode dans le fichier"
+message.already_first:
+  en: "already first"
+  fr: "déjà en premier"
+message.already_last:
+  en: "already last"
+  fr: "déjà en dernier"
+message.clipboard_empty:
+  en: "the clipboard is empty"
+  fr: "le presse-papier est vide"
+message.clipboard_not_expression:
+  en: "the clipboard does not carry a gpui expression"
+  fr: "le presse-papier ne porte pas une expression gpui"
+message.conflict_both:
+  en: "changed on both sides — File > Reload, or Overwrite"
+  fr: "modifié des deux côtés — Fichier > Recharger, ou Écraser"
+message.entry_is_system:
+  en: "this entry is delegated to the system — it has no handler"
+  fr: "cette entrée est déléguée au système — elle n'a pas de gestionnaire"
+message.field_added:
+  en: "field “%{name}” added"
+  fr: "champ « %{name} » ajouté"
+message.handler_unwritten:
+  en: "“%{name}” is not written yet — ⌘S adds it to the file"
+  fr: "« %{name} » n'est pas encore écrite — ⌘S l'ajoute au fichier"
+message.menu_bar_added:
+  en: "menu bar added to the project and wired into main.rs"
+  fr: "barre de menus ajoutée au projet et câblée dans main.rs"
+message.menus_reloaded:
+  en: "menus reloaded"
+  fr: "menus rechargés"
+message.menus_unsaved:
+  en: "menus not saved — ⌘S before changing file"
+  fr: "menus non enregistrés — ⌘S avant de changer de fichier"
+message.module_already_there:
+  en: "src/%{module}.rs is already there"
+  fr: "src/%{module}.rs est déjà là"
+message.module_now_declared:
+  en: "src/%{module}.rs was there, it is now declared in main.rs"
+  fr: "src/%{module}.rs était là, il est maintenant déclaré dans main.rs"
+message.modules_outdated:
+  en: "%{modules} has a newer version — File ▸ Add to project ▸ Update the modules"
+  fr: "%{modules} a une version plus récente — Fichier ▸ Ajouter au projet ▸ Mettre à jour"
+message.modules_up_to_date:
+  en: "this project's modules are up to date"
+  fr: "les modules de ce projet sont à jour"
+message.modules_updated:
+  en: "updated: %{modules}"
+  fr: "mis à jour : %{modules}"
+message.no_action:
+  en: "no action on this node"
+  fr: "aucune action sur ce nœud"
+message.no_state_field:
+  en: "no state field — add one under “State”"
+  fr: "aucun champ d'état — ajoutez-en un dans « État »"
+message.node_copied:
+  en: "node copied"
+  fr: "nœud copié"
+message.node_into_itself:
+  en: "a node cannot be dropped into itself"
+  fr: "un nœud ne peut pas être déposé dans lui-même"
+message.reloaded:
+  en: "%{name} reloaded"
+  fr: "%{name} rechargé"
+message.reloaded_outside:
+  en: "%{name} reloaded — changed outside maxx"
+  fr: "%{name} rechargé — modifié en dehors de maxx"
+message.root_not_duplicated:
+  en: "the root is not duplicated"
+  fr: "la racine ne se duplique pas"
+message.root_takes_no_child:
+  en: "the root takes no child — select a column or a row"
+  fr: "la racine n'accepte pas d'enfant — sélectionnez une colonne ou une ligne"
+message.run_in_progress:
+  en: "a run is already in progress — ⌘. stops it"
+  fr: "une exécution est déjà en cours — ⌘. pour l'arrêter"
+message.run_stopped:
+  en: "run interrupted"
+  fr: "exécution interrompue"
+message.saved:
+  en: "%{name} saved"
+  fr: "%{name} enregistré"
+message.select_entry_first:
+  en: "select an item in the explorer first"
+  fr: "sélectionnez d'abord un élément dans l'explorateur"
+message.select_entry_first_menu:
+  en: "select an entry first"
+  fr: "sélectionnez d'abord une entrée"
+message.select_menu_first:
+  en: "select a menu first"
+  fr: "sélectionnez d'abord un menu"
+message.select_menu_not_submenu:
+  en: "select a menu or one of its entries — a submenu does not go inside a submenu"
+  fr: "sélectionnez un menu ou une de ses entrées — un sous-menu ne va pas dans un sous-menu"
+message.select_rs_file:
+  en: "select a .rs file in the explorer"
+  fr: "sélectionnez un fichier .rs dans l'explorateur"
+message.trashed:
+  en: "%{name} moved to the trash"
+  fr: "%{name} déplacé vers la corbeille"
+message.view_adopted:
+  en: "view adopted"
+  fr: "vue adoptée"
+message.view_created:
+  en: "%{module}.rs created"
+  fr: "%{module}.rs créé"
+message.view_unsaved_close:
+  en: "%{name} is not saved — ⌘S before closing"
+  fr: "%{name} n'est pas enregistré — ⌘S avant de fermer"
+message.view_unsaved_close_project:
+  en: "view not saved — ⌘S before closing the project"
+  fr: "vue non enregistrée — ⌘S avant de fermer le projet"
+prefs.appearance:
+  en: "Appearance"
+  fr: "Apparence"
+prefs.clear_recent:
+  en: "Clear the list"
+  fr: "Vider la liste"
+prefs.editor:
+  en: "Editor"
+  fr: "Éditeur"
+prefs.editor_desc:
+  en: "What ⌘⌥Z and the inspector's → button open."
+  fr: "Ce qu'ouvrent ⌘⌥Z et le bouton → de l'inspecteur."
+prefs.editor_terminal:
+  en: "Editor and terminal"
+  fr: "Éditeur et terminal"
+prefs.file:
+  en: "File"
+  fr: "Fichier"
+prefs.format_on_save:
+  en: "Format on save"
+  fr: "Mettre en forme à l'enregistrement"
+prefs.format_on_save_desc:
+  en: "Runs rustfmt on the file after every write, so that what maxx writes follows the project's conventions — its rustfmt.toml included. Careful: rustfmt formats the whole file, not only the region maxx manages. On an already formatted project, that changes nothing elsewhere."
+  fr: "Passe rustfmt sur le fichier après chaque écriture, pour que ce que maxx écrit suive les conventions du projet — son rustfmt.toml compris. Attention : rustfmt met en forme le fichier entier, pas seulement la zone que maxx gère. Sur un projet déjà formaté, cela ne change rien ailleurs."
+prefs.installed_only:
+  en: "Only what is installed is offered."
+  fr: "Seul ce qui est installé est proposé."
+prefs.installed_only_bound:
+  en: "Only what is installed is offered. A terminal editor — Helix, Neovim, Vim — is launched in the terminal chosen below, which therefore has to know how to receive a command."
+  fr: "Seul ce qui est installé est proposé. Un éditeur de terminal — Helix, Neovim, Vim — est lancé dans le terminal choisi ci-dessous, qui doit donc savoir recevoir une commande."
+prefs.language:
+  en: "Language"
+  fr: "Langue"
+prefs.language_desc:
+  en: "What maxx speaks. “System” follows what the system reports and falls back to English; anything maxx has not translated shows in English."
+  fr: "Ce que maxx parle. « Système » suit ce que le système annonce et retombe sur l'anglais ; ce que maxx n'a pas traduit s'affiche en anglais."
+prefs.language_system:
+  en: "System"
+  fr: "Système"
+prefs.no_location:
+  en: "no location for it on this system"
+  fr: "emplacement introuvable sur ce système"
+prefs.open_in_editor:
+  en: "Open in the editor"
+  fr: "Ouvrir dans l'éditeur"
+prefs.output_panel:
+  en: "Output panel"
+  fr: "Panneau de sortie"
+prefs.output_panel_desc:
+  en: "What `cargo` writes during a run. ⌘J toggles it."
+  fr: "Ce que `cargo` écrit pendant un lancement. ⌘J le bascule."
+prefs.panels:
+  en: "Panels"
+  fr: "Panneaux"
+prefs.panels_desc:
+  en: "What the window shows around the canvas."
+  fr: "Ce que la fenêtre affiche autour du canvas."
+prefs.project_panel:
+  en: "Project panel"
+  fr: "Panneau du projet"
+prefs.project_panel_desc:
+  en: "The explorer, on the left. ⌘B does the same thing."
+  fr: "L'explorateur, à gauche. ⌘B fait la même chose."
+prefs.projects:
+  en: "Projects"
+  fr: "Projets"
+prefs.recent:
+  en: "Recent projects"
+  fr: "Projets récents"
+prefs.recent_many:
+  en: "%{count} projects remembered. The last ten are kept."
+  fr: "%{count} projets retenus. Les dix derniers sont gardés."
+prefs.recent_none:
+  en: "No project opened yet."
+  fr: "Aucun projet ouvert pour l'instant."
+prefs.recent_one:
+  en: "One project remembered. The last ten are kept."
+  fr: "Un projet retenu. Les dix derniers sont gardés."
+prefs.settings_file:
+  en: "Settings file"
+  fr: "Fichier de réglages"
+prefs.settings_file_desc:
+  en: "Everything here can be edited by hand, comments included: maxx only rewrites the key it changes. The recent projects and the window's position live next door, in state.json, which maxx keeps to itself."
+  fr: "Tout ce qui est ici s'édite aussi à la main, commentaires compris : maxx ne réécrit que la clé qu'il change. Les projets récents et la position de la fenêtre vivent à côté, dans state.json, que maxx tient seul."
+prefs.status_bar:
+  en: "Status bar"
+  fr: "Barre d'état"
+prefs.status_bar_desc:
+  en: "The bottom line: the view's name, messages, conflicts."
+  fr: "La ligne du bas : nom de la vue, messages, conflits."
+prefs.terminal:
+  en: "Terminal"
+  fr: "Terminal"
+prefs.terminal_desc:
+  en: "What ⌘⌥T opens, on the project's folder."
+  fr: "Ce qu'ouvre ⌘⌥T, sur le dossier du projet."
+prefs.tools:
+  en: "Tools"
+  fr: "Outils"
+prop.action:
+  en: "Action"
+  fr: "Action"
+prop.align:
+  en: "Alignment"
+  fr: "Alignement"
+prop.background:
+  en: "Background"
+  fr: "Fond"
+prop.bound_field:
+  en: "Bound field"
+  fr: "Champ lié"
+prop.checked:
+  en: "Checked"
+  fr: "Cochée"
+prop.disabled:
+  en: "Disabled"
+  fr: "Désactivé"
+prop.flex:
+  en: "Elastic"
+  fr: "Élastique"
+prop.gap:
+  en: "Spacing"
+  fr: "Espacement"
+prop.height:
+  en: "Height"
+  fr: "Hauteur"
+prop.href:
+  en: "Address"
+  fr: "Adresse"
+prop.id:
+  en: "Identifier"
+  fr: "Identifiant"
+prop.label:
+  en: "Label"
+  fr: "Libellé"
+prop.message:
+  en: "Message"
+  fr: "Message"
+prop.on:
+  en: "On"
+  fr: "Activé"
+prop.outline:
+  en: "Outline"
+  fr: "Contour"
+prop.padding:
+  en: "Padding"
+  fr: "Marge"
+prop.rounded:
+  en: "Rounding"
+  fr: "Arrondi"
+prop.rounded_full:
+  en: "Fully rounded"
+  fr: "Arrondi complet"
+prop.selected:
+  en: "Selected"
+  fr: "Sélectionné"
+prop.text:
+  en: "Text"
+  fr: "Texte"
+prop.text_color:
+  en: "Text colour"
+  fr: "Couleur du texte"
+prop.text_size:
+  en: "Text size"
+  fr: "Taille du texte"
+prop.title:
+  en: "Title"
+  fr: "Titre"
+prop.tooltip:
+  en: "Tooltip"
+  fr: "Infobulle"
+prop.value:
+  en: "Value"
+  fr: "Valeur"
+prop.variant:
+  en: "Variant"
+  fr: "Variante"
+prop.weight:
+  en: "Weight"
+  fr: "Graisse"
+prop.width:
+  en: "Width"
+  fr: "Largeur"
+run.failed:
+  en: "failed"
+  fr: "échec"
+run.finished:
+  en: "finished"
+  fr: "terminé"
+run.idle:
+  en: "ready"
+  fr: "prêt"
+run.running:
+  en: "running…"
+  fr: "exécution…"
+run.stop:
+  en: "Stop"
+  fr: "Arrêter"
+state_type.boolean:
+  en: "Boolean"
+  fr: "Booléen"
+state_type.decimal:
+  en: "Decimal number"
+  fr: "Nombre décimal"
+state_type.integer:
+  en: "Whole number"
+  fr: "Nombre entier"
+state_type.text:
+  en: "Text"
+  fr: "Texte"
+status.changed_outside:
+  en: " ⚠ changed outside maxx"
+  fr: " ⚠ modifié en dehors de maxx"
+status.items:
+  en: "%{name} · %{count} items"
+  fr: "%{name} · %{count} éléments"
+status.no_project:
+  en: "No project"
+  fr: "Aucun projet"
+status.nodes:
+  en: "%{name}%{dirty}%{conflict} · %{count} nodes"
+  fr: "%{name}%{dirty}%{conflict} · %{count} nœuds"
+tools.automatic:
+  en: "Automatic (%{tool})"
+  fr: "Automatique (%{tool})"
+tools.automatic_none:
+  en: "Automatic (none found)"
+  fr: "Automatique (aucun trouvé)"
+tools.the_editor:
+  en: "the editor"
+  fr: "l'éditeur"
+welcome.recent:
+  en: "Recent projects"
+  fr: "Projets récents"

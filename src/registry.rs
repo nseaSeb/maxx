@@ -49,7 +49,11 @@ pub enum Kind {
 /// One editable property.
 #[derive(Clone, Copy, Debug)]
 pub struct Prop {
-    /// Label shown in the inspector.
+    /// Translation key of the label shown in the inspector.
+    ///
+    /// A key and not the text: it is stable across languages, so it can also
+    /// serve as the element's identity — which is what the inspector's field
+    /// ids are built from.
     pub label: &'static str,
     /// Where the value lives in the chain.
     pub target: Target,
@@ -62,7 +66,7 @@ pub struct Prop {
 pub struct Spec {
     /// Stable identifier, used by the palette and the drag payloads.
     pub id: &'static str,
-    /// Name shown in the palette and the tree.
+    /// Translation key of the name shown in the palette and the tree.
     pub label: &'static str,
     /// Constructor path emitted in the generated code.
     pub base: &'static str,
@@ -110,13 +114,13 @@ const ROUNDED: &[&str] =
 /// here, because a style method on a type that does not implement `Styled`
 /// would only fail when the generated project is compiled.
 pub const COMMON: &[Prop] = &[
-    Prop { label: "Largeur", target: Target::Method("w"), kind: Kind::Number },
-    Prop { label: "Hauteur", target: Target::Method("h"), kind: Kind::Number },
-    Prop { label: "Fond", target: Target::Method("bg"), kind: Kind::Color },
-    Prop { label: "Couleur du texte", target: Target::Method("text_color"), kind: Kind::Color },
-    Prop { label: "Taille du texte", target: Target::Family(TEXT_SIZES), kind: Kind::Choice },
-    Prop { label: "Graisse", target: Target::Family(WEIGHTS), kind: Kind::Choice },
-    Prop { label: "Arrondi", target: Target::Family(ROUNDED), kind: Kind::Choice },
+    Prop { label: "prop.width", target: Target::Method("w"), kind: Kind::Number },
+    Prop { label: "prop.height", target: Target::Method("h"), kind: Kind::Number },
+    Prop { label: "prop.background", target: Target::Method("bg"), kind: Kind::Color },
+    Prop { label: "prop.text_color", target: Target::Method("text_color"), kind: Kind::Color },
+    Prop { label: "prop.text_size", target: Target::Family(TEXT_SIZES), kind: Kind::Choice },
+    Prop { label: "prop.weight", target: Target::Family(WEIGHTS), kind: Kind::Choice },
+    Prop { label: "prop.rounded", target: Target::Family(ROUNDED), kind: Kind::Choice },
 ];
 
 /// The catalogue. Adding a component means adding an entry here and a branch in
@@ -124,52 +128,52 @@ pub const COMMON: &[Prop] = &[
 pub const CATALOGUE: &[Spec] = &[
     Spec {
         id: "column",
-        label: "Colonne",
+        label: "component.column",
         base: "v_flex",
         import: "use gpui_component::v_flex;",
         container: true,
         default_args: &[],
         props: &[
-            Prop { label: "Espacement", target: Target::Family(GAPS), kind: Kind::Choice },
-            Prop { label: "Marge", target: Target::Family(PADDINGS), kind: Kind::Choice },
-            Prop { label: "Alignement", target: Target::Family(ALIGNS), kind: Kind::Choice },
-            Prop { label: "Élastique", target: Target::Flag("flex_1"), kind: Kind::Bool },
+            Prop { label: "prop.gap", target: Target::Family(GAPS), kind: Kind::Choice },
+            Prop { label: "prop.padding", target: Target::Family(PADDINGS), kind: Kind::Choice },
+            Prop { label: "prop.align", target: Target::Family(ALIGNS), kind: Kind::Choice },
+            Prop { label: "prop.flex", target: Target::Flag("flex_1"), kind: Kind::Bool },
         ],
         state: None,
     },
     Spec {
         id: "row",
-        label: "Ligne",
+        label: "component.row",
         base: "h_flex",
         import: "use gpui_component::h_flex;",
         container: true,
         default_args: &[],
         props: &[
-            Prop { label: "Espacement", target: Target::Family(GAPS), kind: Kind::Choice },
-            Prop { label: "Marge", target: Target::Family(PADDINGS), kind: Kind::Choice },
-            Prop { label: "Alignement", target: Target::Family(ALIGNS), kind: Kind::Choice },
-            Prop { label: "Élastique", target: Target::Flag("flex_1"), kind: Kind::Bool },
+            Prop { label: "prop.gap", target: Target::Family(GAPS), kind: Kind::Choice },
+            Prop { label: "prop.padding", target: Target::Family(PADDINGS), kind: Kind::Choice },
+            Prop { label: "prop.align", target: Target::Family(ALIGNS), kind: Kind::Choice },
+            Prop { label: "prop.flex", target: Target::Flag("flex_1"), kind: Kind::Bool },
         ],
         state: None,
     },
     Spec {
         id: "label",
-        label: "Étiquette",
+        label: "component.label",
         base: "Label::new",
         import: "use gpui_component::label::Label;",
         container: false,
         default_args: &["Label"],
-        props: &[Prop { label: "Texte", target: Target::BaseArg(0), kind: Kind::Text }],
+        props: &[Prop { label: "prop.text", target: Target::BaseArg(0), kind: Kind::Text }],
         state: None,
     },
     Spec {
         id: "input",
-        label: "Champ texte",
+        label: "component.input",
         base: "Input::new",
         import: "use gpui_component::input::Input;",
         container: false,
         default_args: &[],
-        props: &[Prop { label: "Champ lié", target: Target::BaseArg(0), kind: Kind::Field }],
+        props: &[Prop { label: "prop.bound_field", target: Target::BaseArg(0), kind: Kind::Field }],
         state: Some(StateSpec {
             ty: "Entity<InputState>",
             imports: &["use gpui::Entity;", "use gpui_component::input::InputState;"],
@@ -178,12 +182,12 @@ pub const CATALOGUE: &[Spec] = &[
     },
     Spec {
         id: "select",
-        label: "Liste déroulante",
+        label: "component.select",
         base: "Select::new",
         import: "use gpui_component::select::Select;",
         container: false,
         default_args: &[],
-        props: &[Prop { label: "Champ lié", target: Target::BaseArg(0), kind: Kind::Field }],
+        props: &[Prop { label: "prop.bound_field", target: Target::BaseArg(0), kind: Kind::Field }],
         // Le contenu de la liste est dans l'initialiseur, donc dans le code que
         // vous éditez à la main : maxx pose deux entrées pour que quelque chose
         // s'affiche, et ne prétend pas gérer la source des données.
@@ -200,87 +204,87 @@ pub const CATALOGUE: &[Spec] = &[
     },
     Spec {
         id: "button",
-        label: "Bouton",
+        label: "component.button",
         base: "Button::new",
         import: "use gpui_component::button::Button;",
         container: false,
         default_args: &["button"],
         props: &[
-            Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
-            Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text },
-            Prop { label: "Variante", target: Target::Family(VARIANTS), kind: Kind::Choice },
-            Prop { label: "Infobulle", target: Target::Method("tooltip"), kind: Kind::Text },
-            Prop { label: "Désactivé", target: Target::Method("disabled"), kind: Kind::Bool },
-            Prop { label: "Action", target: Target::Method("on_click"), kind: Kind::Handler },
+            Prop { label: "prop.id", target: Target::BaseArg(0), kind: Kind::Text },
+            Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text },
+            Prop { label: "prop.variant", target: Target::Family(VARIANTS), kind: Kind::Choice },
+            Prop { label: "prop.tooltip", target: Target::Method("tooltip"), kind: Kind::Text },
+            Prop { label: "prop.disabled", target: Target::Method("disabled"), kind: Kind::Bool },
+            Prop { label: "prop.action", target: Target::Method("on_click"), kind: Kind::Handler },
         ],
         state: None,
     },
     Spec {
         id: "checkbox",
-        label: "Case à cocher",
+        label: "component.checkbox",
         base: "Checkbox::new",
         import: "use gpui_component::checkbox::Checkbox;",
         container: false,
         default_args: &["checkbox"],
         props: &[
-            Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
-            Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text },
-            Prop { label: "Cochée", target: Target::Method("checked"), kind: Kind::Bool },
+            Prop { label: "prop.id", target: Target::BaseArg(0), kind: Kind::Text },
+            Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text },
+            Prop { label: "prop.checked", target: Target::Method("checked"), kind: Kind::Bool },
         ],
         state: None,
     },
     Spec {
         id: "switch",
-        label: "Interrupteur",
+        label: "component.switch",
         base: "Switch::new",
         import: "use gpui_component::switch::Switch;",
         container: false,
         default_args: &["switch"],
         props: &[
-            Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
-            Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text },
-            Prop { label: "Activé", target: Target::Method("checked"), kind: Kind::Bool },
+            Prop { label: "prop.id", target: Target::BaseArg(0), kind: Kind::Text },
+            Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text },
+            Prop { label: "prop.on", target: Target::Method("checked"), kind: Kind::Bool },
         ],
         state: None,
     },
     Spec {
         id: "group_box",
-        label: "Cadre",
+        label: "component.group_box",
         base: "GroupBox::new",
         import: "use gpui_component::group_box::GroupBox;",
         container: true,
         default_args: &[],
-        props: &[Prop { label: "Titre", target: Target::Method("title"), kind: Kind::Text }],
+        props: &[Prop { label: "prop.title", target: Target::Method("title"), kind: Kind::Text }],
         state: None,
     },
     Spec {
         id: "divider",
-        label: "Séparateur",
+        label: "component.divider",
         base: "Divider::horizontal",
         import: "use gpui_component::divider::Divider;",
         container: false,
         default_args: &[],
-        props: &[Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text }],
+        props: &[Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text }],
         state: None,
     },
     Spec {
         id: "radio",
-        label: "Bouton radio",
+        label: "component.radio",
         base: "Radio::new",
         import: "use gpui_component::radio::Radio;",
         container: false,
         default_args: &["radio"],
         props: &[
-            Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
-            Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text },
-            Prop { label: "Sélectionné", target: Target::Method("checked"), kind: Kind::Bool },
-            Prop { label: "Désactivé", target: Target::Method("disabled"), kind: Kind::Bool },
+            Prop { label: "prop.id", target: Target::BaseArg(0), kind: Kind::Text },
+            Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text },
+            Prop { label: "prop.selected", target: Target::Method("checked"), kind: Kind::Bool },
+            Prop { label: "prop.disabled", target: Target::Method("disabled"), kind: Kind::Bool },
         ],
         state: None,
     },
     Spec {
         id: "link",
-        label: "Lien",
+        label: "component.link",
         base: "Link::new",
         import: "use gpui_component::link::Link;",
         // `Link` est un `ParentElement` : son texte est un enfant, pas un
@@ -288,37 +292,37 @@ pub const CATALOGUE: &[Spec] = &[
         container: true,
         default_args: &["link"],
         props: &[
-            Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
-            Prop { label: "Adresse", target: Target::Method("href"), kind: Kind::Text },
-            Prop { label: "Désactivé", target: Target::Method("disabled"), kind: Kind::Bool },
+            Prop { label: "prop.id", target: Target::BaseArg(0), kind: Kind::Text },
+            Prop { label: "prop.href", target: Target::Method("href"), kind: Kind::Text },
+            Prop { label: "prop.disabled", target: Target::Method("disabled"), kind: Kind::Bool },
         ],
         state: None,
     },
     Spec {
         id: "alert",
-        label: "Alerte",
+        label: "component.alert",
         base: "Alert::new",
         import: "use gpui_component::alert::Alert;",
         container: false,
         default_args: &["alert", "Message"],
         props: &[
-            Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
-            Prop { label: "Message", target: Target::BaseArg(1), kind: Kind::Text },
-            Prop { label: "Titre", target: Target::Method("title"), kind: Kind::Text },
+            Prop { label: "prop.id", target: Target::BaseArg(0), kind: Kind::Text },
+            Prop { label: "prop.message", target: Target::BaseArg(1), kind: Kind::Text },
+            Prop { label: "prop.title", target: Target::Method("title"), kind: Kind::Text },
         ],
         state: None,
     },
     Spec {
         id: "tag",
-        label: "Pastille",
+        label: "component.tag",
         base: "Tag::new",
         import: "use gpui_component::tag::Tag;",
         container: true,
         default_args: &[],
         props: &[
-            Prop { label: "Contour", target: Target::Flag("outline"), kind: Kind::Bool },
+            Prop { label: "prop.outline", target: Target::Flag("outline"), kind: Kind::Bool },
             Prop {
-                label: "Arrondi complet",
+                label: "prop.rounded_full",
                 target: Target::Flag("rounded_full"),
                 kind: Kind::Bool,
             },
@@ -327,22 +331,22 @@ pub const CATALOGUE: &[Spec] = &[
     },
     Spec {
         id: "progress",
-        label: "Barre de progression",
+        label: "component.progress",
         base: "Progress::new",
         import: "use gpui_component::progress::Progress;",
         container: false,
         default_args: &[],
-        props: &[Prop { label: "Valeur", target: Target::Method("value"), kind: Kind::Ratio }],
+        props: &[Prop { label: "prop.value", target: Target::Method("value"), kind: Kind::Ratio }],
         state: None,
     },
     Spec {
         id: "spacer",
-        label: "Espace élastique",
+        label: "component.spacer",
         base: "div",
         import: "use gpui::div;",
         container: false,
         default_args: &[],
-        props: &[Prop { label: "Élastique", target: Target::Flag("flex_1"), kind: Kind::Bool }],
+        props: &[Prop { label: "prop.flex", target: Target::Flag("flex_1"), kind: Kind::Bool }],
         state: None,
     },
 ];
@@ -373,29 +377,25 @@ fn float_literal(value: &str) -> Option<String> {
     Some(if value.contains('.') { value.to_string() } else { format!("{value}.") })
 }
 
-/// Why a value was refused, for the inspector to say so.
+/// The translation key of why a value was refused, for the inspector to say so.
 ///
 /// `write` silently ignores what it cannot encode — which is the right
 /// behaviour for the file, and the wrong one for the person typing.
 pub fn validate(prop: &Prop, value: &str) -> Option<&'static str> {
     let value = value.trim();
     match prop.kind {
-        Kind::Number if !value.is_empty() && pixel_literal(value).is_none() => {
-            Some("une longueur est un nombre de pixels, par exemple 120")
-        }
-        Kind::Ratio if !value.is_empty() && float_literal(value).is_none() => {
-            Some("un nombre, par exemple 50 ou 12.5")
-        }
+        Kind::Number if !value.is_empty() && pixel_literal(value).is_none() => Some("error.length"),
+        Kind::Ratio if !value.is_empty() && float_literal(value).is_none() => Some("error.number"),
         Kind::Color => {
             let hex = value.trim_start_matches('#');
             if hex.is_empty() || (hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit())) {
                 None
             } else {
-                Some("une couleur s'écrit sur six chiffres hexadécimaux, par exemple 1e2127")
+                Some("error.colour")
             }
         }
         Kind::Field | Kind::Handler if !value.is_empty() && !is_identifier(value) => {
-            Some("lettres, chiffres et « _ » seulement, et pas de chiffre en tête")
+            Some("error.identifier")
         }
         _ => None,
     }

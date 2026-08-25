@@ -49,10 +49,9 @@ impl Workspace {
             return;
         };
         if view.dirty() {
-            self.message = Some(SharedString::from(format!(
-                "{} n'est pas enregistré — ⌘S avant de fermer",
-                view.name()
-            )));
+            self.message = Some(SharedString::from(
+                t!("message.view_unsaved_close", name = view.name()).into_owned(),
+            ));
             cx.notify();
             return;
         }
@@ -144,7 +143,9 @@ impl Workspace {
                 // `select_file` reports its own failure; only claim success when
                 // it stayed quiet.
                 if self.message.is_none() {
-                    self.message = Some(SharedString::from(format!("{module}.rs créé")));
+                    self.message = Some(SharedString::from(
+                        t!("message.view_created", module = module).into_owned(),
+                    ));
                 }
             }
             Err(error) => self.message = Some(SharedString::from(error.to_string())),
@@ -167,11 +168,19 @@ impl Workspace {
     fn write_view(&mut self, force: bool, cx: &mut Context<Self>) {
         if let Some(menus) = self.menu_file.as_mut() {
             let path = menus.path.clone();
-            self.message = match menus.save(force) {
-                Ok(()) => Some(SharedString::from(format!("{} enregistré", menus.name()))),
-                Err(error) => Some(SharedString::from(error)),
+            let saved = match menus.save(force) {
+                Ok(()) => {
+                    self.message = Some(SharedString::from(
+                        t!("message.saved", name = menus.name()).into_owned(),
+                    ));
+                    true
+                }
+                Err(error) => {
+                    self.message = Some(SharedString::from(error));
+                    false
+                }
             };
-            self.format_after_save(&path, cx);
+            self.format_after_save(&path, saved, cx);
             cx.notify();
             return;
         }
@@ -187,19 +196,24 @@ impl Workspace {
                 return;
             }
             self.conflicts.insert(path);
-            self.message = Some(SharedString::from(
-                "fichier modifié en dehors de maxx — Fichier > Recharger, ou Écraser",
-            ));
+            self.message = Some(crate::tr("error.changed_on_disk"));
             cx.notify();
             return;
         }
 
         let view = self.view_mut().expect("just borrowed");
-        self.message = match view.save() {
-            Ok(()) => Some(SharedString::from(format!("{} enregistré", view.name()))),
-            Err(error) => Some(SharedString::from(error)),
+        let saved = match view.save() {
+            Ok(()) => {
+                self.message =
+                    Some(SharedString::from(t!("message.saved", name = view.name()).into_owned()));
+                true
+            }
+            Err(error) => {
+                self.message = Some(SharedString::from(error));
+                false
+            }
         };
-        self.format_after_save(&path, cx);
+        self.format_after_save(&path, saved, cx);
         self.conflicts.remove(&path);
         self.revision += 1;
         cx.notify();
@@ -211,12 +225,12 @@ impl Workspace {
     /// and compares it with the disk to notice edits made elsewhere. Leaving
     /// that copy behind would make the very next save believe someone had
     /// changed the file underneath — maxx accusing itself.
-    fn format_after_save(&mut self, path: &std::path::Path, cx: &mut Context<Self>) {
-        if !crate::settings::prefs(cx).format_on_save {
-            return;
-        }
-        // Nothing to format if the save itself failed.
-        if self.message.as_deref().is_some_and(|message| !message.ends_with("enregistré")) {
+    /// `saved` says whether the write went through. Told rather than deduced
+    /// from the message: reading the outcome back out of a sentence shown to
+    /// the user tied the behaviour to its wording, and the wording is
+    /// translated.
+    fn format_after_save(&mut self, path: &std::path::Path, saved: bool, cx: &mut Context<Self>) {
+        if !saved || !crate::settings::prefs(cx).format_on_save {
             return;
         }
 
@@ -243,7 +257,7 @@ impl Workspace {
         self.edit_snapshot = None;
         if let Some(menus) = self.menu_file.as_mut() {
             self.message = match menus.reload() {
-                Ok(()) => Some(SharedString::from("menus rechargés")),
+                Ok(()) => Some(crate::tr("message.menus_reloaded")),
                 Err(error) => Some(SharedString::from(error)),
             };
             self.menu_synced = None;
@@ -256,7 +270,7 @@ impl Workspace {
         let path = view.path.clone();
         let name = view.name();
         self.message = match view.reload() {
-            Ok(()) => Some(SharedString::from(format!("{name} rechargé"))),
+            Ok(()) => Some(SharedString::from(t!("message.reloaded", name = name).into_owned())),
             Err(error) => Some(SharedString::from(error)),
         };
         self.conflicts.remove(&path);
@@ -296,17 +310,15 @@ impl Workspace {
             let view = &mut self.views[index];
             let name = view.name();
             if view.reload().is_ok() {
-                self.message = Some(SharedString::from(format!(
-                    "{name} rechargé — modifié en dehors de maxx"
-                )));
+                self.message = Some(SharedString::from(
+                    t!("message.reloaded_outside", name = name).into_owned(),
+                ));
                 self.revision += 1;
             }
         }
         for path in conflicted {
             if self.conflicts.insert(path) {
-                self.message = Some(SharedString::from(
-                    "modifié des deux côtés — Fichier > Recharger, ou Écraser",
-                ));
+                self.message = Some(crate::tr("message.conflict_both"));
                 self.revision += 1;
             }
         }
@@ -321,8 +333,7 @@ impl Workspace {
             .clone()
             .filter(|path| path.extension().is_some_and(|extension| extension == "rs"))
         else {
-            self.message =
-                Some(SharedString::from("sélectionnez un fichier .rs dans l'explorateur"));
+            self.message = Some(crate::tr("message.select_rs_file"));
             cx.notify();
             return;
         };
@@ -342,7 +353,7 @@ impl Workspace {
                     self.message = None;
                     self.select_file(path, cx);
                     if self.message.is_none() {
-                        self.message = Some(SharedString::from("vue adoptée"));
+                        self.message = Some(crate::tr("message.view_adopted"));
                     }
                 }
                 Err(error) => self.message = Some(SharedString::from(error.to_string())),

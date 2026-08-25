@@ -62,6 +62,28 @@ panel.
 What `⌘⌥C` puts on the clipboard is Rust, not a format of maxx's own: a subtree
 copied here pastes into Zed, and an expression written there pastes back.
 
+## Language
+
+The interface is English by default and French is bundled; `⌘,` has the choice,
+under Appearance. "System" follows what the system reports and falls back to
+English, and anything not translated shows in English rather than as a key.
+
+The change takes effect at once — labels are translation keys resolved when
+they are drawn, and the native menu bar is the only piece handed to the system
+again.
+
+A language is one file: `locales/app.yml`, one entry per key with a line per
+language. `tests/locales.rs` reads the sources and refuses a key the code cites
+without a translation, or a translation nobody uses. A missing key would not
+fail the build; it would put `message.node_copied` on screen where a sentence
+belongs, which is exactly the kind of defect that reaches the user first.
+
+What is *not* translated, on purpose: everything maxx writes. Module names,
+field names, the comments in the generated modules, `settings.json` and its
+documentation — source code and the files that sit beside it stay in English
+whatever the interface speaks. A project written in French on Monday and opened
+in English on Tuesday would otherwise be two different projects.
+
 ## The demo
 
 ```sh

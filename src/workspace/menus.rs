@@ -8,8 +8,7 @@ impl Workspace {
     /// Returns `true` when the caller must stop.
     pub(super) fn discard_menu_edits(&mut self, cx: &mut Context<Self>) -> bool {
         if self.menu_file.as_ref().is_some_and(|menus| menus.dirty()) {
-            self.message =
-                Some(SharedString::from("menus non enregistrés — ⌘S avant de changer de fichier"));
+            self.message = Some(crate::tr("message.menus_unsaved"));
             cx.notify();
             return true;
         }
@@ -135,16 +134,14 @@ impl Workspace {
             return;
         };
         if os_action.is_some() {
-            self.message = Some(SharedString::from(
-                "cette entrée est déléguée au système — elle n'a pas de gestionnaire",
-            ));
+            self.message = Some(crate::tr("message.entry_is_system"));
             cx.notify();
             return;
         }
         if action.contains("::") {
-            self.message = Some(SharedString::from(format!(
-                "« {action} » vit dans un autre module — maxx ne sait pas où il est écrit"
-            )));
+            self.message = Some(SharedString::from(
+                t!("message.action_elsewhere", action = action).into_owned(),
+            ));
             cx.notify();
             return;
         }
@@ -152,9 +149,9 @@ impl Workspace {
         match menus.handler_line(action) {
             Some(line) => crate::tools::open_in_editor(cx, &menus.path, Some(line)),
             None => {
-                self.message = Some(SharedString::from(format!(
-                    "« {action} » n'est pas encore câblée — ⌘S l'ajoute au fichier"
-                )));
+                self.message = Some(SharedString::from(
+                    t!("message.action_unwired", action = action).into_owned(),
+                ));
                 cx.notify();
             }
         }
@@ -212,8 +209,7 @@ impl Workspace {
 
         self.select_file(path, cx);
         if added && self.message.is_none() {
-            self.message =
-                Some(SharedString::from("barre de menus ajoutée au projet et câblée dans main.rs"));
+            self.message = Some(crate::tr("message.menu_bar_added"));
         }
     }
 
@@ -253,7 +249,7 @@ impl Workspace {
             return;
         };
         if menus.selected.is_none() {
-            self.message = Some(SharedString::from("sélectionnez d'abord un menu"));
+            self.message = Some(crate::tr("message.select_menu_first"));
             cx.notify();
             return;
         }
@@ -261,7 +257,7 @@ impl Workspace {
             ItemDef::Separator
         } else {
             ItemDef::Action {
-                label: "Entrée".into(),
+                label: crate::tr("menu.new_entry_label").to_string(),
                 action: "MonAction".into(),
                 os_action: None,
                 shortcut: None,
@@ -277,7 +273,7 @@ impl Workspace {
             return;
         };
         if menus.selected.is_none() {
-            self.message = Some(SharedString::from("sélectionnez d'abord une entrée"));
+            self.message = Some(crate::tr("message.select_entry_first_menu"));
             cx.notify();
             return;
         }
@@ -288,11 +284,8 @@ impl Workspace {
         } else {
             // Already at the end of its list: saying so beats a click that
             // looks broken.
-            self.message = Some(SharedString::from(if up {
-                "déjà en premier"
-            } else {
-                "déjà en dernier"
-            }));
+            self.message =
+                Some(crate::tr(if up { "message.already_first" } else { "message.already_last" }));
         }
         cx.notify();
     }
@@ -341,9 +334,7 @@ impl Workspace {
         let dans_un_sous_menu = matches!(menus.selected, Some(Selection::SubItem(..)))
             || matches!(menus.selected_item(), Some(ItemDef::Submenu(_)));
         if menus.selected.is_none() || dans_un_sous_menu {
-            self.message = Some(SharedString::from(
-                "sélectionnez un menu ou une de ses entrées — un sous-menu ne va pas dans un sous-menu",
-            ));
+            self.message = Some(crate::tr("message.select_menu_not_submenu"));
             cx.notify();
             return;
         }

@@ -12,6 +12,8 @@ mod views;
 pub use chrome::fillable;
 pub use explorer::{protected_entry, top_level_module, unregister_view, view_module};
 
+use rust_i18n::t;
+
 use gpui::prelude::*;
 use gpui::{
     AnyElement, App, Bounds, Context, Entity, Global, SharedString, TitlebarOptions, WeakEntity,
@@ -207,10 +209,9 @@ impl Workspace {
             views: Vec::new(),
             active: None,
             message: (!outdated.is_empty()).then(|| {
-                SharedString::from(format!(
-                    "{} a une version plus récente — Fichier ▸ Ajouter au projet ▸ Mettre à jour",
-                    outdated.join(", ")
-                ))
+                SharedString::from(
+                    t!("message.modules_outdated", modules = outdated.join(", ")).into_owned(),
+                )
             }),
             prop_inputs: Vec::new(),
             revision: 0,
@@ -257,8 +258,7 @@ impl Workspace {
     /// later `Open Folder…` can reuse it.
     pub fn close_project(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.view().is_some_and(|view| view.dirty()) {
-            self.message =
-                Some(SharedString::from("vue non enregistrée — ⌘S avant de fermer le projet"));
+            self.message = Some(crate::tr("message.view_unsaved_close_project"));
             cx.notify();
             return;
         }

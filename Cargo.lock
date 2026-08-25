@@ -3339,6 +3339,7 @@ dependencies = [
  "gpui-component",
  "proc-macro2",
  "quote",
+ "rust-i18n",
  "schemars",
  "serde",
  "serde_json_lenient",

@@ -7,6 +7,8 @@
 
 use std::path::{Path, PathBuf};
 
+use rust_i18n::t;
+
 use crate::model::{Base, Node};
 use crate::parser::matching_brace;
 use crate::{codegen, parser, registry};
@@ -33,10 +35,10 @@ impl StateField {
 
 /// The kinds of field the state panel can declare.
 pub const STATE_TYPES: &[(&str, &str, &str)] = &[
-    ("Texte", "SharedString", "\"\".into()"),
-    ("Nombre entier", "usize", "0"),
-    ("Nombre décimal", "f32", "0.0"),
-    ("Booléen", "bool", "false"),
+    ("state_type.text", "SharedString", "\"\".into()"),
+    ("state_type.integer", "usize", "0"),
+    ("state_type.decimal", "f32", "0.0"),
+    ("state_type.boolean", "bool", "false"),
 ];
 
 /// A view file open in the workshop.
@@ -131,15 +133,15 @@ impl View {
         if !name.chars().next().is_some_and(|first| first == '_' || first.is_alphabetic())
             || !name.chars().all(|c| c == '_' || c.is_alphanumeric())
         {
-            return Err(format!("« {name} » n'est pas un nom de champ valide"));
+            return Err(t!("error.bad_field_name", name = name).into_owned());
         }
         if self.state_fields().iter().any(|field| field.name == name) {
-            return Err(format!("le champ « {name} » existe déjà"));
+            return Err(t!("error.field_exists", name = name).into_owned());
         }
 
         // The same gate `write_view` applies: this writes the file too.
         if self.disk_changed() {
-            return Err("fichier modifié en dehors de maxx — rechargez d'abord".into());
+            return Err(crate::tr("error.changed_on_disk_reload").to_string());
         }
 
         let mut source = std::mem::take(&mut self.source);
@@ -217,9 +219,7 @@ impl View {
         // `syn` throws comments away, so rendering the region back would delete
         // one written inside it. Refusing is better than losing it quietly.
         if parser::region_has_comment(&self.source) {
-            return Err(
-                "un commentaire se trouve dans la zone gérée — l'enregistrement le perdrait".into(),
-            );
+            return Err(crate::tr("error.comment_in_region").to_string());
         }
         let region = parser::locate(&self.source).map_err(|error| error.to_string())?;
         let block = codegen::render_for_splice(&self.root, region.width());

@@ -155,6 +155,32 @@ Ce qui reste :
   système arrive entier, sous `allow(dead_code)`, alors qu'un projet n'en veut
   peut-être que la corbeille.
 
+## La langue
+
+Faite. L'interface passe par `t!`, `locales/app.yml` porte l'anglais et le
+français, et le réglage vit dans `settings.json` à côté des autres. `rust-i18n`
+était déjà dans l'arbre — `gpui-component` s'en sert pour ses propres chaînes,
+et `set_locale` écrit le même global —, donc le composant suit la langue de maxx
+sans rien de plus.
+
+Deux endroits où le texte servait de valeur, et qui ne pouvaient pas survivre à
+la traduction : `format_after_save` déduisait le succès d'un enregistrement de
+la fin du message affiché, et un test lisait « refusé » dans une erreur de
+rustfmt. Le premier prend maintenant un booléen, le second vérifie le nom du
+fichier.
+
+Ce qui reste de ce côté :
+
+- **Une troisième langue** ne demande qu'une ligne de plus par clé. Le test
+  `tests/locales.rs` n'exige `en` et `fr` que parce que ce sont les deux
+  livrées : y ajouter un code suffit à le rendre exigeant pour lui aussi.
+- **Le pluriel** est écrit à la main là où il apparaît — trois branches dans la
+  description des projets récents. `rust-i18n` sait faire mieux ; trois branches
+  ne le justifiaient pas encore.
+- **Les commentaires du code de maxx** sont toujours en français, alors que
+  le README, le code généré et l'interface sont en anglais. C'est le dernier
+  morceau, et il ne se règle qu'en le lisant en entier.
+
 ## Réglages
 
 Trois choses distinctes, dans cet ordre de dépendance.

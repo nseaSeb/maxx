@@ -6,6 +6,8 @@
 //! range. Everything outside the markers — imports, `struct`, `impl`, handlers,
 //! comments, formatting — survives by construction.
 
+use rust_i18n::t;
+
 use syn::spanned::Spanned as _;
 use syn::{Expr, Lit};
 
@@ -243,16 +245,18 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::AlreadyManaged => write!(f, "cette vue est déjà gérée par maxx"),
-            Error::NoRender => write!(f, "aucun « fn render » dans ce fichier"),
-            Error::NoTrailingExpression => write!(
-                f,
-                "le corps de « render » ne se termine pas par une expression — \
-                 maxx ne saurait pas où poser ses marqueurs"
-            ),
-            Error::NoMarkers => write!(f, "aucune zone « {BEGIN} » dans ce fichier"),
-            Error::MarkersOutOfOrder => write!(f, "« {END} » apparaît avant « {BEGIN} »"),
-            Error::Syntax(error) => write!(f, "la zone gérée n'est pas une expression : {error}"),
+            Error::AlreadyManaged => write!(f, "{}", crate::tr("error.already_managed")),
+            Error::NoRender => write!(f, "{}", crate::tr("error.no_render")),
+            Error::NoTrailingExpression => {
+                write!(f, "{}", crate::tr("error.no_trailing_expression"))
+            }
+            Error::NoMarkers => write!(f, "{}", t!("error.no_markers", begin = BEGIN)),
+            Error::MarkersOutOfOrder => {
+                write!(f, "{}", t!("error.markers_order", begin = BEGIN, end = END))
+            }
+            Error::Syntax(error) => {
+                write!(f, "{}", t!("error.region_not_expression", error = error.to_string()))
+            }
         }
     }
 }

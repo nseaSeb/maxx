@@ -4,6 +4,8 @@
 //! reads on its pipes are blocking; the thread talks back over a channel that a
 //! foreground task drains a few times a second.
 
+use rust_i18n::t;
+
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -376,7 +378,7 @@ pub fn move_to_trash(path: &Path) -> Result<PathBuf, String> {
     if std::fs::rename(path, &target).is_err() {
         let moved = move_across_volumes(path, &target)?;
         if !moved {
-            return Err(format!("déplacement vers la corbeille refusé : {}", path.display()));
+            return Err(t!("error.trash_refused", error = path.display()).into_owned());
         }
     }
 
@@ -387,7 +389,8 @@ pub fn move_to_trash(path: &Path) -> Result<PathBuf, String> {
 /// The directory this system's trash keeps its files in.
 fn trash_dir() -> Result<PathBuf, String> {
     if cfg!(target_os = "macos") {
-        let home = std::env::var("HOME").map_err(|_| "HOME n'est pas défini".to_string())?;
+        let home = std::env::var("HOME")
+            .map_err(|_| t!("error.env_missing", name = "HOME").into_owned())?;
         return Ok(PathBuf::from(home).join(".Trash"));
     }
 
@@ -397,8 +400,8 @@ fn trash_dir() -> Result<PathBuf, String> {
         // to stay simple. maxx keeps its own, in the place Windows puts
         // application data, and says so.
         let local = std::env::var("LOCALAPPDATA")
-            .map_err(|_| "LOCALAPPDATA n'est pas défini".to_string())?;
-        return Ok(PathBuf::from(local).join("maxx/corbeille"));
+            .map_err(|_| t!("error.env_missing", name = "LOCALAPPDATA").into_owned())?;
+        return Ok(PathBuf::from(local).join("maxx/trash"));
     }
 
     // The freedesktop.org specification: `$XDG_DATA_HOME/Trash/files`, with a
@@ -406,7 +409,8 @@ fn trash_dir() -> Result<PathBuf, String> {
     let data = match std::env::var("XDG_DATA_HOME") {
         Ok(data) if !data.is_empty() => PathBuf::from(data),
         _ => {
-            let home = std::env::var("HOME").map_err(|_| "HOME n'est pas défini".to_string())?;
+            let home = std::env::var("HOME")
+                .map_err(|_| t!("error.env_missing", name = "HOME").into_owned())?;
             PathBuf::from(home).join(".local/share")
         }
     };
@@ -576,10 +580,7 @@ pub fn format_rust(path: &Path) -> Result<bool, String> {
     if !status.success() {
         // A file rustfmt refuses is a file that does not parse, and maxx has
         // just written it: saying so is more useful than a silent no-op.
-        return Err(format!(
-            "rustfmt a refusé {} — le fichier ne se lit pas comme du Rust",
-            path.display()
-        ));
+        return Err(t!("error.rustfmt", name = path.display()).into_owned());
     }
 
     let after = std::fs::read_to_string(path).map_err(|error| error.to_string())?;

@@ -162,7 +162,7 @@ impl Workspace {
                         .px_3()
                         .text_xs()
                         .text_color(rgb(theme::TEXT_MUTED))
-                        .child("Projets récents"),
+                        .child(crate::tr("welcome.recent")),
                 )
                 .children(rows)
                 .into_any_element(),
@@ -196,17 +196,24 @@ impl Workspace {
         }
         let label = match (&self.message, &self.view(), &self.project) {
             (Some(message), _, _) => message.clone(),
-            (None, Some(view), _) => SharedString::from(format!(
-                "{}{}{} · {} nœuds",
-                view.name(),
-                if view.dirty() { " •" } else { "" },
-                if conflict { " ⚠ modifié en dehors de maxx" } else { "" },
-                view.root.count()
-            )),
-            (None, None, Some(project)) => {
-                SharedString::from(format!("{} · {} éléments", project.name, self.entries.len()))
-            }
-            (None, None, None) => SharedString::from("Aucun projet"),
+            (None, Some(view), _) => SharedString::from(
+                t!(
+                    "status.nodes",
+                    name = view.name(),
+                    dirty = if view.dirty() { " •" } else { "" },
+                    conflict = if conflict {
+                        crate::tr("status.changed_outside").to_string()
+                    } else {
+                        String::new()
+                    },
+                    count = view.root.count()
+                )
+                .into_owned(),
+            ),
+            (None, None, Some(project)) => SharedString::from(
+                t!("status.items", name = project.name, count = self.entries.len()).into_owned(),
+            ),
+            (None, None, None) => crate::tr("status.no_project"),
         };
 
         div()

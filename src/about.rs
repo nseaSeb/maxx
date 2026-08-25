@@ -53,7 +53,7 @@ impl Render for About {
                 div()
                     .text_xs()
                     .text_color(rgb(theme::TEXT_MUTED))
-                    .child("MIT · les dépendances restent sous leur licence"),
+                    .child(crate::tr("about.licence")),
             )
     }
 }
@@ -80,7 +80,7 @@ fn open_now(cx: &mut App) {
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         titlebar: Some(TitlebarOptions {
-            title: Some(SharedString::from("À propos de maxx")),
+            title: Some(crate::tr("about.title")),
             appears_transparent: true,
             traffic_light_position: Some(point(px(9.), px(9.))),
         }),

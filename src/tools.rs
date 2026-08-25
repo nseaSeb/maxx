@@ -12,6 +12,8 @@ use std::path::Path;
 
 use gpui::App;
 
+use rust_i18n::t;
+
 /// The value that means "whatever is installed", the default.
 pub const AUTOMATIC: &str = "auto";
 
@@ -299,7 +301,9 @@ pub fn terminal(cx: &App) -> Option<&'static Terminal> {
 
 /// What the menu bar and the inspector call the chosen editor.
 pub fn editor_label(cx: &App) -> String {
-    editor(cx).map(|editor| editor.label.to_string()).unwrap_or_else(|| "l'éditeur".into())
+    editor(cx)
+        .map(|editor| editor.label.to_string())
+        .unwrap_or_else(|| crate::tr("tools.the_editor").to_string())
 }
 
 /// Opens `path` in the chosen editor, at `line` when there is one.
@@ -347,15 +351,15 @@ pub fn terminal_options() -> Vec<(String, String)> {
 /// "Automatique" plus what it currently resolves to, so the choice is informed.
 fn automatic_editor_label() -> String {
     match EDITORS.iter().find(|editor| editor.installed()) {
-        Some(editor) => format!("Automatique ({})", editor.label),
-        None => "Automatique (aucun trouvé)".into(),
+        Some(editor) => t!("tools.automatic", tool = editor.label).into_owned(),
+        None => crate::tr("tools.automatic_none").to_string(),
     }
 }
 
 /// Same, for terminals.
 fn automatic_terminal_label() -> String {
     match TERMINALS.iter().find(|terminal| terminal.installed()) {
-        Some(terminal) => format!("Automatique ({})", terminal.label),
-        None => "Automatique (aucun trouvé)".into(),
+        Some(terminal) => t!("tools.automatic", tool = terminal.label).into_owned(),
+        None => crate::tr("tools.automatic_none").to_string(),
     }
 }

@@ -64,12 +64,10 @@ impl Workspace {
         self.refresh_entries();
         self.selected = Some(path);
         self.message = Some(SharedString::from(match (had_file, had_declaration) {
-            (true, true) => format!("src/{module}.rs est déjà là"),
+            (true, true) => t!("message.module_already_there", module = module).into_owned(),
             // The file was there but nothing declared it — which is exactly
             // the state a half-finished delete leaves behind.
-            (true, false) => {
-                format!("src/{module}.rs était là, il est maintenant déclaré dans main.rs")
-            }
+            (true, false) => t!("message.module_now_declared", module = module).into_owned(),
             _ => added.to_string(),
         }));
         cx.notify();
@@ -103,7 +101,7 @@ impl Workspace {
         let outdated = crate::scaffold::outdated_modules(&root);
 
         if outdated.is_empty() {
-            self.message = Some(SharedString::from("les modules de ce projet sont à jour"));
+            self.message = Some(crate::tr("message.modules_up_to_date"));
             cx.notify();
             return;
         }
@@ -119,7 +117,7 @@ impl Workspace {
 
         self.refresh_entries();
         self.message = Some(SharedString::from(if failed.is_empty() {
-            format!("mis à jour : {}", updated.join(", "))
+            t!("message.modules_updated", modules = updated.join(", ")).into_owned()
         } else {
             failed.join(" · ")
         }));
@@ -135,9 +133,8 @@ impl Workspace {
         if outdated.is_empty() {
             return;
         }
-        self.message = Some(SharedString::from(format!(
-            "{} a une version plus récente — Fichier ▸ Ajouter au projet ▸ Mettre à jour",
-            outdated.join(", ")
-        )));
+        self.message = Some(SharedString::from(
+            t!("message.modules_outdated", modules = outdated.join(", ")).into_owned(),
+        ));
     }
 }

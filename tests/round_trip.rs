@@ -199,11 +199,8 @@ fn a_hand_written_argument_is_not_overwritten_by_the_inspector() {
     let (mut node, _) = parser::parse(&file).expect("the region should parse");
 
     let spec = maxx::registry::of(&node).expect("Button is in the catalogue");
-    let id_prop = spec
-        .props
-        .iter()
-        .find(|prop| prop.label == "Identifiant")
-        .expect("Button has an id property");
+    let id_prop =
+        spec.props.iter().find(|prop| prop.label == "prop.id").expect("Button has an id property");
 
     assert!(
         !maxx::registry::editable(&node, id_prop),
@@ -275,8 +272,11 @@ fn an_invalid_value_is_explained_not_swallowed() {
     let node = maxx::registry::instantiate("button").unwrap();
     let spec = maxx::registry::of(&node).unwrap();
     let width =
-        maxx::registry::props(spec).into_iter().find(|prop| prop.label == "Largeur").unwrap();
-    let colour = maxx::registry::props(spec).into_iter().find(|prop| prop.label == "Fond").unwrap();
+        maxx::registry::props(spec).into_iter().find(|prop| prop.label == "prop.width").unwrap();
+    let colour = maxx::registry::props(spec)
+        .into_iter()
+        .find(|prop| prop.label == "prop.background")
+        .unwrap();
 
     assert!(maxx::registry::validate(width, "120").is_none());
     assert!(maxx::registry::validate(width, "").is_none());
@@ -347,7 +347,7 @@ fn a_length_must_be_a_rust_literal() {
     let mut node = maxx::registry::instantiate("button").unwrap();
     let spec = maxx::registry::of(&node).unwrap();
     let width =
-        maxx::registry::props(spec).into_iter().find(|prop| prop.label == "Largeur").unwrap();
+        maxx::registry::props(spec).into_iter().find(|prop| prop.label == "prop.width").unwrap();
 
     for refused in [".5", "inf", "NaN", "-inf", "12px", "1.2.3"] {
         maxx::registry::write(&mut node, width, refused);
@@ -373,7 +373,7 @@ fn a_hand_written_method_argument_is_protected() {
     let file = file_with(source);
     let (node, _) = parser::parse(&file).expect("the region should parse");
     let spec = maxx::registry::of(&node).unwrap();
-    let label = spec.props.iter().find(|p| p.label == "Libellé").unwrap();
+    let label = spec.props.iter().find(|p| p.label == "prop.label").unwrap();
 
     assert!(
         !maxx::registry::editable(&node, label),
@@ -464,7 +464,7 @@ fn a_plain_number_is_written_without_px() {
     let mut node = maxx::registry::instantiate("progress").unwrap();
     let spec = maxx::registry::of(&node).unwrap();
     let value =
-        maxx::registry::props(spec).into_iter().find(|prop| prop.label == "Valeur").unwrap();
+        maxx::registry::props(spec).into_iter().find(|prop| prop.label == "prop.value").unwrap();
 
     assert!(maxx::registry::validate(value, "50").is_none());
     assert!(maxx::registry::validate(value, "12.5").is_none());
@@ -494,7 +494,7 @@ fn a_subtree_survives_the_clipboard() {
     let mut column = maxx::registry::instantiate("column").unwrap();
     let mut button = maxx::registry::instantiate("button").unwrap();
     let spec = maxx::registry::of(&button).unwrap();
-    let label = spec.props.iter().find(|prop| prop.label == "Libellé").unwrap();
+    let label = spec.props.iter().find(|prop| prop.label == "prop.label").unwrap();
     maxx::registry::write(&mut button, label, "Envoyer");
     column.push_child(button);
     column.push_child(maxx::registry::instantiate("input").unwrap());
@@ -542,27 +542,33 @@ fn a_copied_input_gets_a_field_of_its_own() {
 /// La propriété « Champ lié » du champ texte.
 fn binding() -> &'static maxx::registry::Prop {
     let spec = maxx::registry::by_id("input").unwrap();
-    spec.props.iter().find(|prop| prop.label == "Champ lié").unwrap()
+    spec.props.iter().find(|prop| prop.label == "prop.bound_field").unwrap()
 }
 
 /// La recherche du catalogue répond au libellé, à l'identifiant, et aux accents.
+///
+/// Sur la fonction pure et non sur `matches_query` : celle-ci traduit le
+/// libellé, donc son résultat dépend de la langue, et la langue est un global
+/// que les tests d'un même binaire partagent en parallèle.
 #[test]
 fn the_palette_search_forgives_the_accents() {
-    let label = maxx::registry::by_id("label").unwrap();
-    let divider = maxx::registry::by_id("divider").unwrap();
+    let matches = maxx::designer::label_matches;
 
     // Une recherche vide ne cache rien.
-    assert!(maxx::designer::matches_query(label, ""));
+    assert!(matches("Étiquette", "label", ""));
 
     // Le libellé, quelle que soit la casse et les accents : personne ne tape
     // « Étiquette » avec son accent dans une boîte de recherche.
-    assert!(maxx::designer::matches_query(label, "Étiquette"));
-    assert!(maxx::designer::matches_query(label, "etiquette"));
-    assert!(maxx::designer::matches_query(divider, "separateur"));
+    assert!(matches("Étiquette", "label", "Étiquette"));
+    assert!(matches("Étiquette", "label", "etiquette"));
+    assert!(matches("Séparateur", "divider", "separateur"));
 
     // L'identifiant aussi : c'est ce que tape qui a lu le code généré.
-    assert!(maxx::designer::matches_query(label, "label"));
-    assert!(!maxx::designer::matches_query(label, "bouton"));
+    assert!(matches("Étiquette", "label", "label"));
+    assert!(!matches("Étiquette", "label", "bouton"));
+
+    // Et le libellé anglais répond au mot anglais.
+    assert!(matches("Progress bar", "progress", "progress"));
 }
 
 /// Une liaison écrite à la main et qui ne heurte rien est gardée telle quelle.

@@ -19,7 +19,8 @@ fn writing_a_key_leaves_every_other_byte_alone() {
   "show_output": false,
   "editor": "auto",
   "terminal": "auto",
-  "format_on_save": true
+  "format_on_save": true,
+  "language": "system"
 }
 "#;
 
@@ -137,7 +138,7 @@ fn appending_a_key_to_an_empty_object_stays_valid() {
 #[test]
 fn the_documented_defaults_are_readable_and_hold_the_defaults() {
     let source = maxx::settings::documented_defaults();
-    assert!(source.contains("// Réglages de maxx."), "{source}");
+    assert!(source.contains("// maxx settings."), "{source}");
 
     let preferences: Preferences =
         serde_json_lenient::from_str_lenient(&source).expect("les commentaires sont tolérés");

@@ -20,8 +20,7 @@ impl Workspace {
             return;
         };
         if self.run_state == crate::run::State::Running {
-            self.message =
-                Some(SharedString::from("une exécution est déjà en cours — ⌘. pour l'arrêter"));
+            self.message = Some(crate::tr("message.run_in_progress"));
             cx.notify();
             return;
         }
@@ -87,7 +86,7 @@ impl Workspace {
             return;
         };
         crate::run::stop(pid);
-        self.message = Some(SharedString::from("exécution interrompue"));
+        self.message = Some(crate::tr("message.run_stopped"));
         cx.notify();
     }
 
@@ -102,10 +101,12 @@ impl Workspace {
     /// The output of the last run.
     pub(super) fn render_output(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let (label, colour) = match self.run_state {
-            crate::run::State::Idle => ("prêt", theme::TEXT_MUTED),
-            crate::run::State::Running => ("exécution…", theme::ACCENT),
-            crate::run::State::Finished { ok: true } => ("terminé", theme::TEXT_MUTED),
-            crate::run::State::Finished { ok: false } => ("échec", 0xe06c75),
+            crate::run::State::Idle => (crate::tr("run.idle"), theme::TEXT_MUTED),
+            crate::run::State::Running => (crate::tr("run.running"), theme::ACCENT),
+            crate::run::State::Finished { ok: true } => {
+                (crate::tr("run.finished"), theme::TEXT_MUTED)
+            }
+            crate::run::State::Finished { ok: false } => (crate::tr("run.failed"), 0xe06c75),
         };
         let lines = self.run_output.clone();
         // What cargo is doing right now is more useful than a bar with no total.
@@ -152,7 +153,7 @@ impl Workspace {
                                 .rounded_sm()
                                 .cursor_pointer()
                                 .hover(|this| this.bg(rgb(theme::HOVER_BG)))
-                                .child("Arrêter")
+                                .child(crate::tr("run.stop"))
                                 .on_click(cx.listener(|this, _, _, cx| this.stop_project(cx))),
                         )
                     })

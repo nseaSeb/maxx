@@ -2,7 +2,10 @@
 
 use gpui::{App, Menu, MenuItem, OsAction, SystemMenuType};
 
+use rust_i18n::t;
+
 use crate::actions::*;
+use crate::tr;
 
 /// The recent projects, most recent first.
 ///
@@ -13,7 +16,7 @@ fn recent_projects_menu(cx: &App) -> MenuItem {
     if recent.is_empty() {
         // A submenu with nothing in it looks broken; a disabled-looking entry
         // that does nothing says what is going on.
-        return MenuItem::action("Aucun projet récent", NoRecentProject);
+        return MenuItem::action(tr("menu.no_recent"), NoRecentProject);
     }
 
     let items = recent
@@ -26,10 +29,13 @@ fn recent_projects_menu(cx: &App) -> MenuItem {
                 .unwrap_or_else(|| path.to_string_lossy().into_owned());
             MenuItem::action(label, OpenRecent { index })
         })
-        .chain([MenuItem::separator(), MenuItem::action("Vider la liste", ClearRecentProjects)])
+        .chain([
+            MenuItem::separator(),
+            MenuItem::action(tr("menu.clear_recent"), ClearRecentProjects),
+        ])
         .collect();
 
-    MenuItem::submenu(Menu { name: "Ouvrir un élément récent".into(), items })
+    MenuItem::submenu(Menu { name: tr("menu.open_recent"), items })
 }
 
 /// Builds the whole menu bar.
@@ -46,115 +52,122 @@ pub fn app_menus(cx: &App) -> Vec<Menu> {
         Menu {
             name: "maxx".into(),
             items: vec![
-                MenuItem::action("À propos de maxx", About),
+                MenuItem::action(tr("menu.about"), About),
                 MenuItem::separator(),
-                MenuItem::action("Réglages…", OpenPreferences),
+                MenuItem::action(tr("menu.preferences"), OpenPreferences),
                 MenuItem::separator(),
                 MenuItem::os_submenu("Services", SystemMenuType::Services),
                 MenuItem::separator(),
-                MenuItem::action("Masquer maxx", HideApp),
-                MenuItem::action("Masquer les autres", HideOthers),
-                MenuItem::action("Tout afficher", ShowAll),
+                MenuItem::action(tr("menu.hide"), HideApp),
+                MenuItem::action(tr("menu.hide_others"), HideOthers),
+                MenuItem::action(tr("menu.show_all"), ShowAll),
                 MenuItem::separator(),
-                MenuItem::action("Quitter maxx", Quit),
+                MenuItem::action(tr("menu.quit"), Quit),
             ],
         },
         Menu {
-            name: "Fichier".into(),
+            name: tr("menu.file"),
             items: vec![
-                MenuItem::action("Nouveau projet…", NewProject),
-                MenuItem::action("Nouvelle vue…", NewView),
-                MenuItem::action("Nouvelle fenêtre", NewWindow),
+                MenuItem::action(tr("menu.new_project"), NewProject),
+                MenuItem::action(tr("menu.new_view"), NewView),
+                MenuItem::action(tr("menu.new_window"), NewWindow),
                 MenuItem::separator(),
                 MenuItem::submenu(Menu {
-                    name: "Ajouter au projet".into(),
+                    name: tr("menu.add_to_project"),
                     items: vec![
-                        MenuItem::action("La barre de menus", OpenMenuBar),
-                        MenuItem::action("Le module système", AddSystemModule),
-                        MenuItem::action("Les réglages", AddSettingsModule),
+                        MenuItem::action(tr("menu.add_menu_bar"), OpenMenuBar),
+                        MenuItem::action(tr("menu.add_system"), AddSystemModule),
+                        MenuItem::action(tr("menu.add_settings"), AddSettingsModule),
                         MenuItem::separator(),
-                        MenuItem::action("Mettre à jour les modules", UpdateModules),
+                        MenuItem::action(tr("menu.update_modules"), UpdateModules),
                     ],
                 }),
                 MenuItem::separator(),
-                MenuItem::action("Ouvrir un dossier…", OpenFolder),
+                MenuItem::action(tr("menu.open_folder"), OpenFolder),
                 recent_projects_menu(cx),
                 MenuItem::separator(),
-                MenuItem::action("Enregistrer", Save),
-                MenuItem::action("Recharger la vue", ReloadView),
-                MenuItem::action("Écraser le fichier", OverwriteFile),
+                MenuItem::action(tr("menu.save"), Save),
+                MenuItem::action(tr("menu.reload_view"), ReloadView),
+                MenuItem::action(tr("menu.overwrite"), OverwriteFile),
                 MenuItem::separator(),
-                MenuItem::action("Adopter cette vue", AdoptView),
+                MenuItem::action(tr("menu.adopt_view"), AdoptView),
                 MenuItem::separator(),
-                MenuItem::action("Fermer le projet", CloseFolder),
-                MenuItem::action("Fermer la vue", CloseWindow),
+                MenuItem::action(tr("menu.close_project"), CloseFolder),
+                MenuItem::action(tr("menu.close_view"), CloseWindow),
             ],
         },
         Menu {
-            name: "Édition".into(),
+            name: tr("menu.edit"),
             items: vec![
-                MenuItem::os_action("Annuler", Undo, OsAction::Undo),
-                MenuItem::os_action("Rétablir", Redo, OsAction::Redo),
+                MenuItem::os_action(tr("menu.undo"), Undo, OsAction::Undo),
+                MenuItem::os_action(tr("menu.redo"), Redo, OsAction::Redo),
                 MenuItem::separator(),
-                MenuItem::os_action("Couper", Cut, OsAction::Cut),
-                MenuItem::os_action("Copier", Copy, OsAction::Copy),
-                MenuItem::os_action("Coller", Paste, OsAction::Paste),
-                MenuItem::os_action("Tout sélectionner", SelectAll, OsAction::SelectAll),
+                MenuItem::os_action(tr("menu.cut"), Cut, OsAction::Cut),
+                MenuItem::os_action(tr("menu.copy"), Copy, OsAction::Copy),
+                MenuItem::os_action(tr("menu.paste"), Paste, OsAction::Paste),
+                MenuItem::os_action(tr("menu.select_all"), SelectAll, OsAction::SelectAll),
                 MenuItem::separator(),
-                MenuItem::action("Dupliquer le nœud", DuplicateNode),
-                MenuItem::action("Copier le nœud", CopyNode),
-                MenuItem::action("Coller le nœud", PasteNode),
+                MenuItem::action(tr("menu.duplicate_node"), DuplicateNode),
+                MenuItem::action(tr("menu.copy_node"), CopyNode),
+                MenuItem::action(tr("menu.paste_node"), PasteNode),
                 MenuItem::separator(),
-                MenuItem::action("Ajouter un menu", AddMenu),
-                MenuItem::action("Ajouter une entrée", AddMenuEntry),
-                MenuItem::action("Ajouter un séparateur", AddMenuSeparator),
+                MenuItem::action(tr("menu.add_menu"), AddMenu),
+                MenuItem::action(tr("menu.add_entry"), AddMenuEntry),
+                MenuItem::action(tr("menu.add_separator"), AddMenuSeparator),
                 MenuItem::separator(),
-                MenuItem::action("Monter", MoveMenuUp),
-                MenuItem::action("Descendre", MoveMenuDown),
+                MenuItem::action(tr("menu.move_up"), MoveMenuUp),
+                MenuItem::action(tr("menu.move_down"), MoveMenuDown),
                 MenuItem::separator(),
-                MenuItem::action("Supprimer le nœud", DeleteNode),
-                MenuItem::action("Supprimer le fichier", DeleteFile),
+                MenuItem::action(tr("menu.delete_node"), DeleteNode),
+                MenuItem::action(tr("menu.delete_file"), DeleteFile),
             ],
         },
         Menu {
-            name: "Affichage".into(),
+            name: tr("menu.view"),
             items: vec![
-                MenuItem::action("Panneau du projet", ToggleProjectPanel),
-                MenuItem::action("Sortie", ToggleOutput),
-                MenuItem::action("Barre d'état", ToggleStatusBar),
+                MenuItem::action(tr("menu.project_panel"), ToggleProjectPanel),
+                MenuItem::action(tr("menu.output"), ToggleOutput),
+                MenuItem::action(tr("menu.status_bar"), ToggleStatusBar),
                 MenuItem::separator(),
-                MenuItem::action("Barre de menus du projet", OpenMenuBar),
-                MenuItem::action("Retirer la barre de menus", RemoveMenuBar),
+                MenuItem::action(tr("menu.project_menu_bar"), OpenMenuBar),
+                MenuItem::action(tr("menu.remove_menu_bar"), RemoveMenuBar),
             ],
         },
         Menu {
-            name: "Exécution".into(),
+            name: tr("menu.run"),
             items: vec![
-                MenuItem::action("Lancer le projet", RunProject),
-                MenuItem::action("Arrêter", StopProject),
+                MenuItem::action(tr("menu.run_project"), RunProject),
+                MenuItem::action(tr("menu.stop"), StopProject),
                 MenuItem::separator(),
-                MenuItem::action("Préparer les dépendances", PrewarmProject),
+                MenuItem::action(tr("menu.prewarm"), PrewarmProject),
             ],
         },
         Menu {
-            name: "Aller".into(),
+            name: tr("menu.go"),
             items: vec![
-                MenuItem::action("Révéler dans le Finder", RevealInFinder),
-                MenuItem::action("Ouvrir dans le Terminal", OpenTerminal),
+                MenuItem::action(tr("menu.reveal"), RevealInFinder),
+                MenuItem::action(tr("menu.open_terminal"), OpenTerminal),
                 MenuItem::action(
-                    format!("Ouvrir le fichier dans {}", crate::tools::editor_label(cx)),
+                    t!("menu.open_file_in", editor = crate::tools::editor_label(cx)).into_owned(),
                     OpenInZed,
                 ),
                 MenuItem::action(
-                    format!("Ouvrir le projet dans {}", crate::tools::editor_label(cx)),
+                    t!("menu.open_project_in", editor = crate::tools::editor_label(cx))
+                        .into_owned(),
                     OpenProjectInZed,
                 ),
             ],
         },
         Menu {
-            name: "Fenêtre".into(),
-            items: vec![MenuItem::action("Réduire", Minimize), MenuItem::action("Zoom", Zoom)],
+            name: tr("menu.window"),
+            items: vec![
+                MenuItem::action(tr("menu.minimize"), Minimize),
+                MenuItem::action(tr("menu.zoom"), Zoom),
+            ],
         },
-        Menu { name: "Aide".into(), items: vec![MenuItem::action("Documentation GPUI", OpenDocs)] },
+        Menu {
+            name: tr("menu.help"),
+            items: vec![MenuItem::action(tr("menu.gpui_docs"), OpenDocs)],
+        },
     ]
 }

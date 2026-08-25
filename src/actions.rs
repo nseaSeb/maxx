@@ -349,7 +349,7 @@ fn new_project(_: &NewProject, cx: &mut App) {
                     // now, while there is drawing to do.
                     workspace::with_active(cx, |workspace, _, cx| workspace.prewarm_project(cx));
                 }
-                Err(error) => eprintln!("création du projet impossible : {error}"),
+                Err(error) => eprintln!("the project could not be created: {error}"),
             }
         })
         .ok();

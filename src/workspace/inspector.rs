@@ -46,7 +46,8 @@ impl Workspace {
         // depend on the selection, and a workspace with no view open still
         // shows the palette.
         if self.palette_filter.is_none() {
-            let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Chercher"));
+            let filter =
+                cx.new(|cx| InputState::new(window, cx).placeholder(crate::tr("designer.search")));
             cx.subscribe(&filter, |_, _, _: &InputEvent, cx| cx.notify()).detach();
             self.palette_filter = Some(filter);
         }
@@ -56,8 +57,9 @@ impl Workspace {
             return;
         }
         if self.state_name_input.is_none() {
-            self.state_name_input =
-                Some(cx.new(|cx| InputState::new(window, cx).placeholder("nom du champ")));
+            self.state_name_input = Some(cx.new(|cx| {
+                InputState::new(window, cx).placeholder(crate::tr("designer.field_name"))
+            }));
         }
 
         self.synced = key;
@@ -117,9 +119,7 @@ impl Workspace {
             None => match fields.first() {
                 Some(field) => Some(field.read_expression()),
                 None => {
-                    self.message = Some(SharedString::from(
-                        "aucun champ d'état — ajoutez-en un dans « État »",
-                    ));
+                    self.message = Some(crate::tr("message.no_state_field"));
                     cx.notify();
                     return;
                 }
@@ -174,7 +174,9 @@ impl Workspace {
 
         self.message = match self.view_mut() {
             Some(view) => match view.add_state_field(&name, ty, initial) {
-                Ok(()) => Some(SharedString::from(format!("champ « {name} » ajouté"))),
+                Ok(()) => {
+                    Some(SharedString::from(t!("message.field_added", name = name).into_owned()))
+                }
                 Err(error) => Some(SharedString::from(error)),
             },
             None => None,
@@ -235,16 +237,16 @@ impl Workspace {
         };
         let node = view.selected();
         let Some(name) = registry::read(node, prop).filter(|name| !name.is_empty()) else {
-            self.message = Some(SharedString::from("aucune action sur ce nœud"));
+            self.message = Some(crate::tr("message.no_action"));
             cx.notify();
             return;
         };
         match view.method_line(&name) {
             Some(line) => crate::tools::open_in_editor(cx, &view.path, Some(line)),
             None => {
-                self.message = Some(SharedString::from(format!(
-                    "« {name} » n'est pas encore écrite — ⌘S l'ajoute au fichier"
-                )));
+                self.message = Some(SharedString::from(
+                    t!("message.handler_unwritten", name = name).into_owned(),
+                ));
                 cx.notify();
             }
         }
@@ -389,9 +391,7 @@ impl Workspace {
             return Some(path);
         }
         if selected.is_empty() {
-            self.message = Some(SharedString::from(
-                "la racine n'accepte pas d'enfant — sélectionnez une colonne ou une ligne",
-            ));
+            self.message = Some(crate::tr("message.root_takes_no_child"));
             cx.notify();
             return None;
         }
@@ -412,7 +412,7 @@ impl Workspace {
             return;
         };
         if view.selected.is_empty() {
-            self.message = Some(SharedString::from("la racine ne se duplique pas"));
+            self.message = Some(crate::tr("message.root_not_duplicated"));
             cx.notify();
             return;
         }
@@ -448,7 +448,7 @@ impl Workspace {
         };
         let source = crate::codegen::render(node, 0);
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(source));
-        self.message = Some(SharedString::from("nœud copié"));
+        self.message = Some(crate::tr("message.node_copied"));
         cx.notify();
     }
 
@@ -459,15 +459,14 @@ impl Workspace {
     /// into something unmodifiable would be a surprise.
     pub fn paste_node(&mut self, cx: &mut Context<Self>) {
         let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) else {
-            self.message = Some(SharedString::from("le presse-papier est vide"));
+            self.message = Some(crate::tr("message.clipboard_empty"));
             cx.notify();
             return;
         };
         let mut node = match crate::parser::parse_expr(&text) {
             Ok(node) if !node.is_opaque() => node,
             _ => {
-                self.message =
-                    Some(SharedString::from("le presse-papier ne porte pas une expression gpui"));
+                self.message = Some(crate::tr("message.clipboard_not_expression"));
                 cx.notify();
                 return;
             }
@@ -555,8 +554,7 @@ impl Workspace {
                     return;
                 }
                 if destination.len() > from.len() && destination.starts_with(&from) {
-                    self.message =
-                        Some(SharedString::from("un nœud ne peut pas être déposé dans lui-même"));
+                    self.message = Some(crate::tr("message.node_into_itself"));
                     cx.notify();
                     return;
                 }
@@ -600,9 +598,8 @@ impl Workspace {
         if let Some(node) = view.root.at_mut(&selected) {
             registry::write(node, prop, &name);
         }
-        self.message = Some(SharedString::from(format!(
-            "action « {name} » — ⌘S écrit la méthode dans le fichier"
-        )));
+        self.message =
+            Some(SharedString::from(t!("message.action_written", name = name).into_owned()));
         cx.notify();
     }
 

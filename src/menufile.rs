@@ -304,7 +304,7 @@ impl MenuFile {
         let inner = dedented.trim();
         let expr: syn::Expr = syn::parse_str(inner).map_err(|error| error.to_string())?;
         let menus = crate::menu_model::parse(&expr, inner)
-            .ok_or("la zone gérée n'est pas un « vec![Menu { .. }] »")?;
+            .ok_or_else(|| crate::tr("error.region_not_menus").to_string())?;
 
         let mut menus = menus;
         for menu in &mut menus {
@@ -358,9 +358,7 @@ impl MenuFile {
     /// Writes the menus back, declaring and wiring any new action on the way.
     pub fn save(&mut self, force: bool) -> Result<(), String> {
         if !force && self.disk_changed() {
-            return Err(
-                "fichier modifié en dehors de maxx — Fichier > Recharger, ou Écraser".into()
-            );
+            return Err(crate::tr("error.changed_on_disk").to_string());
         }
         if !self.dirty() && !force {
             // Nothing to write: rewriting would still add handlers and churn

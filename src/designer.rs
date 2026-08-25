@@ -72,7 +72,7 @@ impl Workspace {
                 .items_center()
                 .justify_center()
                 .text_color(rgb(theme::TEXT_MUTED))
-                .child("Ouvrez une vue de src/ui/ pour la dessiner")
+                .child(crate::tr("designer.open_a_view"))
                 .into_any_element();
         }
 
@@ -84,7 +84,7 @@ impl Workspace {
                 // Not `h_flex`: it centres its children vertically, which would
                 // leave the side panel floating in the middle of the window.
                 div().flex().flex_row().flex_1().overflow_hidden().child(
-                    h_resizable("inspecteur")
+                    h_resizable(crate::tr("designer.inspector"))
                         .with_state(&self.inspector_split)
                         .child(
                             resizable_panel()
@@ -236,7 +236,7 @@ impl Workspace {
                         div()
                             .text_xs()
                             .text_color(rgb(theme::TEXT_MUTED))
-                            .child("Barre de menus du projet"),
+                            .child(crate::tr("designer.project_menu_bar")),
                     )
                     .children(rows),
             )
@@ -248,38 +248,44 @@ impl Workspace {
                     .border_color(rgb(theme::BORDER))
                     .bg(rgb(theme::PANEL_BG))
                     .child(self.render_menu_inspector(cx))
-                    .child(section_title("Ajouter"))
+                    .child(section_title("designer.add"))
                     .child(
                         v_flex()
                             .gap_1()
                             .p_2()
-                            .child(menu_button("menu-add", "Menu", cx, |this, cx| {
+                            .child(menu_button("menu-add", "designer.menu", cx, |this, cx| {
                                 this.add_menu(cx)
                             }))
-                            .child(menu_button("item-add", "Entrée", cx, |this, cx| {
+                            .child(menu_button("item-add", "designer.entry", cx, |this, cx| {
                                 this.add_menu_item(false, cx)
                             }))
-                            .child(menu_button("sep-add", "Séparateur", cx, |this, cx| {
+                            .child(menu_button("sep-add", "designer.separator", cx, |this, cx| {
                                 this.add_menu_item(true, cx)
                             }))
-                            .child(menu_button("submenu-add", "Sous-menu", cx, |this, cx| {
-                                this.add_submenu(cx)
-                            }))
-                            .child(menu_button("menu-del", "Supprimer", cx, |this, cx| {
+                            .child(menu_button(
+                                "submenu-add",
+                                "designer.submenu",
+                                cx,
+                                |this, cx| this.add_submenu(cx),
+                            ))
+                            .child(menu_button("menu-del", "designer.delete", cx, |this, cx| {
                                 this.remove_menu_selection(cx)
                             })),
                     )
-                    .child(section_title("Ordre"))
+                    .child(section_title("designer.order"))
                     .child(
                         h_flex()
                             .gap_1()
                             .p_2()
-                            .child(menu_button("menu-up", "↑ Monter", cx, |this, cx| {
+                            .child(menu_button("menu-up", "designer.move_up", cx, |this, cx| {
                                 this.move_menu_selection(true, cx)
                             }))
-                            .child(menu_button("menu-down", "↓ Descendre", cx, |this, cx| {
-                                this.move_menu_selection(false, cx)
-                            })),
+                            .child(menu_button(
+                                "menu-down",
+                                "designer.move_down",
+                                cx,
+                                |this, cx| this.move_menu_selection(false, cx),
+                            )),
                     ),
             )
             .into_any_element()
@@ -288,12 +294,13 @@ impl Workspace {
     /// The fields of the selected menu or entry.
     fn render_menu_inspector(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let menus = self.menu_file.as_ref().expect("checked by the caller");
+        // Les libellés sont des clés de traduction, comme ceux du catalogue.
         let fields: &[(MenuField, &str)] = match menus.selected {
-            Some(Selection::Menu(_)) => &[(MenuField::Name, "Titre")],
+            Some(Selection::Menu(_)) => &[(MenuField::Name, "menu.title")],
             // Un sous-menu porte un titre, pas une action : lui proposer un
             // champ Action serait proposer ce qui ne s'écrit pas.
             Some(_) if matches!(menus.selected_item(), Some(ItemDef::Submenu(_))) => {
-                &[(MenuField::Label, "Titre")]
+                &[(MenuField::Label, "menu.title")]
             }
             Some(_)
                 if matches!(
@@ -302,13 +309,13 @@ impl Workspace {
                 ) =>
             {
                 &[
-                    (MenuField::Label, "Libellé"),
-                    (MenuField::Action, "Action"),
-                    (MenuField::Shortcut, "Raccourci"),
+                    (MenuField::Label, "prop.label"),
+                    (MenuField::Action, "prop.action"),
+                    (MenuField::Shortcut, "menu.shortcut"),
                 ]
             }
             Some(Selection::Item(..)) | Some(Selection::SubItem(..)) => {
-                &[(MenuField::Label, "Libellé"), (MenuField::Action, "Action")]
+                &[(MenuField::Label, "prop.label"), (MenuField::Action, "prop.action")]
             }
             None => &[],
         };
@@ -330,7 +337,7 @@ impl Workspace {
                             .flex_none()
                             .text_xs()
                             .text_color(rgb(theme::TEXT_MUTED))
-                            .child(*label),
+                            .child(crate::tr(label)),
                     )
                     .child(div().flex_1().child(Input::new(state).small()))
                     .when(*field == MenuField::Action, |this| {
@@ -354,7 +361,7 @@ impl Workspace {
         }
 
         v_flex()
-            .child(section_title("Propriétés"))
+            .child(section_title("designer.properties"))
             .when(rows.is_empty(), |this| {
                 this.child(
                     div()
@@ -362,7 +369,7 @@ impl Workspace {
                         .py_2()
                         .text_xs()
                         .text_color(rgb(theme::TEXT_MUTED))
-                        .child("Sélectionnez un menu ou une entrée."),
+                        .child(crate::tr("designer.select_menu_or_entry")),
                 )
             })
             .children(rows)
@@ -439,7 +446,7 @@ impl Workspace {
             ));
         });
 
-        v_flex().child(section_title("Structure")).children(rows.into_iter().map(
+        v_flex().child(section_title("designer.structure")).children(rows.into_iter().map(
             |(path, label, depth, selected)| {
                 let target = path.clone();
                 div()
@@ -486,7 +493,7 @@ impl Workspace {
                 .cloned()
                 .collect();
             if !extra.is_empty() {
-                rows.push(section_title("Autres appels").into_any_element());
+                rows.push(section_title("designer.other_calls").into_any_element());
                 for call in extra {
                     rows.push(self.render_extra_call(&call, cx).into_any_element());
                 }
@@ -494,7 +501,7 @@ impl Workspace {
         }
 
         v_flex()
-            .child(section_title("Propriétés"))
+            .child(section_title("designer.properties"))
             .when(node.is_opaque(), |this| {
                 this.child(
                     div()
@@ -502,7 +509,7 @@ impl Workspace {
                         .py_2()
                         .text_xs()
                         .text_color(rgb(theme::TEXT_MUTED))
-                        .child("Code Rust conservé tel quel — non modifiable ici."),
+                        .child(crate::tr("designer.opaque")),
                 )
             })
             .children(rows)
@@ -562,7 +569,7 @@ impl Workspace {
                 .flex_none()
                 .text_xs()
                 .text_color(rgb(theme::TEXT_MUTED))
-                .child(prop.label),
+                .child(crate::tr(prop.label)),
         );
 
         match prop.kind {
@@ -651,7 +658,7 @@ impl Workspace {
                         .cursor_pointer()
                         .bg(rgb(if on { theme::ACCENT } else { theme::BG }))
                         .text_color(rgb(if on { theme::ON_ACCENT } else { theme::TEXT }))
-                        .child(if on { "oui" } else { "non" })
+                        .child(crate::tr(if on { "designer.yes" } else { "designer.no" }))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.edit_prop(prop, if on { "false" } else { "true" }, cx);
                         })),
@@ -673,7 +680,7 @@ impl Workspace {
                         .bg(rgb(theme::BG))
                         .hover(|this| this.bg(rgb(theme::HOVER_BG)))
                         .child(if current.is_empty() {
-                            SharedString::from("par défaut")
+                            crate::tr("designer.default")
                         } else {
                             SharedString::from(current)
                         })
@@ -692,9 +699,10 @@ impl Workspace {
     fn render_state(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let fields = self.view().map(|view| view.state_fields()).unwrap_or_default();
         let (type_label, _, _) = crate::view::STATE_TYPES[self.state_type()];
+        let type_label = crate::tr(type_label);
 
         v_flex()
-            .child(section_title("État"))
+            .child(section_title("designer.state"))
             .children(fields.into_iter().map(|field| {
                 h_flex()
                     .gap_2()
@@ -754,7 +762,7 @@ impl Workspace {
             registry::CATALOGUE.iter().filter(|spec| matches_query(spec, &query)).collect();
 
         v_flex()
-            .child(section_title("Composants"))
+            .child(section_title("designer.components"))
             .when_some(self.palette_filter().cloned(), |this, filter| {
                 this.child(div().px_3().pb_1().child(Input::new(&filter).small()))
             })
@@ -765,7 +773,7 @@ impl Workspace {
                         .py_1()
                         .text_xs()
                         .text_color(rgb(theme::TEXT_MUTED))
-                        .child("aucun composant de ce nom"),
+                        .child(crate::tr("designer.no_component")),
                 )
             })
             .children(matching.into_iter().map(|spec| {
@@ -775,9 +783,9 @@ impl Workspace {
                     .py_1()
                     .cursor_pointer()
                     .hover(|this| this.bg(rgb(theme::HOVER_BG)))
-                    .child(spec.label)
+                    .child(crate::tr(spec.label))
                     .on_drag(Dragged::Component(spec.id), move |_, _: Point<Pixels>, _, cx| {
-                        cx.new(|_| DragGhost { label: SharedString::from(spec.label) })
+                        cx.new(|_| DragGhost { label: crate::tr(spec.label) })
                     })
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.insert_component(spec.id, cx);
@@ -787,13 +795,18 @@ impl Workspace {
 }
 
 /// Whether a catalogue entry answers to what was typed in the search box.
+pub fn matches_query(spec: &registry::Spec, query: &str) -> bool {
+    label_matches(&crate::tr(spec.label), spec.id, query)
+}
+
+/// The search itself, over a label already in the interface's language.
 ///
 /// The id is searched as well as the label: `input` finds the text field
-/// whatever the interface's language, which is what someone who has read the
-/// generated code will type.
-pub fn matches_query(spec: &registry::Spec, query: &str) -> bool {
+/// whatever that language is, which is what someone who has read the generated
+/// code will type.
+pub fn label_matches(label: &str, id: &str, query: &str) -> bool {
     let query = fold(query);
-    query.is_empty() || fold(spec.label).contains(&query) || spec.id.contains(&query)
+    query.is_empty() || fold(label).contains(&query) || id.contains(&query)
 }
 
 /// Lowercase, and without the accents.
@@ -951,9 +964,10 @@ fn menu_row(
 }
 
 /// One button of the menu panel.
+/// A small button of the menu panel, labelled from its translation key.
 fn menu_button(
     id: &'static str,
-    label: &'static str,
+    key: &'static str,
     cx: &mut Context<Workspace>,
     action: impl Fn(&mut Workspace, &mut Context<Workspace>) + 'static,
 ) -> impl IntoElement {
@@ -966,7 +980,7 @@ fn menu_button(
         .cursor_pointer()
         .bg(rgb(theme::BG))
         .hover(|this| this.bg(rgb(theme::HOVER_BG)))
-        .child(label)
+        .child(crate::tr(key))
         .on_click(cx.listener(move |this, _, _, cx| action(this, cx)))
 }
 
@@ -997,8 +1011,8 @@ fn node_label(node: &Node) -> SharedString {
                     crate::model::Base::Opaque(_) => None,
                 });
             match detail {
-                Some(text) => format!("{} · {text}", spec.label).into(),
-                None => spec.label.into(),
+                Some(text) => format!("{} · {text}", crate::tr(spec.label)).into(),
+                None => crate::tr(spec.label),
             }
         }
         None if node.is_opaque() => "code Rust".into(),
@@ -1089,15 +1103,15 @@ fn preview(
         }
         Some("Label::new") => Label::new(text(0)).into_any_element(),
         Some("Checkbox::new") => Checkbox::new(SharedString::from(format!("preview-{path:?}")))
-            .label(call_text(node, "label", "Case à cocher"))
+            .label(call_text(node, "label", &crate::tr("component.checkbox")))
             .checked(call_bool(node, "checked"))
             .into_any_element(),
         Some("Switch::new") => Switch::new(SharedString::from(format!("preview-{path:?}")))
-            .label(call_text(node, "label", "Interrupteur"))
+            .label(call_text(node, "label", &crate::tr("component.switch")))
             .checked(call_bool(node, "checked"))
             .into_any_element(),
         Some("GroupBox::new") => GroupBox::new()
-            .title(call_text(node, "title", "Cadre"))
+            .title(call_text(node, "title", &crate::tr("component.group_box")))
             .children(children_with_zones(node, path, selected, true, cx))
             .into_any_element(),
         Some("Divider::horizontal") => match node.call("label") {
@@ -1113,11 +1127,11 @@ fn preview(
             .children(children_with_zones(node, path, selected, true, cx))
             .into_any_element(),
         Some("Button::new") => Button::new(SharedString::from(format!("preview-{path:?}")))
-            .label(call_text(node, "label", "Bouton"))
+            .label(call_text(node, "label", &crate::tr("component.button")))
             .into_any_element(),
         Some("Radio::new") => {
             gpui_component::radio::Radio::new(SharedString::from(format!("preview-{path:?}")))
-                .label(call_text(node, "label", "Bouton radio"))
+                .label(call_text(node, "label", &crate::tr("component.radio")))
                 .checked(call_bool(node, "checked"))
                 .into_any_element()
         }
@@ -1161,7 +1175,7 @@ fn preview(
             .bg(rgb(theme::HOVER_BG))
             .text_xs()
             .text_color(rgb(theme::TEXT_MUTED))
-            .child("code Rust")
+            .child(crate::tr("designer.rust_code"))
             .into_any_element(),
     }
 }

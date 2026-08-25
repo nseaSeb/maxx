@@ -152,7 +152,7 @@ fn a_button_action_writes_a_method_stub() {
     let action = spec
         .props
         .iter()
-        .find(|prop| prop.label == "Action")
+        .find(|prop| prop.label == "prop.action")
         .expect("le bouton a une propriété Action");
 
     let name = maxx::registry::suggested_handler(&button);
@@ -221,11 +221,11 @@ fn style_properties_reach_the_generated_file() {
     let spec = maxx::registry::of(&button).unwrap();
 
     for (label, value) in [
-        ("Largeur", "120"),
-        ("Fond", "#1e2127"),
-        ("Couleur du texte", "c8ccd4"),
-        ("Infobulle", "Enregistrer"),
-        ("Taille du texte", "text_sm"),
+        ("prop.width", "120"),
+        ("prop.background", "#1e2127"),
+        ("prop.text_color", "c8ccd4"),
+        ("prop.tooltip", "Enregistrer"),
+        ("prop.text_size", "text_sm"),
     ] {
         let prop = maxx::registry::props(spec)
             .into_iter()
@@ -250,7 +250,7 @@ fn style_properties_reach_the_generated_file() {
     let reloaded = View::load(&path).unwrap();
     let button = &reloaded.root.children[1];
     let width =
-        maxx::registry::props(spec).into_iter().find(|prop| prop.label == "Largeur").unwrap();
+        maxx::registry::props(spec).into_iter().find(|prop| prop.label == "prop.width").unwrap();
     assert_eq!(maxx::registry::read(button, width).as_deref(), Some("120"));
 }
 
@@ -320,7 +320,7 @@ fn a_state_field_is_declared_and_initialised() {
 fn a_property_can_read_a_state_field() {
     let mut label = maxx::registry::instantiate("label").unwrap();
     let spec = maxx::registry::of(&label).unwrap();
-    let text = spec.props.iter().find(|prop| prop.label == "Texte").unwrap();
+    let text = spec.props.iter().find(|prop| prop.label == "prop.text").unwrap();
 
     assert_eq!(maxx::registry::read_binding(&label, text), None);
 
@@ -430,7 +430,7 @@ fn insertions_land_in_the_view_not_in_a_helper_type() {
     let mut view = View::load(&path).unwrap();
     let mut button = maxx::registry::instantiate("button").unwrap();
     let spec = maxx::registry::of(&button).unwrap();
-    let action = spec.props.iter().find(|p| p.label == "Action").unwrap();
+    let action = spec.props.iter().find(|p| p.label == "prop.action").unwrap();
     maxx::registry::write(&mut button, action, "on_go");
     view.root.push_child(button);
     view.root.push_child(maxx::registry::instantiate("input").unwrap());
@@ -489,7 +489,7 @@ fn a_wrapped_import_is_not_duplicated() {
     let mut button = maxx::registry::instantiate("button").unwrap();
     let spec = maxx::registry::of(&button).unwrap();
     let width =
-        maxx::registry::props(spec).into_iter().find(|prop| prop.label == "Largeur").unwrap();
+        maxx::registry::props(spec).into_iter().find(|prop| prop.label == "prop.width").unwrap();
     maxx::registry::write(&mut button, width, "120");
     view.root.push_child(button);
     view.save().unwrap();
@@ -1051,7 +1051,7 @@ fn a_dropdown_declares_the_field_it_needs() {
 
     // Lier le champ, comme le fait l'inspecteur.
     let index = view.root.children.len() - 1;
-    let prop = select.props.iter().find(|prop| prop.label == "Champ lié").unwrap();
+    let prop = select.props.iter().find(|prop| prop.label == "prop.bound_field").unwrap();
     maxx::registry::write_binding(&mut view.root.children[index], prop, Some("&self.pays"));
     view.save().expect("la vue doit s'enregistrer");
 

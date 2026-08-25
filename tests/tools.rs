@@ -128,8 +128,16 @@ fn a_file_that_is_not_rust_is_refused_rather_than_mangled() {
     let path = std::env::temp_dir().join("maxx_format_invalide.rs");
     std::fs::write(&path, "ceci n'est pas du Rust {{{\n").unwrap();
 
+    // Le texte du message n'est pas ce qu'on vérifie : il est traduit, donc
+    // dépend de la langue, et l'affirmer ici lierait le comportement à sa
+    // formulation. Ce qui compte est qu'il y ait un refus et qu'il nomme le
+    // fichier.
     if let Err(erreur) = maxx::run::format_rust(&path) {
-        assert!(erreur.contains("refusé") || erreur.contains("introuvable"), "{erreur}");
+        assert!(!erreur.is_empty());
+        assert!(
+            erreur.contains("maxx_format_invalide.rs") || erreur.contains("rustfmt"),
+            "{erreur}"
+        );
     }
     // Et surtout : le fichier n'a pas été abîmé.
     assert!(std::fs::read_to_string(&path).unwrap().contains("ceci n'est pas du Rust"));

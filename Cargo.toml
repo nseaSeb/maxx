@@ -28,6 +28,10 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8"                 # lecture unique de l'ancien settings.toml
 serde_json_lenient = "0.2"   # le JSON à commentaires, celui que Zed lit
 schemars = "1"
+# Déjà dans l'arbre : gpui-component y met ses propres chaînes, et
+# `set_locale` y écrit le même global que celui-ci. Le prendre en dépendance
+# directe ne coûte donc rien au build.
+rust-i18n = "3"
 
 [profile.dev]
 opt-level = 0
