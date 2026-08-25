@@ -24,7 +24,9 @@ Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
   lu et écrit dans `key_bindings`, avec refus d'une frappe que gpui ne saurait
   pas lire. Reste au clavier : la touche `-` elle-même, dont l'écriture est
   ambiguë avec le séparateur, et la saisie du raccourci en l'appuyant plutôt
-  qu'en le tapant.
+  qu'en le tapant. Renommer une action laisse son ancienne liaison derrière,
+  comme elle laisse son ancien gestionnaire : maxx ajoute et met à jour ce
+  qu'il possède, il n'efface pas ce qu'il ne peut pas prouver inutile.
 - **Réordonner** est fait : Monter et Descendre, ⌘⌃↑ et ⌘⌃↓, dans la barre de
   menus comme dans le panneau. Une entrée reste dans son menu et un menu parmi
   les menus — franchir cette limite est ce qu'un glisser-déposer ferait, et

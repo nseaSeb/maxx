@@ -19,12 +19,14 @@ fn barre() -> MenuFile {
         label: "Nouveau".into(),
         action: "Nouveau".into(),
         os_action: None,
+        shortcut: None,
     });
     fichier.items.push(ItemDef::Separator);
     fichier.items.push(ItemDef::Action {
         label: "Quitter".into(),
         action: "Quitter".into(),
         os_action: None,
+        shortcut: None,
     });
     let menus = vec![fichier, MenuDef::named("Édition")];
 
@@ -160,11 +162,13 @@ fn an_entry_of_a_submenu_moves_inside_it() {
         label: "Un".into(),
         action: "Un".into(),
         os_action: None,
+        shortcut: None,
     });
     interne.items.push(ItemDef::Action {
         label: "Deux".into(),
         action: "Deux".into(),
         os_action: None,
+        shortcut: None,
     });
     menus.menus[0].items[1] = ItemDef::Submenu(interne);
 
@@ -220,6 +224,7 @@ fn an_action_written_inside_a_submenu_is_declared_too() {
         label: "Rouvrir".into(),
         action: "RouvrirRecent".into(),
         os_action: None,
+        shortcut: None,
     });
     menus.menus[0].items[1] = ItemDef::Submenu(interne);
 
@@ -239,12 +244,14 @@ fn a_qualified_or_system_action_is_still_left_alone_inside_a_submenu() {
         label: "Ailleurs".into(),
         action: "autre::Action".into(),
         os_action: None,
+        shortcut: None,
     });
     // Une action système : la déclarer masquerait ce qu'elle délègue.
     interne.items.push(ItemDef::Action {
         label: "Copier".into(),
         action: "Copy".into(),
         os_action: Some("Copy".into()),
+        shortcut: None,
     });
     menus.menus[0].items[1] = ItemDef::Submenu(interne);
 
@@ -289,61 +296,130 @@ pub fn app_menus() -> Vec<Menu> {{
 }
 
 #[test]
-fn a_shortcut_is_read_added_changed_and_removed() {
+fn a_shortcut_travels_with_its_entry_and_is_written_at_save() {
     let path = std::env::temp_dir().join("maxx_raccourci.rs");
     let source = fichier_complet("        KeyBinding::new(\"cmd-q\", Quitter, None),\n");
     std::fs::write(&path, &source).unwrap();
 
-    let mut menus = MenuFile::from_source(path.clone(), source).expect("doit se relire");
+    let mut menus = MenuFile::load(&path).expect("doit se relire");
 
-    // Lu depuis le fichier, et non depuis le modèle : le raccourci vit dehors.
-    assert_eq!(menus.shortcut("Quitter").as_deref(), Some("cmd-q"));
-    assert_eq!(menus.shortcut("Nouveau"), None);
+    // Lu à l'ouverture et posé sur l'entrée, pas cherché dans le fichier à
+    // chaque affichage.
+    let ItemDef::Action { shortcut, .. } = &menus.menus[0].items[0] else {
+        panic!("la première entrée est une action");
+    };
+    assert_eq!(shortcut.as_deref(), None, "Nouveau n'a pas de raccourci au départ");
 
-    // Ajouté à une action qui n'en avait pas.
-    menus.set_shortcut("Nouveau", Some("cmd-n")).unwrap();
-    assert_eq!(menus.shortcut("Nouveau").as_deref(), Some("cmd-n"));
+    // Posé sur le modèle : rien n'a encore touché le disque.
+    let ItemDef::Action { shortcut, .. } = &mut menus.menus[0].items[0] else { unreachable!() };
+    *shortcut = Some("cmd-n".into());
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), source, "rien avant ⌘S");
+
+    menus.save(false).expect("l'enregistrement doit passer");
+    let ecrit = std::fs::read_to_string(&path).unwrap();
+    assert!(ecrit.contains("KeyBinding::new(\"cmd-n\", Nouveau, None),"), "{ecrit}");
     // Celui d'à côté n'a pas bougé.
-    assert_eq!(menus.shortcut("Quitter").as_deref(), Some("cmd-q"));
+    assert!(ecrit.contains("KeyBinding::new(\"cmd-q\", Quitter, None),"), "{ecrit}");
 
-    // Changé.
-    menus.set_shortcut("Nouveau", Some("cmd-shift-n")).unwrap();
-    assert_eq!(menus.shortcut("Nouveau").as_deref(), Some("cmd-shift-n"));
-    assert_eq!(
-        menus.source.matches("Nouveau, None").count(),
-        1,
-        "le remplacement ne doit pas dupliquer la ligne"
+    // Relire rend le raccourci à son entrée.
+    let relu = MenuFile::load(&path).expect("doit se relire");
+    let ItemDef::Action { shortcut, .. } = &relu.menus[0].items[0] else { unreachable!() };
+    assert_eq!(shortcut.as_deref(), Some("cmd-n"));
+}
+
+#[test]
+fn removing_a_shortcut_removes_every_line_that_bound_it() {
+    // gpui accepte plusieurs frappes pour une action : n'en réécrire qu'une
+    // laisserait l'ancienne vivante dans le dos de l'utilisateur.
+    let path = std::env::temp_dir().join("maxx_raccourci_double.rs");
+    let source = fichier_complet(
+        "        KeyBinding::new(\"cmd-n\", Nouveau, None),\n        KeyBinding::new(\"ctrl-n\", Nouveau, None),\n",
     );
+    std::fs::write(&path, &source).unwrap();
 
-    // Retiré.
-    menus.set_shortcut("Nouveau", None).unwrap();
-    assert_eq!(menus.shortcut("Nouveau"), None);
-    assert_eq!(menus.shortcut("Quitter").as_deref(), Some("cmd-q"));
+    let mut menus = MenuFile::load(&path).expect("doit se relire");
+    let ItemDef::Action { shortcut, .. } = &mut menus.menus[0].items[0] else { unreachable!() };
+    *shortcut = Some("cmd-shift-n".into());
+    menus.save(false).expect("l'enregistrement doit passer");
 
-    // Et le fichier sur le disque a suivi à chaque fois.
-    let relu = std::fs::read_to_string(&path).unwrap();
-    assert!(relu.contains("KeyBinding::new(\"cmd-q\", Quitter, None),"), "{relu}");
-    assert!(!relu.contains("Nouveau, None"), "{relu}");
+    let ecrit = std::fs::read_to_string(&path).unwrap();
+    assert_eq!(ecrit.matches(", Nouveau, None").count(), 1, "{ecrit}");
+    assert!(ecrit.contains("cmd-shift-n"), "{ecrit}");
+}
+
+#[test]
+fn a_file_without_key_bindings_is_left_whole() {
+    // Le défaut que ce test verrouille : la source était vidée avant de
+    // pouvoir échouer, et tout devenait irrécupérable.
+    let path = std::env::temp_dir().join("maxx_sans_bindings.rs");
+    let source = r#"use gpui::{Menu, MenuItem};
+
+pub fn app_menus() -> Vec<Menu> {
+    // maxx:begin
+    vec![Menu { name: "Fichier".into(), items: vec![MenuItem::action("Nouveau", Nouveau)] }]
+    // maxx:end
+}
+"#;
+    std::fs::write(&path, source).unwrap();
+
+    let mut menus = MenuFile::load(&path).expect("doit se relire");
+    let ItemDef::Action { shortcut, .. } = &mut menus.menus[0].items[0] else { unreachable!() };
+    *shortcut = Some("cmd-n".into());
+    menus.save(false).expect("l'enregistrement doit passer malgré tout");
+
+    assert!(!menus.source.is_empty(), "la source ne doit jamais être vidée");
+    let ecrit = std::fs::read_to_string(&path).unwrap();
+    assert!(ecrit.contains("maxx:begin"), "{ecrit}");
+    assert!(ecrit.contains("Nouveau"), "{ecrit}");
 }
 
 #[test]
 fn a_keystroke_gpui_cannot_read_is_refused() {
     // Une frappe illisible fait interrompre `bind_keys` au démarrage :
-    // l'application générée refuserait de s'ouvrir. Mieux vaut refuser ici.
+    // l'application générée refuserait de s'ouvrir.
     for mauvais in ["", "cmd-", "-n", "commande-n", "cmd--n"] {
         assert!(!maxx::menufile::is_keystroke(mauvais), "« {mauvais} » devrait être refusé");
     }
     for bon in ["n", "cmd-n", "cmd-shift-n", "ctrl-alt-delete", "cmd-,", "secondary-a"] {
         assert!(maxx::menufile::is_keystroke(bon), "« {bon} » devrait être accepté");
     }
+}
 
-    let path = std::env::temp_dir().join("maxx_raccourci_refuse.rs");
-    let source = fichier_complet("");
-    std::fs::write(&path, &source).unwrap();
-    let mut menus = MenuFile::from_source(path, source.clone()).expect("doit se relire");
+#[test]
+fn a_stale_menu_selection_does_not_interrupt_the_process_either() {
+    let mut menus = barre();
+    menus.selected = Some(Selection::Menu(9));
+    assert!(!menus.move_selected(true));
+    assert!(!menus.move_selected(false));
+    assert_eq!(menus.menus.len(), 2);
+}
 
-    let erreur = menus.set_shortcut("Nouveau", Some("commande-n")).expect_err("doit refuser");
-    assert!(erreur.contains("raccourci gpui"), "{erreur}");
-    // Et rien n'a été écrit.
-    assert_eq!(menus.source, source);
+#[test]
+fn a_submenu_inside_a_submenu_is_kept_verbatim() {
+    // L'arbre ne descend qu'à deux niveaux : afficher le troisième à moitié
+    // donnerait une ligne sans enfants, ni sélectionnable ni supprimable.
+    let source = r#"use gpui::{Menu, MenuItem};
+
+pub fn app_menus() -> Vec<Menu> {
+    // maxx:begin
+    vec![Menu {
+        name: "Fichier".into(),
+        items: vec![MenuItem::submenu(Menu {
+            name: "Récents".into(),
+            items: vec![MenuItem::submenu(Menu { name: "Encore".into(), items: vec![] })],
+        })],
+    }]
+    // maxx:end
+}
+"#;
+    let menus = MenuFile::from_source(std::path::PathBuf::from("/tmp/menus.rs"), source.into())
+        .expect("doit se relire");
+    assert!(
+        matches!(menus.menus[0].items[0], ItemDef::Opaque(_)),
+        "le sous-menu imbriqué doit rester tel quel : {:?}",
+        menus.menus[0].items[0]
+    );
+    // Et il ressort intact.
+    let rendu = fichier_de(&menus.menus);
+    assert!(rendu.contains("Encore"), "{rendu}");
 }

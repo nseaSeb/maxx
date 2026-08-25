@@ -473,17 +473,14 @@ impl Workspace {
             }
             Some(Selection::Item(..)) | Some(Selection::SubItem(..)) => {
                 match menus.selected_item() {
-                    Some(ItemDef::Action { label, action, os_action }) => {
+                    Some(ItemDef::Action { label, action, os_action, shortcut }) => {
                         fields.push((MenuField::Label, label.clone()));
                         fields.push((MenuField::Action, action.clone()));
                         // Une action système porte le raccourci que le système
                         // lui donne : en proposer un autre serait mentir.
                         if os_action.is_none() {
-                            let action = action.clone();
-                            fields.push((
-                                MenuField::Shortcut,
-                                menus.shortcut(&action).unwrap_or_default(),
-                            ));
+                            fields
+                                .push((MenuField::Shortcut, shortcut.clone().unwrap_or_default()));
                         }
                     }
                     // Un sous-menu porte un titre, sous le même champ Libellé
@@ -526,21 +523,26 @@ impl Workspace {
             }
             (Selection::Item(..) | Selection::SubItem(..), _) => {
                 match menus.selected_item_mut() {
-                    Some(ItemDef::Action { label, action, .. }) => match field {
+                    Some(ItemDef::Action { label, action, shortcut, .. }) => match field {
                         MenuField::Label => *label = value.to_string(),
                         // An action name is a Rust type: refuse what would not
                         // compile rather than write it.
                         MenuField::Action if is_type_name(value) => *action = value.to_string(),
+                        // Retenu dans le modèle et écrit à ⌘S avec le reste.
+                        // Écrit sur-le-champ, il partait sur le disque à chaque
+                        // touche — donc à chaque état intermédiaire de la
+                        // frappe — et survivait à l'entrée qu'il désignait.
                         MenuField::Shortcut => {
-                            // Le raccourci vit hors de la zone gérée, donc il
-                            // s'écrit tout de suite plutôt qu'à ⌘S : rien dans
-                            // le modèle ne le porterait jusque-là.
-                            let action = action.clone();
-                            let keystroke = value.trim().to_string();
-                            let keystroke = (!keystroke.is_empty()).then_some(keystroke);
-                            if let Err(error) = menus.set_shortcut(&action, keystroke.as_deref()) {
-                                self.message = Some(SharedString::from(error));
-                            }
+                            let keystroke = value.trim();
+                            *shortcut = match keystroke {
+                                "" => None,
+                                keystroke if crate::menufile::is_keystroke(keystroke) => {
+                                    Some(keystroke.to_string())
+                                }
+                                // Ce qui est en cours de frappe n'est pas
+                                // encore lisible : on garde ce qu'on avait.
+                                _ => shortcut.clone(),
+                            };
                         }
                         _ => {}
                     },
@@ -844,7 +846,12 @@ impl Workspace {
         let item = if separator {
             ItemDef::Separator
         } else {
-            ItemDef::Action { label: "Entrée".into(), action: "MonAction".into(), os_action: None }
+            ItemDef::Action {
+                label: "Entrée".into(),
+                action: "MonAction".into(),
+                os_action: None,
+                shortcut: None,
+            }
         };
         menus.add_item(item);
         cx.notify();

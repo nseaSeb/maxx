@@ -48,6 +48,13 @@ pub enum ItemDef {
         action: String,
         /// The system action it stands for, if any: `Copy`, `Undo`…
         os_action: Option<String>,
+        /// The keystroke bound to it in `key_bindings`, if any.
+        ///
+        /// In the model although it is written elsewhere in the file: carried
+        /// here, it travels with the entry when it is renamed or moved, and it
+        /// is written at save time with everything else. Written on the spot
+        /// instead, it outlived the entry it belonged to.
+        shortcut: Option<String>,
     },
     /// A menu inside a menu.
     ///
@@ -130,17 +137,26 @@ fn parse_item(expr: &Expr, source: &str) -> ItemDef {
         "separator" => ItemDef::Separator,
         "submenu" => match args.next() {
             // Un sous-menu dont le contenu n'est pas un littéral — `submenu(
-            // build())` — reste opaque : il est lisible, pas modifiable.
+            // build())` — reste opaque : il est lisible, pas modifiable. Un
+            // sous-menu qui en contient un autre aussi : l'arbre ne descend
+            // qu'à deux niveaux, et une entrée qu'on ne peut ni voir ni
+            // atteindre vaut mieux conservée telle quelle qu'affichée à moitié.
             Some(inner) => match parse_menu(inner, source) {
                 MenuDef { opaque: Some(_), .. } => ItemDef::Opaque(text(expr, source)),
+                menu if menu.items.iter().any(|item| matches!(item, ItemDef::Submenu(_))) => {
+                    ItemDef::Opaque(text(expr, source))
+                }
                 menu => ItemDef::Submenu(menu),
             },
             None => ItemDef::Opaque(text(expr, source)),
         },
         "action" => match (args.next().and_then(string_of), args.next()) {
-            (Some(label), Some(action)) => {
-                ItemDef::Action { label, action: path_text(action, source), os_action: None }
-            }
+            (Some(label), Some(action)) => ItemDef::Action {
+                label,
+                action: path_text(action, source),
+                os_action: None,
+                shortcut: None,
+            },
             _ => ItemDef::Opaque(text(expr, source)),
         },
         "os_action" => match (args.next().and_then(string_of), args.next(), args.next()) {
@@ -148,6 +164,7 @@ fn parse_item(expr: &Expr, source: &str) -> ItemDef {
                 label,
                 action: path_text(action, source),
                 os_action: Some(last_segment(os).unwrap_or_else(|| text(os, source))),
+                shortcut: None,
             },
             _ => ItemDef::Opaque(text(expr, source)),
         },
@@ -194,10 +211,10 @@ fn render_item(item: &ItemDef, column: usize) -> String {
     let pad = " ".repeat(column);
     match item {
         ItemDef::Separator => "MenuItem::separator()".into(),
-        ItemDef::Action { label, action, os_action: None } => {
+        ItemDef::Action { label, action, os_action: None, .. } => {
             format!("MenuItem::action(\"{}\", {action})", escape(label))
         }
-        ItemDef::Action { label, action, os_action: Some(os) } => {
+        ItemDef::Action { label, action, os_action: Some(os), .. } => {
             format!("MenuItem::os_action(\"{}\", {action}, OsAction::{os})", escape(label))
         }
         ItemDef::Submenu(menu) => {

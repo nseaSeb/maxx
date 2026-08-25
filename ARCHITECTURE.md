@@ -336,6 +336,30 @@ Il reste que rustfmt met en forme le fichier entier, donc au-delà de la zone
 gérée. Sur un projet déjà passé au formateur cela ne change rien ailleurs ; sur
 un projet qui l'ignore, le réglage s'éteint.
 
+## Le raccourci d'une entrée
+
+Dans gpui, un raccourci n'est pas une propriété de l'entrée de menu : c'est une
+liste séparée, `key_bindings`, que la barre lit pour afficher l'accélérateur.
+Elle vit hors de la zone gérée, dans une fonction que le développeur édite aussi.
+
+Première tentative, écartée : écrire le raccourci sur le disque au moment où on
+le tape, puisque le modèle ne le portait pas. C'était faux sur quatre points à
+la fois — une écriture par touche, donc une pour chaque état intermédiaire de la
+frappe ; une écriture qui contournait la garde « fichier modifié en dehors de
+maxx » ; un raccourci écrit pour une action que `actions!` ne déclarait pas
+encore ; et un raccourci qui survivait à l'entrée renommée ou supprimée.
+
+Ce qui les règle tous : **le raccourci est dans le modèle**, lu à l'ouverture et
+posé sur l'entrée, écrit à `⌘S` avec le reste. Il voyage alors avec l'entrée
+qu'on renomme ou qu'on déplace, il part avec elle quand on la supprime, et il
+est écrit après `ensure_action`, jamais avant.
+
+Deux règles de bordure. Toutes les lignes qui lient une action sont retirées
+avant qu'une soit écrite, parce que gpui en accepte plusieurs pour une même
+action : n'en réécrire qu'une laisserait l'ancienne vivante. Et une liaison
+pour une action qui n'apparaît dans aucun menu appartient au développeur —
+l'enregistrement n'y touche pas.
+
 ## La mise en forme du dépôt
 
 maxx passe à `rustfmt`, avec une seule dérogation : `use_small_heuristics =

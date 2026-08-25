@@ -39,49 +39,86 @@ pub fn is_keystroke(keystroke: &str) -> bool {
     seen_key && !keystroke.starts_with('-') && !keystroke.ends_with('-')
 }
 
-/// Rewrites the `KeyBinding` line of `action` inside `key_bindings`.
-fn set_binding(source: String, action: &str, keystroke: Option<&str>) -> Result<String, String> {
+/// Rewrites the `KeyBinding` lines of `action` inside `key_bindings`.
+///
+/// Never fails: a file without `key_bindings` simply has nowhere to put a
+/// shortcut, and refusing the whole save over it would be out of proportion —
+/// the source comes back unchanged.
+///
+/// Every line matching the action is removed before one is written, because
+/// gpui allows several keystrokes for one action: rewriting the first and
+/// leaving the second would keep the old shortcut alive behind the user's back.
+fn set_binding(source: String, action: &str, keystroke: Option<&str>) -> String {
     let needle = format!(", {action},");
-    let existing = source
-        .lines()
-        .position(|line| line.trim().starts_with("KeyBinding::new(") && line.contains(&needle));
+    let matches_action =
+        |line: &str| line.trim().starts_with("KeyBinding::new(") && line.contains(&needle);
 
     let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
+    let first = lines.iter().position(|line| matches_action(line));
+    let indent: String = first
+        .map(|index| lines[index].chars().take_while(|c| c.is_whitespace()).collect())
+        .unwrap_or_else(|| "        ".to_string());
+    lines.retain(|line| !matches_action(line));
 
-    match (existing, keystroke) {
-        (Some(index), Some(keystroke)) => {
-            let indent: String = lines[index].chars().take_while(|c| c.is_whitespace()).collect();
-            lines[index] = format!("{indent}KeyBinding::new(\"{keystroke}\", {action}, None),");
+    let Some(keystroke) = keystroke else {
+        return lines.join("\n") + "\n";
+    };
+
+    // Où l'écrire : à la place de l'ancienne ligne, sinon avant le crochet qui
+    // ferme le `vec!` de `key_bindings` — la seule ancre que le gabarit
+    // garantisse.
+    let at = first.or_else(|| {
+        let start = lines.iter().position(|line| line.contains("fn key_bindings("))?;
+        let open =
+            lines[start..].iter().position(|line| line.contains("vec![")).map(|o| start + o)?;
+        lines[open..].iter().position(|line| line.trim() == "]").map(|o| open + o)
+    });
+    let Some(at) = at else {
+        return lines.join("\n") + "\n";
+    };
+    lines.insert(at, format!("{indent}KeyBinding::new(\"{keystroke}\", {action}, None),"));
+    lines.join("\n") + "\n"
+}
+
+/// Reads the keystroke bound to `action` in a menu file's source.
+fn read_shortcut(source: &str, action: &str) -> Option<String> {
+    let needle = format!(", {action},");
+    for line in source.lines() {
+        let line = line.trim();
+        if !line.starts_with("KeyBinding::new(") || !line.contains(&needle) {
+            continue;
         }
-        (Some(index), None) => {
-            lines.remove(index);
-        }
-        (None, Some(keystroke)) => {
-            // Inserted before the closing bracket of the `vec![` that
-            // `key_bindings` returns — the one anchor the template guarantees.
-            let start = lines
-                .iter()
-                .position(|line| line.contains("fn key_bindings("))
-                .ok_or("key_bindings est introuvable dans ce fichier")?;
-            let open = lines[start..]
-                .iter()
-                .position(|line| line.contains("vec!["))
-                .map(|offset| start + offset)
-                .ok_or("le vec! de key_bindings est introuvable")?;
-            let close = lines[open..]
-                .iter()
-                .position(|line| line.trim() == "]")
-                .map(|offset| open + offset)
-                .ok_or("le vec! de key_bindings n'est pas refermé")?;
-            lines.insert(
-                close,
-                format!("        KeyBinding::new(\"{keystroke}\", {action}, None),"),
-            );
-        }
-        (None, None) => return Ok(lines.join("\n") + "\n"),
+        let start = line.find('"')? + 1;
+        let end = line[start..].find('"')? + start;
+        return Some(line[start..end].to_string());
     }
+    None
+}
 
-    Ok(lines.join("\n") + "\n")
+/// Gives every entry the keystroke the file binds to its action.
+fn attach_shortcuts(items: &mut [ItemDef], source: &str) {
+    for item in items {
+        match item {
+            ItemDef::Action { action, os_action: None, shortcut, .. } => {
+                *shortcut = read_shortcut(source, action);
+            }
+            ItemDef::Submenu(inner) => attach_shortcuts(&mut inner.items, source),
+            _ => {}
+        }
+    }
+}
+
+/// Gathers what each entry wants its shortcut to be.
+fn collect_shortcuts(items: &[ItemDef], out: &mut Vec<(String, Option<String>)>) {
+    for item in items {
+        match item {
+            ItemDef::Action { action, os_action: None, shortcut, .. } if !action.contains("::") => {
+                out.push((action.clone(), shortcut.clone()));
+            }
+            ItemDef::Submenu(inner) => collect_shortcuts(&inner.items, out),
+            _ => {}
+        }
+    }
 }
 
 /// Gathers the actions of a list of entries, submenus included.
@@ -184,6 +221,10 @@ impl MenuFile {
         let menus = crate::menu_model::parse(&expr, inner)
             .ok_or("la zone gérée n'est pas un « vec![Menu { .. }] »")?;
 
+        let mut menus = menus;
+        for menu in &mut menus {
+            attach_shortcuts(&mut menu.items, &source);
+        }
         Ok(Self { path, source, saved: menus.clone(), menus, selected: None })
     }
 
@@ -247,6 +288,12 @@ impl MenuFile {
         for action in self.actions() {
             source = ensure_action(source, &action);
         }
+        // Après `ensure_action`, jamais avant : un raccourci écrit pour une
+        // action que `actions!` ne déclare pas encore laisse un projet qui ne
+        // compile pas.
+        for (action, keystroke) in self.shortcuts() {
+            source = set_binding(source, &action, keystroke.as_deref());
+        }
 
         std::fs::write(&self.path, &source).map_err(|error| error.to_string())?;
         self.source = source;
@@ -254,43 +301,16 @@ impl MenuFile {
         Ok(())
     }
 
-    /// The keystroke bound to `action`, as written in `key_bindings`.
+    /// The shortcut every entry of the bar carries, by action.
     ///
-    /// Read from the source rather than held in the model: the shortcut lives
-    /// outside the managed region, in a function the developer also edits by
-    /// hand, and the file is the only place that knows the truth about it.
-    pub fn shortcut(&self, action: &str) -> Option<String> {
-        let needle = format!(", {action},");
-        for line in self.source.lines() {
-            let line = line.trim();
-            if !line.starts_with("KeyBinding::new(") || !line.contains(&needle) {
-                continue;
-            }
-            let start = line.find('"')? + 1;
-            let end = line[start..].find('"')? + start;
-            return Some(line[start..end].to_string());
+    /// Only the entries maxx owns: a `KeyBinding` for an action that appears in
+    /// no menu belongs to the developer, and saving leaves it alone.
+    fn shortcuts(&self) -> Vec<(String, Option<String>)> {
+        let mut out = Vec::new();
+        for menu in &self.menus {
+            collect_shortcuts(&menu.items, &mut out);
         }
-        None
-    }
-
-    /// Binds `action` to `keystroke`, or unbinds it when given nothing.
-    ///
-    /// Written straight to the source, and to `self.source`, because
-    /// `key_bindings` is not part of what `render` produces: a shortcut is not
-    /// a property of the menu entry in gpui, it is a separate list the menu bar
-    /// reads to display the accelerator.
-    pub fn set_shortcut(&mut self, action: &str, keystroke: Option<&str>) -> Result<(), String> {
-        if let Some(keystroke) = keystroke
-            && !is_keystroke(keystroke)
-        {
-            return Err(format!(
-                "« {keystroke} » n'est pas un raccourci gpui — par exemple cmd-shift-n"
-            ));
-        }
-        let source = set_binding(std::mem::take(&mut self.source), action, keystroke)?;
-        std::fs::write(&self.path, &source).map_err(|error| error.to_string())?;
-        self.source = source;
-        Ok(())
+        out
     }
 
     /// The line where an action's handler is registered.
@@ -431,6 +451,12 @@ impl MenuFile {
         };
         match selection {
             Selection::Menu(index) => {
+                // La même garde que la branche des entrées, et pour la même
+                // raison : une sélection périmée doit ne rien faire, pas
+                // interrompre le processus.
+                if index >= self.menus.len() {
+                    return false;
+                }
                 let Some(target) = step(index, up, self.menus.len()) else {
                     return false;
                 };

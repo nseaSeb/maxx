@@ -545,6 +545,7 @@ fn a_generated_project_has_a_menu_bar() {
         label: "Préférences…".into(),
         action: "OpenSettings".into(),
         os_action: None,
+        shortcut: None,
     });
     assert!(menus.dirty());
     menus.save(false).expect("l'enregistrement doit réussir");
@@ -685,6 +686,7 @@ fn a_menu_action_points_at_its_handler() {
         label: "Préférences…".into(),
         action: "Preferences".into(),
         os_action: None,
+        shortcut: None,
     });
     menus.save(false).unwrap();
 
