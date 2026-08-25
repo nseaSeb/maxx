@@ -75,14 +75,18 @@ pub fn open_terminal(terminal: Option<&Terminal>, path: &Path) {
         return;
     };
 
+    // `spawn` and never `status`: a terminal does not exit until its window is
+    // closed, and these are called from the interface thread. Waiting on one
+    // freezes maxx until the user quits the terminal.
     if !terminal.command.is_empty()
         && let Some(flag) = terminal.directory_flag
         && on_path(terminal.command)
         && Command::new(terminal.command)
-            .arg(flag)
-            .arg(path)
-            .status()
-            .is_ok_and(|status| status.success())
+            // The `--flag=value` form, not two arguments: Ghostty accepts only
+            // that one, and every other terminal here takes it too.
+            .arg(format!("{flag}={}", path.display()))
+            .spawn()
+            .is_ok()
     {
         return;
     }
@@ -96,13 +100,13 @@ pub fn open_terminal(terminal: Option<&Terminal>, path: &Path) {
                 .arg(bundle)
                 .arg("--args")
                 .arg(format!("{flag}={}", path.display()))
-                .status()
-                .is_ok_and(|status| status.success());
+                .spawn()
+                .is_ok();
             if opened {
                 return;
             }
         }
-        let _ = Command::new("open").arg("-a").arg(bundle).arg(path).status();
+        let _ = Command::new("open").arg("-a").arg(bundle).arg(path).spawn();
     }
 }
 
@@ -131,15 +135,12 @@ pub fn editor_arguments(editor: &Editor, path: &Path, line: Option<usize>) -> Ve
 pub fn open_editor(editor: &Editor, path: &Path, line: Option<usize>) {
     let arguments = editor_arguments(editor, path, line);
     if on_path(editor.command)
-        && Command::new(editor.command)
-            .args(&arguments)
-            .status()
-            .is_ok_and(|status| status.success())
+        && Command::new(editor.command).args(&arguments).spawn().is_ok()
     {
         return;
     }
     if let Some(bundle) = editor.bundle {
-        let _ = Command::new("open").arg("-a").arg(bundle).arg(path).status();
+        let _ = Command::new("open").arg("-a").arg(bundle).arg(path).spawn();
     }
 }
 
@@ -171,11 +172,11 @@ pub fn open_editor_in_terminal(
 
     let mut command = Command::new(terminal.command);
     if let Some(directory_flag) = terminal.directory_flag {
-        command.arg(directory_flag).arg(directory);
+        command.arg(format!("{directory_flag}={}", directory.display()));
     }
     command.arg(flag).arg(editor.command).args(&arguments);
 
-    if on_path(terminal.command) && command.status().is_ok() {
+    if on_path(terminal.command) && command.spawn().is_ok() {
         return;
     }
 
@@ -187,7 +188,7 @@ pub fn open_editor_in_terminal(
             .arg(bundle)
             .arg("--args")
             .args(&passed)
-            .status();
+            .spawn();
     }
 }
 

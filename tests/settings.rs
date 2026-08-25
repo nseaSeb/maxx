@@ -261,3 +261,20 @@ fn a_hand_written_file_with_every_trap_at_once_survives() {
         serde_json_lenient::from_str_lenient(&patched).expect("le fichier reste lisible : {patched}");
     assert_eq!(reread, preferences);
 }
+
+#[test]
+fn a_brace_in_the_header_comment_does_not_anchor_the_walk() {
+    // Un utilisateur qui écrit « // éditeur : {code, zed} » au-dessus de
+    // l'accolade ouvrante faisait ancrer tout le parcours dans le commentaire.
+    let source = "// éditeur : {code, zed}\n{\n  \"show_output\": false\n}\n";
+    let preferences = Preferences {
+        show_output: true,
+        ..Preferences::default()
+    };
+    let patched = patch_preferences(source, &preferences);
+
+    assert!(patched.starts_with("// éditeur : {code, zed}\n{"), "{patched}");
+    let reread: Preferences =
+        serde_json_lenient::from_str_lenient(&patched).expect("le fichier reste lisible : {patched}");
+    assert!(reread.show_output);
+}

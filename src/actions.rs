@@ -105,9 +105,14 @@ pub fn register_handlers(cx: &mut App) {
             .get(action.index)
             .cloned();
         // The project may have been moved since the bar was built.
-        if let Some(path) = path.filter(|path| path.is_dir()) {
-            workspace::open_folder(path, cx);
-        }
+        let Some(path) = path.filter(|path| path.is_dir()) else {
+            return;
+        };
+        // Deferred: `open_folder` reuses the current window through
+        // `with_active`, which cannot enter a window update from inside one —
+        // called directly it would silently fail to reuse and open a second
+        // window every time, leaving the empty one behind.
+        cx.defer(move |cx: &mut App| workspace::open_folder(path, cx));
     });
     cx.on_action(|_: &ClearRecentProjects, cx: &mut App| {
         crate::settings::update_state(cx, |state| state.recent_projects.clear());

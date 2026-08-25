@@ -593,6 +593,8 @@ impl Workspace {
             return;
         };
         if self.menu_file.is_some() {
+            // Already open — but the preferences may have been covering it.
+            cx.notify();
             return;
         }
         let root = project.root.clone();
@@ -1670,6 +1672,12 @@ impl Workspace {
         // menu from the builder of the frame it was painted with, so anything
         // computed here would be one right click behind. `DeleteFile` reports
         // its own refusal.
+        //
+        // The editor's name is read here rather than inside the builder, which
+        // is `'static` and cannot hold the application. Changing the editor
+        // repaints every workspace, so the label follows on the next frame.
+        let editor = crate::tools::editor_label(cx);
+
         div()
             .flex()
             .flex_col()
@@ -1720,7 +1728,10 @@ impl Workspace {
                         "Révéler dans le Finder",
                         Box::new(crate::actions::RevealInFinder),
                     )
-                    .menu("Ouvrir dans Zed", Box::new(crate::actions::OpenInZed))
+                    .menu(
+                        format!("Ouvrir dans {editor}"),
+                        Box::new(crate::actions::OpenInZed),
+                    )
             })
     }
 
@@ -2291,17 +2302,23 @@ fn panel_icon(
 /// follow — otherwise it keeps the old layout until something else happens to
 /// make it redraw.
 pub fn notify_all(cx: &mut App) {
-    let workspaces: Vec<WeakEntity<Workspace>> = cx
-        .default_global::<Workspaces>()
-        .0
-        .values()
-        .cloned()
-        .collect();
-    for workspace in workspaces {
-        if let Some(workspace) = workspace.upgrade() {
-            workspace.update(cx, |_, cx| cx.notify());
+    // Deferred, and that is not a precaution: every caller runs inside the
+    // update of one of these very workspaces — a menu action, or a click in
+    // the preferences screen. Leasing an entity that is already leased aborts
+    // the process, so the notifications wait for the current update to finish.
+    cx.defer(|cx: &mut App| {
+        let workspaces: Vec<WeakEntity<Workspace>> = cx
+            .default_global::<Workspaces>()
+            .0
+            .values()
+            .cloned()
+            .collect();
+        for workspace in workspaces {
+            if let Some(workspace) = workspace.upgrade() {
+                workspace.update(cx, |_, cx| cx.notify());
+            }
         }
-    }
+    });
 }
 
 /// Puts `path` at the head of the recent projects and refreshes the menu bar.

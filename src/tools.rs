@@ -255,7 +255,9 @@ pub fn installed_terminals() -> Vec<&'static Terminal> {
 pub fn editor(cx: &App) -> Option<&'static Editor> {
     let chosen = crate::settings::prefs(cx).editor.clone();
     if chosen != AUTOMATIC
-        && let Some(editor) = EDITORS.iter().find(|editor| editor.id == chosen)
+        && let Some(editor) = EDITORS
+            .iter()
+            .find(|editor| editor.id == chosen && editor.installed())
     {
         return Some(editor);
     }
@@ -274,8 +276,12 @@ pub fn editor(cx: &App) -> Option<&'static Editor> {
 /// The terminal to use: the one chosen, or the first installed.
 pub fn terminal(cx: &App) -> Option<&'static Terminal> {
     let chosen = crate::settings::prefs(cx).terminal.clone();
+    // An editor or a terminal chosen on another machine, or since uninstalled,
+    // falls back rather than running a command that is not there.
     if chosen != AUTOMATIC
-        && let Some(terminal) = TERMINALS.iter().find(|terminal| terminal.id == chosen)
+        && let Some(terminal) = TERMINALS
+            .iter()
+            .find(|terminal| terminal.id == chosen && terminal.installed())
     {
         return Some(terminal);
     }

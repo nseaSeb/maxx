@@ -319,9 +319,12 @@ struct Member {
 /// one position no trailing comment can spoil.
 fn walk(source: &str, key: &str) -> (Option<Member>, Option<usize>) {
     let bytes = source.as_bytes();
-    let Some(brace) = source.find('{') else {
+    // Not `find('{')`: the documented default file opens with a comment block,
+    // and a brace written inside it would anchor the whole walk in the comment.
+    let brace = skip_trivia(bytes, 0);
+    if brace >= bytes.len() || bytes[brace] != b'{' {
         return (None, None);
-    };
+    }
     let after_brace = brace + 1;
 
     let mut index = skip_trivia(bytes, after_brace);

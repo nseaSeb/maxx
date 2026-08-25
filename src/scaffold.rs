@@ -453,6 +453,31 @@ pub fn add_menu_bar(root: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Whether `line` is one of the three calls `add_menu_bar` writes, or the
+/// module declaration that goes with them.
+fn is_menu_wiring(line: &str) -> bool {
+    if line == "mod menus;" || line == "menus::register" {
+        return true;
+    }
+    if let Some(argument) = line
+        .strip_prefix("menus::register(")
+        .and_then(|rest| rest.strip_suffix(");"))
+    {
+        return identifier(argument).is_some();
+    }
+    for call in [
+        ".bind_keys(menus::key_bindings());",
+        ".set_menus(menus::app_menus());",
+    ] {
+        if let Some(receiver) = line.strip_suffix(call)
+            && identifier(receiver).is_some()
+        {
+            return true;
+        }
+    }
+    false
+}
+
 /// The name `line` gives the application.
 ///
 /// Either the receiver of `.activate(`, or the argument of the closure handed
@@ -491,15 +516,13 @@ fn identifier(name: &str) -> Option<String> {
 pub fn remove_menu_bar(root: &Path) -> io::Result<()> {
     let main_path = root.join("src/main.rs");
     let source = std::fs::read_to_string(&main_path)?;
-    let dropped = [
-        "mod menus;",
-        "menus::register(cx);",
-        "cx.bind_keys(menus::key_bindings());",
-        "cx.set_menus(menus::app_menus());",
-    ];
+    // Matched on shape, not on the exact text: `add_menu_bar` writes these
+    // with the name the project gave its application, which is `cx` in the
+    // template and anything at all in a hand-written `main.rs`. Filtering
+    // literal `cx` lines would leave a call to a module that no longer exists.
     let kept: Vec<&str> = source
         .lines()
-        .filter(|line| !dropped.contains(&line.trim()))
+        .filter(|line| !is_menu_wiring(line.trim()))
         .collect();
     let mut out = kept.join("\n");
     out.push('\n');

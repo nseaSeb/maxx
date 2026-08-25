@@ -887,3 +887,28 @@ fn the_wiring_follows_the_name_the_closure_gave_the_application() {
     assert!(wired.contains("app.set_menus(menus::app_menus());"), "{wired}");
     assert!(!wired.contains("(cx)"), "{wired}");
 }
+
+#[test]
+fn the_menu_bar_is_unwired_whatever_the_application_is_called() {
+    let root = scratch("maxx_menu_bar_unwire_test");
+    scaffold::create_project(&root, "essai").expect("le projet doit être créé");
+    std::fs::remove_file(root.join("src/menus.rs")).unwrap();
+    scaffold::remove_menu_bar(&root).unwrap();
+
+    let main_path = root.join("src/main.rs");
+    std::fs::write(
+        &main_path,
+        "use gpui::{App, Application};\n\nfn main() {\n    Application::new().run(|app: &mut App| {\n        let _ = app;\n    });\n}\n",
+    )
+    .unwrap();
+
+    scaffold::add_menu_bar(&root).expect("la barre doit être ajoutée");
+    assert!(std::fs::read_to_string(&main_path).unwrap().contains("menus::register(app);"));
+
+    // Le décâblage doit retrouver ces lignes-là, pas celles du gabarit.
+    scaffold::remove_menu_bar(&root).expect("le câblage doit partir");
+    let stripped = std::fs::read_to_string(&main_path).unwrap();
+    assert!(!stripped.contains("menus::"), "{stripped}");
+    assert!(!stripped.contains("mod menus;"), "{stripped}");
+    assert!(stripped.contains("let _ = app;"), "le reste du fichier doit rester : {stripped}");
+}
