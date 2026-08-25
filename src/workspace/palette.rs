@@ -26,6 +26,7 @@ impl Workspace {
         })
         .detach();
         window.focus(&input.read(cx).focus_handle(cx));
+        self.commands = crate::palette::commands(cx);
         self.command_input = Some(input);
         self.command_index = 0;
         cx.notify();
@@ -34,6 +35,7 @@ impl Workspace {
     /// Closes the palette without running anything.
     pub fn close_palette(&mut self, cx: &mut Context<Self>) {
         if self.command_input.take().is_some() {
+            self.commands = Vec::new();
             cx.notify();
         }
     }
@@ -44,7 +46,7 @@ impl Workspace {
     /// line to the first loses the reader's place for the sake of a gesture
     /// nobody was making.
     pub fn move_palette(&mut self, down: bool, cx: &mut Context<Self>) {
-        let count = self.palette_commands(cx).len();
+        let count = self.matching_commands(cx).len();
         if count == 0 {
             return;
         }
@@ -62,11 +64,11 @@ impl Workspace {
     /// the window's own update, and several of maxx's commands open a window or
     /// borrow the workspace again — the same rule `defer_active` exists for.
     pub fn run_palette(&mut self, cx: &mut Context<Self>) {
-        let mut commands = self.palette_commands(cx);
-        if self.command_index >= commands.len() {
+        let matching = self.matching_commands(cx);
+        let Some(position) = matching.get(self.command_index) else {
             return;
-        }
-        let action = commands.remove(self.command_index).action;
+        };
+        let action = self.commands[*position].action.boxed_clone();
         self.close_palette(cx);
         cx.defer(move |cx: &mut App| {
             if let Some(handle) = cx.active_window() {
@@ -75,14 +77,19 @@ impl Workspace {
         });
     }
 
-    /// The commands the palette is showing, query applied.
-    pub(crate) fn palette_commands(&self, cx: &App) -> Vec<crate::palette::Command> {
+    /// Where in [`Self::commands`] the lines the query keeps are.
+    pub(crate) fn matching_commands(&self, cx: &App) -> Vec<usize> {
         let query = self
             .command_input
             .as_ref()
             .map(|input| input.read(cx).value().to_string())
             .unwrap_or_default();
-        crate::palette::filter(crate::palette::commands(cx), &query)
+        crate::palette::matching(&self.commands, &query)
+    }
+
+    /// The command at `position` of the list the palette was opened on.
+    pub(crate) fn command_at(&self, position: usize) -> Option<&crate::palette::Command> {
+        self.commands.get(position)
     }
 
     /// The palette's box, while it is open.

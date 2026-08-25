@@ -4,6 +4,8 @@
 //! that the tree stays the single source and every panel is recomputed from it
 //! on each frame — a panel can never hold a stale copy of the model.
 
+use rust_i18n::t;
+
 use gpui::prelude::*;
 use gpui::{AnyElement, Context, Div, SharedString, div, px};
 use gpui_component::alert::Alert;
@@ -626,7 +628,10 @@ impl Workspace {
                                 .text_xs()
                                 .cursor_pointer()
                                 .hover(|this| this.bg(theme::hover_bg()))
-                                .child("→ Zed")
+                                .child(
+                                    t!("designer.open_in", editor = crate::tools::editor_label(cx))
+                                        .into_owned(),
+                                )
                                 .on_click(
                                     cx.listener(move |this, _, _, cx| this.open_handler(prop, cx)),
                                 ),
@@ -746,7 +751,7 @@ impl Workspace {
                             .cursor_pointer()
                             .bg(theme::accent())
                             .text_color(theme::on_accent())
-                            .child("Ajouter")
+                            .child(crate::tr("designer.add"))
                             .on_click(cx.listener(|this, _, _, cx| this.add_state_field(cx))),
                     ),
             )
@@ -985,7 +990,7 @@ fn menu_button(
 }
 
 /// Section header inside the right-hand panels.
-fn section_title(title: &'static str) -> impl IntoElement {
+fn section_title(key: &'static str) -> impl IntoElement {
     div()
         .px_3()
         .py_2()
@@ -993,7 +998,7 @@ fn section_title(title: &'static str) -> impl IntoElement {
         .text_color(theme::text_muted())
         .border_t_1()
         .border_color(theme::border())
-        .child(title)
+        .child(crate::tr(key))
 }
 
 /// Name shown for a node in the tree.

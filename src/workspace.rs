@@ -173,6 +173,12 @@ pub struct Workspace {
     palette_filter: Option<Entity<InputState>>,
     /// The command palette's box, while it is open.
     command_input: Option<Entity<InputState>>,
+    /// The commands the palette was opened on.
+    ///
+    /// Built once, at opening: walking the menu bar reads the settings and asks
+    /// the system which editors are installed, which is not a thing to do on
+    /// every keystroke.
+    commands: Vec<crate::palette::Command>,
     /// Which line of the command palette is highlighted.
     command_index: usize,
     /// Index into `view::STATE_TYPES` for the field about to be added.
@@ -228,6 +234,7 @@ impl Workspace {
             state_name_input: None,
             palette_filter: None,
             command_input: None,
+            commands: Vec::new(),
             command_index: 0,
             state_type: 0,
             edit_snapshot: None,

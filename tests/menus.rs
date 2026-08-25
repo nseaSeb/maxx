@@ -593,9 +593,10 @@ fn the_palette_search_takes_words_in_any_order() {
         }]
     };
     let cherche = |query: &str| -> Vec<String> {
-        maxx::palette::filter(maxx::palette::flatten(barre()), query)
+        let commandes = maxx::palette::flatten(barre());
+        maxx::palette::matching(&commandes, query)
             .into_iter()
-            .map(|command| command.label.to_string())
+            .map(|position| commandes[position].label.to_string())
             .collect()
     };
 

@@ -164,7 +164,7 @@ impl Workspace {
                             .rounded_sm()
                             .cursor_pointer()
                             .hover(|this| this.bg(theme::hover_bg()))
-                            .child("Fermer")
+                            .child(crate::tr("run.close"))
                             .on_click(cx.listener(|this, _, _, cx| this.toggle_output(cx))),
                     ),
             )

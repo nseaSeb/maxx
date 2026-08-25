@@ -93,7 +93,7 @@ impl Workspace {
             .justify_center()
             .gap_4()
             .child(div().text_2xl().child("maxx"))
-            .child(div().text_color(theme::text_muted()).child("Ouvrez un dossier pour commencer."))
+            .child(div().text_color(theme::text_muted()).child(crate::tr("welcome.hint")))
             .child(
                 div()
                     .id("welcome-open-folder")
@@ -104,7 +104,7 @@ impl Workspace {
                     .bg(theme::accent())
                     .text_color(theme::on_accent())
                     .hover(|this| this.opacity(0.85))
-                    .child("Ouvrir un dossier…")
+                    .child(crate::tr("welcome.open_folder"))
                     .on_click(cx.listener(|_, _, window, cx| {
                         window.dispatch_action(Box::new(OpenFolder), cx);
                     })),
@@ -175,12 +175,15 @@ impl Workspace {
         if let Some(menus) = self.menu_file.as_ref() {
             let label = match &self.message {
                 Some(message) => message.clone(),
-                None => SharedString::from(format!(
-                    "{}{} · {} menus",
-                    menus.name(),
-                    if menus.dirty() { " •" } else { "" },
-                    menus.menus.len()
-                )),
+                None => SharedString::from(
+                    t!(
+                        "status.menus",
+                        name = menus.name(),
+                        dirty = if menus.dirty() { " •" } else { "" },
+                        count = menus.menus.len()
+                    )
+                    .into_owned(),
+                ),
             };
             return div()
                 .flex()
@@ -334,14 +337,15 @@ impl Workspace {
     /// here and nothing anywhere else — the keymap binds them to that name.
     pub(crate) fn render_command_palette(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let input = self.command_input()?.clone();
-        let commands = self.palette_commands(cx);
+        let matching = self.matching_commands(cx);
         let selected = self.command_index();
 
         // Ramassées plutôt que paresseuses : la fermeture porterait `cx`, dont
         // la palette a encore besoin pour ses propres écouteurs.
-        let rows: Vec<_> = commands
+        let rows: Vec<_> = matching
             .into_iter()
             .enumerate()
+            .filter_map(|(index, position)| self.command_at(position).map(|c| (index, c)))
             .map(|(index, command)| {
                 h_flex()
                     .id(SharedString::from(format!("command-{index}")))
@@ -354,8 +358,8 @@ impl Workspace {
                     .cursor_pointer()
                     .when(index == selected, |this| this.bg(theme::selected_bg()))
                     .hover(|this| this.bg(theme::hover_bg()))
-                    .child(div().flex_1().child(command.label))
-                    .when_some(command.shortcut, |this, keys| {
+                    .child(div().flex_1().child(command.label.clone()))
+                    .when_some(command.shortcut.clone(), |this, keys| {
                         this.child(div().text_xs().text_color(theme::text_muted()).child(keys))
                     })
                     .on_click(cx.listener(move |this, _, _, cx| {

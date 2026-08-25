@@ -23,9 +23,14 @@ pub struct Command {
 
 /// Every command the menu bar offers, in menu order.
 ///
-/// Separators, the system's own submenus and the recent-project entries are left
-/// out: the first two are not commands, and the third is a list of paths that
-/// changes under the palette rather than a thing to run.
+/// Separators and the system's own submenus are left out — they are not things
+/// to run. The recent projects are kept: opening one is a command like any
+/// other, and it is among the ones a palette is most useful for. Only the
+/// placeholder shown when that list is empty is dropped.
+///
+/// Walking the menu bar is not free — it reads the settings and asks the system
+/// which editors are installed — so the caller is expected to do it when the
+/// palette opens, not on every keystroke.
 pub fn commands(cx: &App) -> Vec<Command> {
     flatten(crate::menus::app_menus(cx))
 }
@@ -99,22 +104,25 @@ fn shortcuts() -> Vec<(&'static str, SharedString)> {
         .collect()
 }
 
-/// The commands whose label answers to `query`, in menu order.
+/// The positions of the commands whose label answers to `query`.
 ///
 /// Every word of the query has to appear somewhere in the label, in any order:
 /// `add set` finds `File ▸ Add to project ▸ The settings` without asking anyone
 /// to remember which menu holds what. That is the whole point of a palette.
-pub fn filter(commands: Vec<Command>, query: &str) -> Vec<Command> {
+///
+/// Positions and not the commands themselves, so the list can be built once
+/// when the palette opens and only narrowed as the query changes — a `Command`
+/// carries a boxed action and is not worth rebuilding per keystroke.
+pub fn matching(commands: &[Command], query: &str) -> Vec<usize> {
     let words: Vec<String> = query.split_whitespace().map(fold).filter(|w| !w.is_empty()).collect();
-    if words.is_empty() {
-        return commands;
-    }
     commands
-        .into_iter()
-        .filter(|command| {
+        .iter()
+        .enumerate()
+        .filter(|(_, command)| {
             let label = fold(&command.label);
             words.iter().all(|word| label.contains(word.as_str()))
         })
+        .map(|(index, _)| index)
         .collect()
 }
 

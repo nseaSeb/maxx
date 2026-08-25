@@ -173,14 +173,22 @@ impl Workspace {
                             .flex_1()
                             .text_xs()
                             .text_color(theme::text_muted())
-                            .child("EXPLORATEUR"),
+                            .child(crate::tr("explorer.title")),
                     )
-                    .child(panel_icon("panel-new-view", "＋", "Nouvelle vue", cx, |this, cx| {
-                        this.new_view(cx)
-                    }))
-                    .child(panel_icon("panel-delete", "🗑", "Supprimer", cx, |this, cx| {
-                        this.delete_selected_entry(cx)
-                    })),
+                    .child(panel_icon(
+                        "panel-new-view",
+                        "＋",
+                        "explorer.new_view",
+                        cx,
+                        |this, cx| this.new_view(cx),
+                    ))
+                    .child(panel_icon(
+                        "panel-delete",
+                        "🗑",
+                        "explorer.delete",
+                        cx,
+                        |this, cx| this.delete_selected_entry(cx),
+                    )),
             )
             .child(
                 uniform_list(
@@ -360,6 +368,7 @@ pub fn unregister_view(root: &std::path::Path, module: &str) {
 fn panel_icon(
     id: &'static str,
     glyph: &'static str,
+    // Clé de traduction, pas le texte.
     tooltip: &'static str,
     cx: &mut Context<Workspace>,
     action: impl Fn(&mut Workspace, &mut Context<Workspace>) + 'static,
@@ -376,7 +385,9 @@ fn panel_icon(
         .cursor_pointer()
         .text_color(theme::text_muted())
         .hover(|this| this.bg(theme::hover_bg()))
-        .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tooltip).build(window, cx))
+        .tooltip(move |window, cx| {
+            gpui_component::tooltip::Tooltip::new(crate::tr(tooltip)).build(window, cx)
+        })
         .child(glyph)
         .on_click(cx.listener(move |this, _, _window, cx| action(this, cx)))
 }

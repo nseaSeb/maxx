@@ -52,6 +52,7 @@ const NAMESPACES: &[&str] = &[
     "context",
     "designer",
     "error",
+    "explorer",
     "menu",
     "palette",
     "message",
@@ -138,4 +139,76 @@ fn no_translation_is_left_unused() {
     let orphelines: Vec<String> =
         catalogue().into_keys().filter(|key| !used.contains_key(key)).collect();
     assert!(orphelines.is_empty(), "clés sans emploi :\n{}", orphelines.join("\n"));
+}
+
+/// Les fichiers d'interface ne portent plus de texte français en dur.
+///
+/// C'est la moitié du travail qu'un test peut faire : une chaîne oubliée reste
+/// dans une seule langue quoi que l'utilisateur choisisse, et rien à la
+/// compilation ne s'en émeut. Le pluriel des accents suffit à les trouver — le
+/// français en met partout, l'anglais nulle part.
+#[test]
+fn no_french_text_is_left_in_the_interface() {
+    // Un nom de langue s'écrit dans sa propre langue : « Français » est la
+    // bonne réponse dans les deux locales, pas une chaîne oubliée.
+    const ALLOWED: &[&str] = &["Français"];
+
+    let mut found = Vec::new();
+    for directory in ["src", "src/workspace"] {
+        let Ok(entries) = std::fs::read_dir(racine().join(directory)) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_none_or(|extension| extension != "rs") {
+                continue;
+            }
+            let Ok(source) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            let name = path.strip_prefix(racine()).unwrap_or(&path).display().to_string();
+            let mut rest = source.as_str();
+            while let Some(open) = rest.find('"') {
+                rest = &rest[open + 1..];
+                let Some(close) = rest.find('"') else { break };
+                let value = &rest[..close];
+                rest = &rest[close + 1..];
+                if !ALLOWED.contains(&value)
+                    && value.chars().any(|c| "éèêëàâçùûôîïœÉÈÀÇ".contains(c))
+                {
+                    found.push(format!("{name} : {value:?}"));
+                }
+            }
+        }
+    }
+    assert!(found.is_empty(), "texte français en dur :\n{}", found.join("\n"));
+}
+
+/// Une fonction qui prend une clé la traduit, plutôt que de l'afficher.
+///
+/// L'autre moitié, et la plus vicieuse : `section_title` a reçu des clés à la
+/// place de son texte sans que rien ne change de type, et chaque titre de
+/// section a affiché « designer.properties » pendant un lot entier. La
+/// compilation ne bronche pas, `no_french_text_is_left_in_the_interface` non
+/// plus, et la clé est bien dans `app.yml` — seul l'œil sur l'écran l'attrape,
+/// ou ceci.
+#[test]
+fn a_helper_that_takes_a_key_translates_it() {
+    let helpers = [
+        ("src/designer.rs", "fn section_title("),
+        ("src/designer.rs", "fn menu_button("),
+        ("src/workspace/explorer.rs", "fn panel_icon("),
+        ("src/preferences.rs", "fn action_button("),
+    ];
+    for (file, signature) in helpers {
+        let source = std::fs::read_to_string(racine().join(file)).expect(file);
+        let start = source.find(signature).unwrap_or_else(|| panic!("{file} : {signature}"));
+        let end =
+            source[start..].find("\n}\n").map(|offset| start + offset).unwrap_or(source.len());
+        let body = &source[start..end];
+        assert!(
+            body.contains("crate::tr("),
+            "{file} : {signature} prend une clé et ne la traduit pas :\n{body}"
+        );
+    }
 }

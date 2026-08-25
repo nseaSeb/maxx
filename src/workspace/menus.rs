@@ -183,7 +183,7 @@ impl Workspace {
     pub fn open_menu_bar(&mut self, cx: &mut Context<Self>) {
         self.preferences = false;
         let Some(project) = self.project.as_ref() else {
-            self.message = Some(SharedString::from("aucun projet ouvert"));
+            self.message = Some(crate::tr("message.no_project"));
             cx.notify();
             return;
         };
@@ -217,13 +217,13 @@ impl Workspace {
     /// `main.rs` unwired.
     pub fn remove_menu_bar(&mut self, cx: &mut Context<Self>) {
         let Some(project) = self.project.as_ref() else {
-            self.message = Some(SharedString::from("aucun projet ouvert"));
+            self.message = Some(crate::tr("message.no_project"));
             cx.notify();
             return;
         };
         let path = project.root.join("src/menus.rs");
         if !path.exists() {
-            self.message = Some(SharedString::from("ce projet n'a pas de barre de menus"));
+            self.message = Some(crate::tr("message.no_menu_bar"));
             cx.notify();
             return;
         }
@@ -258,7 +258,7 @@ impl Workspace {
         } else {
             ItemDef::Action {
                 label: crate::tr("menu.new_entry_label").to_string(),
-                action: "MonAction".into(),
+                action: "MyAction".into(),
                 os_action: None,
                 shortcut: None,
             }
@@ -338,7 +338,7 @@ impl Workspace {
             cx.notify();
             return;
         }
-        menus.add_item(ItemDef::Submenu(crate::menu_model::MenuDef::named("Sous-menu")));
+        menus.add_item(ItemDef::Submenu(crate::menu_model::MenuDef::named("Submenu")));
         cx.notify();
     }
 

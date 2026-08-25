@@ -78,7 +78,7 @@ impl Workspace {
         for prop in crate::registry::props(spec) {
             if !matches!(
                 prop.kind,
-                Kind::Text | Kind::Field | Kind::Handler | Kind::Number | Kind::Color
+                Kind::Text | Kind::Field | Kind::Handler | Kind::Number | Kind::Color | Kind::Ratio
             ) || !crate::registry::editable(&node, prop)
             {
                 continue;
@@ -166,7 +166,7 @@ impl Workspace {
         };
         let name = state.read(cx).value().trim().to_string();
         if name.is_empty() {
-            self.message = Some(SharedString::from("donnez un nom au champ"));
+            self.message = Some(crate::tr("message.name_the_field"));
             cx.notify();
             return;
         }
@@ -224,7 +224,7 @@ impl Workspace {
         match path {
             Some(path) => crate::tools::open_in_editor(cx, &path, None),
             None => {
-                self.message = Some(SharedString::from("aucun projet ouvert"));
+                self.message = Some(crate::tr("message.no_project"));
                 cx.notify();
             }
         }
@@ -337,7 +337,7 @@ impl Workspace {
             }
             crate::registry::write(node, prop, value);
         }
-        self.message = crate::registry::validate(prop, value).map(SharedString::from);
+        self.message = crate::registry::validate(prop, value).map(crate::tr);
         cx.notify();
     }
 

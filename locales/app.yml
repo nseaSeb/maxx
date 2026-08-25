@@ -107,6 +107,9 @@ designer.opaque:
 designer.open_a_view:
   en: "Open a view from src/ui/ to draw it"
   fr: "Ouvrez une vue de src/ui/ pour la dessiner"
+designer.open_in:
+  en: "→ %{editor}"
+  fr: "→ %{editor}"
 designer.order:
   en: "Order"
   fr: "Ordre"
@@ -200,6 +203,15 @@ error.rustfmt:
 error.trash_refused:
   en: "move to the trash refused: %{error}"
   fr: "déplacement vers la corbeille refusé : %{error}"
+explorer.delete:
+  en: "Delete"
+  fr: "Supprimer"
+explorer.new_view:
+  en: "New view"
+  fr: "Nouvelle vue"
+explorer.title:
+  en: "EXPLORER"
+  fr: "EXPLORATEUR"
 menu.about:
   en: "About maxx"
   fr: "À propos de maxx"
@@ -458,9 +470,15 @@ message.modules_up_to_date:
 message.modules_updated:
   en: "updated: %{modules}"
   fr: "mis à jour : %{modules}"
+message.name_the_field:
+  en: "give the field a name"
+  fr: "donnez un nom au champ"
 message.no_action:
   en: "no action on this node"
   fr: "aucune action sur ce nœud"
+message.no_menu_bar:
+  en: "this project has no menu bar"
+  fr: "ce projet n'a pas de barre de menus"
 message.no_project:
   en: "no project open"
   fr: "aucun projet ouvert"
@@ -737,6 +755,9 @@ prop.weight:
 prop.width:
   en: "Width"
   fr: "Largeur"
+run.close:
+  en: "Close"
+  fr: "Fermer"
 run.failed:
   en: "failed"
   fr: "échec"
@@ -770,6 +791,9 @@ status.changed_outside:
 status.items:
   en: "%{name} · %{count} items"
   fr: "%{name} · %{count} éléments"
+status.menus:
+  en: "%{name}%{dirty} · %{count} menus"
+  fr: "%{name}%{dirty} · %{count} menus"
 status.no_project:
   en: "No project"
   fr: "Aucun projet"
@@ -785,6 +809,12 @@ tools.automatic_none:
 tools.the_editor:
   en: "the editor"
   fr: "l'éditeur"
+welcome.hint:
+  en: "Open a folder to begin."
+  fr: "Ouvrez un dossier pour commencer."
+welcome.open_folder:
+  en: "Open a folder…"
+  fr: "Ouvrir un dossier…"
 welcome.recent:
   en: "Recent projects"
   fr: "Projets récents"
