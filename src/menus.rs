@@ -77,6 +77,7 @@ pub fn app_menus(cx: &App) -> Vec<Menu> {
                     items: vec![
                         MenuItem::action("La barre de menus", OpenMenuBar),
                         MenuItem::action("Le module système", AddSystemModule),
+                        MenuItem::action("Les réglages", AddSettingsModule),
                     ],
                 }),
                 MenuItem::separator(),

@@ -506,6 +506,410 @@ fn date_civile(jours: i64) -> (i64, u32, u32) {
     .to_string()
 }
 
+/// Adds the settings module to an existing project, with what it needs.
+///
+/// Pulls the system module in with it: the settings need to know where this
+/// system puts an application's files, and that is exactly what `systeme.rs`
+/// answers. And declares `serde` and `serde_json_lenient`, both already
+/// compiled in the tree through gpui, so the build does not grow.
+pub fn add_settings_module(root: &Path) -> io::Result<()> {
+    add_system_module(root)?;
+    add_dependencies(
+        root,
+        &[
+            ("serde", "{ version = \"1\", features = [\"derive\"] }"),
+            ("serde_json_lenient", "\"0.2\""),
+        ],
+    )?;
+
+    let main_path = root.join("src/main.rs");
+    let source = std::fs::read_to_string(&main_path)?;
+    let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
+    if !lines.iter().any(|line| line.trim() == "mod reglages;") {
+        lines.insert(header_end(&lines), "mod reglages;".into());
+    }
+
+    let path = root.join("src/reglages.rs");
+    if !path.exists() {
+        std::fs::write(&path, settings_rs())?;
+    }
+
+    let mut out = lines.join("\n");
+    out.push('\n');
+    std::fs::write(&main_path, out)
+}
+
+/// Declares crates in the project's `Cargo.toml`, under `[dependencies]`.
+///
+/// Textual, like everything else maxx adds: the file is the developer's, and
+/// rewriting it from a template would throw away whatever they put in it.
+fn add_dependencies(root: &Path, crates: &[(&str, &str)]) -> io::Result<()> {
+    let path = root.join("Cargo.toml");
+    let source = std::fs::read_to_string(&path)?;
+    let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
+
+    let Some(section) = lines.iter().position(|line| line.trim() == "[dependencies]") else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Cargo.toml : pas de section [dependencies]",
+        ));
+    };
+    // The end of the section, not the end of the file: a `[profile]` block
+    // after it must stay after it.
+    let end = lines[section + 1..]
+        .iter()
+        .position(|line| line.trim_start().starts_with('['))
+        .map(|offset| section + 1 + offset)
+        .unwrap_or(lines.len());
+
+    let mut inserted = 0;
+    for (name, requirement) in crates {
+        let declared = lines[section + 1..end].iter().any(|line| {
+            line.split('=')
+                .next()
+                .is_some_and(|left| left.trim() == *name)
+        });
+        if declared {
+            continue;
+        }
+        lines.insert(end + inserted, format!("{name} = {requirement}"));
+        inserted += 1;
+    }
+    if inserted == 0 {
+        return Ok(());
+    }
+
+    let ending = if source.contains("\r\n") { "\r\n" } else { "\n" };
+    let mut out = lines.join(ending);
+    out.push_str(ending);
+    std::fs::write(&path, out)
+}
+
+/// The settings module of a generated project.
+///
+/// The same discipline maxx applies to its own: JSON with comments, only the
+/// changed key rewritten, a documented default file. It is a copy, and a copy
+/// is a debt — a defect found on one side has to be carried to the other.
+fn settings_rs() -> String {
+    r##"//! Les réglages de l'application : ce qu'elle retient d'un lancement à l'autre.
+//!
+//! Écrit par maxx, à vous ensuite. Ajoutez vos champs à `Reglages`, une ligne
+//! dans `defauts_documentes`, et c'est tout.
+//!
+//! Du JSON à commentaires, parce qu'un fichier qu'on invite l'utilisateur à
+//! ouvrir doit accepter d'être annoté — et **seule la clé qui change est
+//! réécrite**. Vos commentaires et votre mise en forme survivent à un
+//! enregistrement, ce qu'une sérialisation de la structure entière ne permet
+//! jamais.
+//!
+//! Le principe de lecture : un fichier absent, partiel ou abîmé n'est jamais
+//! pire que pas de fichier. `serde(default)` fait retomber une clé manquante
+//! sur son défaut plutôt que d'échouer la lecture entière, et un fichier
+//! illisible est signalé puis laissé intact — l'écraser perdrait ce que
+//! l'utilisateur était en train d'y écrire.
+
+#![allow(dead_code)]
+
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+/// Ce que l'application retient. Ajoutez vos champs ici.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Reglages {
+    /// Exemple : à remplacer par les vôtres.
+    pub theme_sombre: bool,
+    /// Exemple : à remplacer par les vôtres.
+    pub taille_du_texte: f32,
+}
+
+impl Default for Reglages {
+    fn default() -> Self {
+        Self {
+            theme_sombre: true,
+            taille_du_texte: 14.0,
+        }
+    }
+}
+
+/// Le nom du dossier de l'application, sous le répertoire de configuration.
+const APPLICATION: &str = env!("CARGO_PKG_NAME");
+
+/// Où vit le fichier.
+pub fn chemin() -> Option<PathBuf> {
+    crate::systeme::config_dir(APPLICATION).map(|dossier| dossier.join("reglages.json"))
+}
+
+/// Lit les réglages, en tolérant les commentaires et les virgules finales.
+pub fn charger() -> Reglages {
+    let Some(chemin) = chemin() else {
+        return Reglages::default();
+    };
+    let Ok(source) = std::fs::read_to_string(&chemin) else {
+        return Reglages::default();
+    };
+    match serde_json_lenient::from_str_lenient(&source) {
+        Ok(reglages) => reglages,
+        Err(erreur) => {
+            eprintln!("{} illisible : {erreur}", chemin.display());
+            Reglages::default()
+        }
+    }
+}
+
+/// Écrit les réglages en ne touchant que les clés dont la valeur a changé.
+pub fn enregistrer(reglages: &Reglages) -> std::io::Result<()> {
+    let Some(chemin) = chemin() else {
+        return Ok(());
+    };
+    let source = match std::fs::read_to_string(&chemin) {
+        Ok(source) if source.contains('{') => source,
+        Ok(_) => defauts_documentes(),
+        Err(erreur) if erreur.kind() == std::io::ErrorKind::NotFound => defauts_documentes(),
+        // Illisible pour une autre raison — une permission, un incident : écrire
+        // remplacerait ce que l'utilisateur a écrit par les défauts, ce qui est
+        // le seul résultat pire que ne pas enregistrer.
+        Err(erreur) => return Err(erreur),
+    };
+    crate::systeme::write_atomically(&chemin, &rustiner(&source, reglages))
+}
+
+/// Le fichier écrit quand il n'y en a pas : chaque clé, son défaut, et une
+/// ligne qui dit ce qu'elle fait. Le fichier est sa propre documentation.
+pub fn defauts_documentes() -> String {
+    let defauts = Reglages::default();
+    format!(
+        r#"// Réglages de {APPLICATION}.
+//
+// Ce fichier est à vous. L'application ne réécrit que la clé qu'elle change :
+// vos commentaires et votre mise en forme restent en place. Les commentaires et
+// les virgules finales sont acceptés à la lecture.
+{{
+  // Exemple : à remplacer par les vôtres.
+  "theme_sombre": {},
+
+  // Exemple : à remplacer par les vôtres.
+  "taille_du_texte": {}
+}}
+"#,
+        defauts.theme_sombre, defauts.taille_du_texte
+    )
+}
+
+/// Écrit chaque clé de `reglages` dans `source`, en changeant le moins d'octets
+/// possible.
+pub fn rustiner(source: &str, reglages: &Reglages) -> String {
+    let Ok(serde_json_lenient::Value::Object(valeurs)) = serde_json_lenient::to_value(reglages)
+    else {
+        return source.to_string();
+    };
+
+    let mut sortie = source.to_string();
+    for (cle, valeur) in valeurs {
+        let rendue = valeur.to_string();
+        sortie = match remplacer(&sortie, &cle, &rendue) {
+            Some(rustinee) => rustinee,
+            None => ajouter(&sortie, &cle, &rendue),
+        };
+    }
+    sortie
+}
+
+/// Remplace la valeur d'une clé de premier niveau, en gardant tout le reste.
+///
+/// Répond `None` quand la clé n'y est pas, ce qui dit à l'appelant de
+/// l'ajouter.
+fn remplacer(source: &str, cle: &str, valeur: &str) -> Option<String> {
+    let (membre, _) = parcourir(source, cle);
+    let membre = membre?;
+    Some(format!(
+        "{}{valeur}{}",
+        &source[..membre.start],
+        &source[membre.end..]
+    ))
+}
+
+/// Ajoute une clé juste après l'accolade ouvrante.
+///
+/// Après l'ouvrante et non avant la fermante : la dernière chose d'un objet est
+/// très souvent un commentaire, et une virgule ajoutée là se retrouverait
+/// commentée — deux membres sans séparateur, fichier invalide.
+fn ajouter(source: &str, cle: &str, valeur: &str) -> String {
+    let (_, position) = parcourir(source, cle);
+    let Some(position) = position else {
+        return format!("{{\n  \"{cle}\": {valeur}\n}}\n");
+    };
+
+    let octets = source.as_bytes();
+    let suivant = sauter_le_vide(octets, position);
+    let vide = suivant >= octets.len() || octets[suivant] == b'}';
+    let separateur = if vide { "" } else { "," };
+
+    format!(
+        "{}\n  \"{cle}\": {valeur}{separateur}{}",
+        &source[..position],
+        &source[position..]
+    )
+}
+
+/// Parcourt les membres de l'objet de premier niveau.
+///
+/// Répond l'étendue de la valeur de `cle` si elle y est, et l'endroit où une
+/// nouvelle clé peut être insérée.
+fn parcourir(source: &str, cle: &str) -> (Option<std::ops::Range<usize>>, Option<usize>) {
+    let octets = source.as_bytes();
+    // Pas `find('{')` : le fichier commence par un bloc de commentaires, et une
+    // accolade écrite dedans ancrerait tout le parcours dans le commentaire.
+    let accolade = sauter_le_vide(octets, 0);
+    if accolade >= octets.len() || octets[accolade] != b'{' {
+        return (None, None);
+    }
+    let apres = accolade + 1;
+
+    let attendu = format!("\"{cle}\"");
+    let mut index = sauter_le_vide(octets, apres);
+    while index < octets.len() && octets[index] != b'}' {
+        if octets[index] != b'"' {
+            break;
+        }
+        let fin_du_nom = fin_de_chaine(octets, index);
+        let trouve = source[index..fin_du_nom] == attendu;
+
+        let deux_points = sauter_le_vide(octets, fin_du_nom);
+        if deux_points >= octets.len() || octets[deux_points] != b':' {
+            break;
+        }
+        let debut = sauter_le_vide(octets, deux_points + 1);
+        let fin = fin_de_valeur(octets, debut);
+        if trouve {
+            return (Some(debut..fin), Some(apres));
+        }
+
+        index = sauter_le_vide(octets, fin);
+        if index < octets.len() && octets[index] == b',' {
+            index = sauter_le_vide(octets, index + 1);
+        }
+    }
+
+    (None, Some(apres))
+}
+
+/// Saute les espaces et les commentaires.
+///
+/// Un commentaire n'est pas du JSON, et le parcours doit l'enjamber sans lire
+/// comme structure une accolade, un guillemet ou un deux-points écrits dedans.
+/// Un seul guillemet impair dans un commentaire laisserait sinon le balayage
+/// « dans une chaîne » jusqu'à la fin du fichier.
+fn sauter_le_vide(octets: &[u8], mut index: usize) -> usize {
+    loop {
+        while index < octets.len() && octets[index].is_ascii_whitespace() {
+            index += 1;
+        }
+        if octets[index..].starts_with(b"//") {
+            while index < octets.len() && octets[index] != b'\n' {
+                index += 1;
+            }
+            continue;
+        }
+        if octets[index..].starts_with(b"/*") {
+            index += 2;
+            while index + 1 < octets.len() && !(octets[index] == b'*' && octets[index + 1] == b'/') {
+                index += 1;
+            }
+            index = (index + 2).min(octets.len());
+            continue;
+        }
+        return index;
+    }
+}
+
+/// L'index juste après la chaîne dont le guillemet ouvrant est à `index`.
+fn fin_de_chaine(octets: &[u8], index: usize) -> usize {
+    let mut index = index + 1;
+    while index < octets.len() {
+        match octets[index] {
+            b'\\' => index += 2,
+            b'"' => return index + 1,
+            _ => index += 1,
+        }
+    }
+    octets.len()
+}
+
+/// L'index juste après la valeur JSON qui commence à `index`.
+fn fin_de_valeur(octets: &[u8], index: usize) -> usize {
+    if index >= octets.len() {
+        return octets.len();
+    }
+    match octets[index] {
+        b'"' => fin_de_chaine(octets, index),
+        ouvrant @ (b'[' | b'{') => {
+            let fermant = if ouvrant == b'[' { b']' } else { b'}' };
+            let mut profondeur = 0usize;
+            let mut index = index;
+            while index < octets.len() {
+                index = sauter_le_vide(octets, index);
+                if index >= octets.len() {
+                    break;
+                }
+                match octets[index] {
+                    b'"' => {
+                        index = fin_de_chaine(octets, index);
+                        continue;
+                    }
+                    octet if octet == ouvrant => profondeur += 1,
+                    octet if octet == fermant => {
+                        profondeur -= 1;
+                        if profondeur == 0 {
+                            return index + 1;
+                        }
+                    }
+                    _ => {}
+                }
+                index += 1;
+            }
+            octets.len()
+        }
+        // Un nombre, `true`, `false` ou `null` : la valeur s'arrête au premier
+        // caractère qui ne peut en faire partie — un séparateur, une espace, ou
+        // le début d'un commentaire.
+        _ => {
+            let mut index = index;
+            while index < octets.len() {
+                let octet = octets[index];
+                if octet.is_ascii_whitespace()
+                    || matches!(octet, b',' | b'}' | b']')
+                    || octets[index..].starts_with(b"//")
+                    || octets[index..].starts_with(b"/*")
+                {
+                    break;
+                }
+                index += 1;
+            }
+            index
+        }
+    }
+}
+
+/// Le chemin d'un fichier, tel quel : pratique pour l'afficher dans un écran de
+/// réglages, ou pour l'ouvrir dans l'éditeur de l'utilisateur.
+pub fn chemin_affichable() -> String {
+    chemin()
+        .map(|chemin| chemin.display().to_string())
+        .unwrap_or_else(|| "emplacement introuvable sur ce système".into())
+}
+
+/// Pour les tests : lit un fichier donné plutôt que celui de l'application.
+pub fn charger_depuis(chemin: &Path) -> Reglages {
+    let Ok(source) = std::fs::read_to_string(chemin) else {
+        return Reglages::default();
+    };
+    serde_json_lenient::from_str_lenient(&source).unwrap_or_default()
+}
+"##.to_string()
+}
+
 /// The menu bar of a generated project.
 ///
 /// A GPUI application gets no menu bar of its own — not even a Quit — unless it

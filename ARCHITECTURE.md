@@ -234,9 +234,12 @@ essayé à la main que sur macOS.
 
 ## Ce que maxx ajoute à un projet
 
-Trois choses s'ajoutent à un projet existant, par insertion textuelle et jamais
-par réécriture depuis le gabarit : une vue, la barre de menus, le module
-système. Le projet peut être antérieur à maxx et faire autre chose au
+Quatre choses s'ajoutent à un projet existant, par insertion textuelle et
+jamais par réécriture depuis le gabarit : une vue, la barre de menus, le module
+système, les réglages. Ce dernier tire le module système avec lui et déclare
+deux crates dans le `Cargo.toml` du projet — insérées dans la section des
+dépendances, pas à la fin du fichier, pour qu'un bloc `[profile]` reste après
+elles. Le projet peut être antérieur à maxx et faire autre chose au
 démarrage — il doit le garder.
 
 Le module système mérite sa règle : il ne contient que ce qui diffère d'un
@@ -250,6 +253,12 @@ une troisième fois.
 Symétrie nécessaire : supprimer `src/<module>.rs` depuis l'explorateur retire
 sa ligne `mod` de `main.rs`. Sans quoi supprimer un fichier casse la
 compilation, ce qui est l'inverse du but.
+
+**Une copie est une dette**, et il faut la nommer : le module système et les
+réglages reprennent du code que maxx a écrit pour lui-même. Un défaut trouvé
+d'un côté doit être porté de l'autre. C'est déjà arrivé — la fiche
+`.trashinfo`, non conforme dans les deux à la fois. Le prix est assumé, un
+projet généré ne devant rien à maxx, mais il se paie à chaque correction.
 
 ## La démo comme référence
 

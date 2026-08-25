@@ -24,6 +24,7 @@ actions!(
         NewProject,
         NewView,
         AddSystemModule,
+        AddSettingsModule,
         NoRecentProject,
         ClearRecentProjects,
         OpenFolder,
@@ -199,6 +200,9 @@ pub fn register_handlers(cx: &mut App) {
     });
     cx.on_action(|_: &AddSystemModule, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.add_system_module(cx));
+    });
+    cx.on_action(|_: &AddSettingsModule, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.add_settings_module(cx));
     });
     cx.on_action(|_: &OpenPreferences, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.toggle_preferences(cx));

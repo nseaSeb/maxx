@@ -1039,3 +1039,39 @@ fn the_shared_target_dir_survives_being_written_into_toml() {
         maxx::run::shared_target_dir()
     );
 }
+
+#[test]
+fn the_settings_module_brings_what_it_needs() {
+    let root = scratch("maxx_settings_module_test");
+    scaffold::create_project(&root, "essai").expect("le projet doit être créé");
+
+    scaffold::add_settings_module(&root).expect("les réglages doivent être ajoutés");
+
+    // Il tire le module système avec lui : il a besoin de savoir où ce système
+    // range les fichiers d'une application.
+    assert!(root.join("src/systeme.rs").exists());
+    assert!(root.join("src/reglages.rs").exists());
+
+    let main_rs = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    assert!(main_rs.contains("mod systeme;"), "{main_rs}");
+    assert!(main_rs.contains("mod reglages;"), "{main_rs}");
+
+    // Les deux crates sont déclarées, dans la section des dépendances et pas
+    // après le bloc [profile].
+    let cargo = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
+    let parsed: toml::Value = toml::from_str(&cargo).expect("Cargo.toml doit rester du TOML");
+    assert!(parsed["dependencies"].get("serde").is_some(), "{cargo}");
+    assert!(parsed["dependencies"].get("serde_json_lenient").is_some(), "{cargo}");
+    assert!(parsed.get("profile").is_some(), "le bloc profile doit survivre : {cargo}");
+
+    // Deux fois de suite ne duplique rien.
+    scaffold::add_settings_module(&root).expect("la seconde fois ne doit rien casser");
+    let cargo = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
+    assert_eq!(cargo.matches("serde_json_lenient").count(), 1, "{cargo}");
+    let main_rs = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    assert_eq!(main_rs.matches("mod reglages;").count(), 1, "{main_rs}");
+
+    // Il ne doit rien devoir à maxx.
+    let body = std::fs::read_to_string(root.join("src/reglages.rs")).unwrap();
+    assert!(!body.contains("maxx::"), "les réglages ne doivent rien devoir à maxx");
+}

@@ -67,6 +67,16 @@ Ce qui reste, et qui ne se règle pas au clavier :
   installé mais sans commande sur le `PATH` reste invisible : Linux devrait lire
   les `.desktop` de `/usr/share/applications`, Windows la base de registre.
 
+## Le code ajouté aux projets
+
+Le module système et les réglages sont des copies de ce que maxx a écrit pour
+lui-même : un défaut corrigé d'un côté doit être porté de l'autre, à la main.
+La fiche `.trashinfo` non conforme l'a déjà été. Deux façons d'en sortir un
+jour, aucune gratuite : extraire un crate que les projets générés
+dépendraient — ce qui casse la promesse « rien ne doit à maxx » —, ou faire
+générer le gabarit depuis le code de maxx, ce qui demande que les deux soient
+écrits pour ça.
+
 ## Réglages
 
 Trois choses distinctes, dans cet ordre de dépendance.

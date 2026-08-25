@@ -574,17 +574,37 @@ impl Workspace {
     /// write a third time. Copied source, not a dependency: a generated
     /// project owes nothing to maxx.
     pub fn add_system_module(&mut self, cx: &mut Context<Self>) {
+        self.add_module(
+            "systeme",
+            crate::scaffold::add_system_module,
+            "module système ajouté au projet et déclaré dans main.rs",
+            cx,
+        );
+    }
+
+    /// Copies a module into the project, declares it, and points at it.
+    ///
+    /// Shared by the modules maxx knows how to add, so they all leave the
+    /// window in the same state — no menu editor left in front of a file that
+    /// was just written, and no unsaved menu edits dropped on the way.
+    fn add_module(
+        &mut self,
+        module: &str,
+        add: fn(&std::path::Path) -> std::io::Result<()>,
+        added: &'static str,
+        cx: &mut Context<Self>,
+    ) {
         let Some(project) = self.project.as_ref() else {
             self.message = Some(SharedString::from("aucun projet ouvert"));
             cx.notify();
             return;
         };
         let root = project.root.clone();
-        let path = root.join("src/systeme.rs");
-        let main_path = root.join("src/main.rs");
+        let path = root.join(format!("src/{module}.rs"));
+        let declaration = format!("mod {module};");
         let had_file = path.exists();
-        let had_declaration = std::fs::read_to_string(&main_path)
-            .is_ok_and(|source| source.lines().any(|line| line.trim() == "mod systeme;"));
+        let had_declaration = std::fs::read_to_string(root.join("src/main.rs"))
+            .is_ok_and(|source| source.lines().any(|line| line.trim() == declaration));
 
         // Unsaved menu edits come first: this leaves the menu editor, and
         // dropping them silently would be the worst way to add a file.
@@ -592,7 +612,7 @@ impl Workspace {
             return;
         }
 
-        if let Err(error) = crate::scaffold::add_system_module(&root) {
+        if let Err(error) = add(&root) {
             self.message = Some(SharedString::from(error.to_string()));
             cx.notify();
             return;
@@ -604,13 +624,29 @@ impl Workspace {
         self.refresh_entries();
         self.selected = Some(path);
         self.message = Some(SharedString::from(match (had_file, had_declaration) {
-            (true, true) => "src/systeme.rs est déjà là",
+            (true, true) => format!("src/{module}.rs est déjà là"),
             // The file was there but nothing declared it — which is exactly
             // the state a half-finished delete leaves behind.
-            (true, false) => "src/systeme.rs était là, il est maintenant déclaré dans main.rs",
-            _ => "module système ajouté au projet et déclaré dans main.rs",
+            (true, false) => {
+                format!("src/{module}.rs était là, il est maintenant déclaré dans main.rs")
+            }
+            _ => added.to_string(),
         }));
         cx.notify();
+    }
+
+    /// Copies the settings module into the project.
+    ///
+    /// It brings the system module with it, and declares two crates in the
+    /// project's `Cargo.toml` — both already compiled in the tree through
+    /// gpui, so nothing gets slower.
+    pub fn add_settings_module(&mut self, cx: &mut Context<Self>) {
+        self.add_module(
+            "reglages",
+            crate::scaffold::add_settings_module,
+            "réglages ajoutés au projet, avec le module système et leurs deux crates",
+            cx,
+        );
     }
 
     /// Shows the preferences, or leaves them when they are already up.

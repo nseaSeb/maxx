@@ -110,6 +110,27 @@ bouton `→ Zed` à côté de la propriété Action ouvre l'éditeur sur la lign
 méthode. Et il ne faut pas oublier `cx.notify()` — sans lui le champ change et
 l'écran ne bouge pas.
 
+## Ce qu'on ajoute à un projet
+
+`Fichier > Ajouter au projet` copie du code dans le projet et le déclare. Du
+code, pas une dépendance à maxx : ce qui est copié vous appartient.
+
+- **La barre de menus** — `src/menus.rs`, éditable ensuite dans maxx.
+- **Le module système** — `src/systeme.rs`.
+- **Les réglages** — `src/reglages.rs`, qui tire le module système avec lui.
+
+### Les réglages
+
+La même discipline que maxx applique aux siens : du JSON à commentaires, un
+fichier de défauts documenté écrit au premier lancement, et **seule la clé qui
+change est réécrite** — vos commentaires et votre mise en forme survivent. Un
+fichier absent, partiel ou abîmé ne fait jamais planter le démarrage.
+
+Ajoutez vos champs à `Reglages`, une ligne dans `defauts_documentes`, et c'est
+tout. Deux crates sont déclarées au passage, `serde` et `serde_json_lenient` ;
+toutes deux sont déjà compilées dans l'arbre par gpui, donc le build ne
+s'allonge pas.
+
 ## Le module système
 
 `Fichier > Ajouter au projet > Le module système` copie `src/systeme.rs` dans le
