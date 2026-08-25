@@ -544,3 +544,23 @@ fn binding() -> &'static maxx::registry::Prop {
     let spec = maxx::registry::by_id("input").unwrap();
     spec.props.iter().find(|prop| prop.label == "Champ lié").unwrap()
 }
+
+/// La recherche du catalogue répond au libellé, à l'identifiant, et aux accents.
+#[test]
+fn the_palette_search_forgives_the_accents() {
+    let label = maxx::registry::by_id("label").unwrap();
+    let divider = maxx::registry::by_id("divider").unwrap();
+
+    // Une recherche vide ne cache rien.
+    assert!(maxx::designer::matches_query(label, ""));
+
+    // Le libellé, quelle que soit la casse et les accents : personne ne tape
+    // « Étiquette » avec son accent dans une boîte de recherche.
+    assert!(maxx::designer::matches_query(label, "Étiquette"));
+    assert!(maxx::designer::matches_query(label, "etiquette"));
+    assert!(maxx::designer::matches_query(divider, "separateur"));
+
+    // L'identifiant aussi : c'est ce que tape qui a lu le code généré.
+    assert!(maxx::designer::matches_query(label, "label"));
+    assert!(!maxx::designer::matches_query(label, "bouton"));
+}

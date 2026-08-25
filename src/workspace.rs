@@ -166,6 +166,8 @@ pub struct Workspace {
     run_task: Option<Task<()>>,
     /// Name box of the state panel.
     state_name_input: Option<Entity<InputState>>,
+    /// Search box of the component palette.
+    palette_filter: Option<Entity<InputState>>,
     /// Index into `view::STATE_TYPES` for the field about to be added.
     state_type: usize,
     /// The tree as it was when the focused inspector field was entered, and
@@ -218,6 +220,7 @@ impl Workspace {
             run_pid: None,
             run_task: None,
             state_name_input: None,
+            palette_filter: None,
             state_type: 0,
             edit_snapshot: None,
             conflicts: HashSet::new(),

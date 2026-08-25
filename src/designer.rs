@@ -735,8 +735,29 @@ impl Workspace {
 
     /// The component palette. Clicking inserts into the selected container.
     fn render_palette(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex().child(section_title("Composants")).children(registry::CATALOGUE.iter().map(
-            |spec| {
+        let query = self
+            .palette_filter()
+            .map(|filter| filter.read(cx).value().to_string())
+            .unwrap_or_default();
+        let matching: Vec<_> =
+            registry::CATALOGUE.iter().filter(|spec| matches_query(spec, &query)).collect();
+
+        v_flex()
+            .child(section_title("Composants"))
+            .when_some(self.palette_filter().cloned(), |this, filter| {
+                this.child(div().px_3().pb_1().child(Input::new(&filter).small()))
+            })
+            .when(matching.is_empty(), |this| {
+                this.child(
+                    div()
+                        .px_3()
+                        .py_1()
+                        .text_xs()
+                        .text_color(rgb(theme::TEXT_MUTED))
+                        .child("aucun composant de ce nom"),
+                )
+            })
+            .children(matching.into_iter().map(|spec| {
                 div()
                     .id(SharedString::from(format!("palette-{}", spec.id)))
                     .px_3()
@@ -750,9 +771,38 @@ impl Workspace {
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.insert_component(spec.id, cx);
                     }))
-            },
-        ))
+            }))
     }
+}
+
+/// Whether a catalogue entry answers to what was typed in the search box.
+///
+/// The id is searched as well as the label: `input` finds the text field
+/// whatever the interface's language, which is what someone who has read the
+/// generated code will type.
+pub fn matches_query(spec: &registry::Spec, query: &str) -> bool {
+    let query = fold(query);
+    query.is_empty() || fold(spec.label).contains(&query) || spec.id.contains(&query)
+}
+
+/// Lowercase, and without the accents.
+///
+/// Someone looking for « Étiquette » types `etiquette`: a search that answers
+/// only to the exact spelling is a search nobody uses twice.
+fn fold(value: &str) -> String {
+    value
+        .to_lowercase()
+        .chars()
+        .map(|character| match character {
+            'á'..='å' | 'à' => 'a',
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            'í' | 'ì' | 'î' | 'ï' => 'i',
+            'ó' | 'ò' | 'ô' | 'ö' | 'õ' => 'o',
+            'ú' | 'ù' | 'û' | 'ü' => 'u',
+            'ç' => 'c',
+            other => other,
+        })
+        .collect()
 }
 
 /// What is being dragged across the canvas.

@@ -49,6 +49,16 @@ Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
 
 ## Confort
 
+- ~~Recherche dans le catalogue~~ — faite, une boîte au-dessus de la palette.
+  Elle cherche dans le libellé *et* dans l'identifiant : `input` trouve le champ
+  texte quelle que soit la langue de l'interface, ce que tape qui a lu le code
+  généré. Et elle ignore les accents — personne ne tape « Étiquette » avec son
+  accent dans une boîte de recherche.
+
+  Le champ est construit avant le retour anticipé de `sync_prop_inputs`, parce
+  qu'il ne dépend pas de la sélection et qu'une fenêtre sans vue ouverte montre
+  quand même la palette.
+
 - ~~Copier, coller, dupliquer un nœud~~ — faits. `⌘D` duplique, `⌘⌥C` et `⌘⌥V`
   copient et collent. Pas `⌘C` / `⌘V` : ils appartiennent aux champs texte de
   l'inspecteur, et les leur reprendre casserait la saisie.

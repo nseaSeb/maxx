@@ -42,6 +42,15 @@ impl Workspace {
     /// changed. Called once per frame from `render`, which is the only place
     /// holding both `&mut self` and a `Window`.
     pub(super) fn sync_prop_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Built before the early return: the palette's search box does not
+        // depend on the selection, and a workspace with no view open still
+        // shows the palette.
+        if self.palette_filter.is_none() {
+            let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Chercher"));
+            cx.subscribe(&filter, |_, _, _: &InputEvent, cx| cx.notify()).detach();
+            self.palette_filter = Some(filter);
+        }
+
         let key = self.view().map(|view| (self.revision, view.selected.clone()));
         if key == self.synced {
             return;
@@ -183,6 +192,11 @@ impl Workspace {
     /// The field-name box of the state panel.
     pub(crate) fn state_name_input(&self) -> Option<&Entity<InputState>> {
         self.state_name_input.as_ref()
+    }
+
+    /// The palette's search box.
+    pub(crate) fn palette_filter(&self) -> Option<&Entity<InputState>> {
+        self.palette_filter.as_ref()
     }
 
     /// Which kind of field the state panel will add.
