@@ -49,6 +49,17 @@ Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
 
 ## Confort
 
+- ~~Palette de commandes `⌘K`~~ — faite, et sans liste à elle : `palette::flatten`
+  aplatit ce que `menus::app_menus` renvoie déjà. Une commande ajoutée au menu y
+  apparaît sans qu'on y touche, dans la langue de l'interface, avec son
+  raccourci relu depuis `actions::key_bindings`. Écrire une seconde liste à côté
+  aurait fait deux endroits à tenir à jour, et le second aurait pris du retard.
+
+  `escape`, `↑` et `↓` sont liées au contexte clavier « Palette » et non
+  globalement — les prendre partout les aurait reprises au reste de l'interface.
+  L'aplatissement est séparé de `commands(cx)` pour être vérifiable sans `App` :
+  la feature `test-support` de gpui n'a pas à entrer dans le build pour ça.
+
 - ~~Recherche dans le catalogue~~ — faite, une boîte au-dessus de la palette.
   Elle cherche dans le libellé *et* dans l'identifiant : `input` trouve le champ
   texte quelle que soit la langue de l'interface, ce que tape qui a lu le code

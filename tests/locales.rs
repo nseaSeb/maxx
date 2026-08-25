@@ -53,6 +53,7 @@ const NAMESPACES: &[&str] = &[
     "designer",
     "error",
     "menu",
+    "palette",
     "message",
     "prefs",
     "prop",

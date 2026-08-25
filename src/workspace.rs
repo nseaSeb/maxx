@@ -6,6 +6,7 @@ mod explorer;
 mod inspector;
 mod menus;
 mod modules;
+mod palette;
 mod process;
 mod views;
 
@@ -170,6 +171,10 @@ pub struct Workspace {
     state_name_input: Option<Entity<InputState>>,
     /// Search box of the component palette.
     palette_filter: Option<Entity<InputState>>,
+    /// The command palette's box, while it is open.
+    command_input: Option<Entity<InputState>>,
+    /// Which line of the command palette is highlighted.
+    command_index: usize,
     /// Index into `view::STATE_TYPES` for the field about to be added.
     state_type: usize,
     /// The tree as it was when the focused inspector field was entered, and
@@ -222,6 +227,8 @@ impl Workspace {
             run_task: None,
             state_name_input: None,
             palette_filter: None,
+            command_input: None,
+            command_index: 0,
             state_type: 0,
             edit_snapshot: None,
             conflicts: HashSet::new(),

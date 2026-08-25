@@ -1,5 +1,8 @@
 //! The window's own furniture: titlebar, welcome screen, status bar, [`Render`].
 
+use gpui_component::input::Input;
+use gpui_component::{h_flex, v_flex};
+
 use super::*;
 
 impl Workspace {
@@ -308,6 +311,7 @@ impl Render for Workspace {
             )
             .when(visible.show_output, |this| this.child(self.render_output(cx)))
             .when(visible.show_status_bar, |this| this.child(self.render_status_bar()))
+            .children(self.render_command_palette(cx))
     }
 }
 
@@ -319,4 +323,94 @@ impl Render for Workspace {
 /// floor, and the content follows the handle.
 pub fn fillable(content: impl IntoElement) -> impl IntoElement {
     div().flex().size_full().min_w(px(0.)).overflow_hidden().child(content)
+}
+
+impl Workspace {
+    /// The command palette, when it is open.
+    ///
+    /// Drawn over everything rather than beside it, and anchored near the top:
+    /// a palette that pushes the window's contents around costs a reflow every
+    /// time it opens, and lands where the eye is not.
+    ///
+    /// The `key_context` is what makes `escape`, `up` and `down` mean something
+    /// here and nothing anywhere else — the keymap binds them to that name.
+    pub(crate) fn render_command_palette(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let input = self.command_input()?.clone();
+        let commands = self.palette_commands(cx);
+        let selected = self.command_index();
+
+        // Ramassées plutôt que paresseuses : la fermeture porterait `cx`, dont
+        // la palette a encore besoin pour ses propres écouteurs.
+        let rows: Vec<_> = commands
+            .into_iter()
+            .enumerate()
+            .map(|(index, command)| {
+                h_flex()
+                    .id(SharedString::from(format!("command-{index}")))
+                    .items_center()
+                    .justify_between()
+                    .gap_4()
+                    .px_3()
+                    .py_1()
+                    .rounded_sm()
+                    .cursor_pointer()
+                    .when(index == selected, |this| this.bg(rgb(theme::SELECTED_BG)))
+                    .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                    .child(div().flex_1().child(command.label))
+                    .when_some(command.shortcut, |this, keys| {
+                        this.child(div().text_xs().text_color(rgb(theme::TEXT_MUTED)).child(keys))
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.command_index = index;
+                        this.run_palette(cx);
+                    }))
+                    .into_any_element()
+            })
+            .collect();
+
+        Some(
+            div()
+                .key_context("Palette")
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+                .flex()
+                .justify_center()
+                // Un clic à côté referme, comme partout ailleurs. Sans cela, la
+                // seule sortie serait `escape`, qui ne se devine pas.
+                .on_mouse_down_out(cx.listener(|this, _, _, cx| this.close_palette(cx)))
+                .child(
+                    v_flex()
+                        .mt(px(80.))
+                        .w(px(560.))
+                        .max_h(px(420.))
+                        .overflow_hidden()
+                        .rounded_md()
+                        .border_1()
+                        .border_color(rgb(theme::BORDER))
+                        .bg(rgb(theme::PANEL_BG))
+                        .child(div().p_2().child(Input::new(&input)))
+                        .when(rows.is_empty(), |this| {
+                            this.child(
+                                div()
+                                    .px_3()
+                                    .pb_2()
+                                    .text_xs()
+                                    .text_color(rgb(theme::TEXT_MUTED))
+                                    .child(crate::tr("palette.nothing")),
+                            )
+                        })
+                        .child(
+                            v_flex()
+                                .id("command-list")
+                                .flex_1()
+                                .overflow_y_scroll()
+                                .pb_2()
+                                .children(rows),
+                        ),
+                )
+                .into_any_element(),
+        )
+    }
 }

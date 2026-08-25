@@ -515,6 +515,12 @@ message.view_unsaved_close:
 message.view_unsaved_close_project:
   en: "view not saved — ⌘S before closing the project"
   fr: "vue non enregistrée — ⌘S avant de fermer le projet"
+palette.hint:
+  en: "Search a command"
+  fr: "Chercher une commande"
+palette.nothing:
+  en: "no command by that name"
+  fr: "aucune commande de ce nom"
 prefs.appearance:
   en: "Appearance"
   fr: "Apparence"

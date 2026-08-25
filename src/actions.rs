@@ -44,6 +44,10 @@ actions!(
         Copy,
         Paste,
         SelectAll,
+        TogglePalette,
+        PaletteUp,
+        PaletteDown,
+        PaletteClose,
         DuplicateNode,
         CopyNode,
         PasteNode,
@@ -139,6 +143,18 @@ pub fn register_handlers(cx: &mut App) {
     });
     cx.on_action(|_: &Save, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.save_view(cx));
+    });
+    cx.on_action(|_: &TogglePalette, cx: &mut App| {
+        with_active_workspace(cx, |workspace, window, cx| workspace.toggle_palette(window, cx));
+    });
+    cx.on_action(|_: &PaletteUp, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.move_palette(false, cx));
+    });
+    cx.on_action(|_: &PaletteDown, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.move_palette(true, cx));
+    });
+    cx.on_action(|_: &PaletteClose, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.close_palette(cx));
     });
     cx.on_action(|_: &DuplicateNode, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.duplicate_selected(cx));
@@ -281,6 +297,12 @@ pub fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-shift-r", ReloadView, None),
         KeyBinding::new("cmd-ctrl-up", MoveMenuUp, None),
         KeyBinding::new("cmd-ctrl-down", MoveMenuDown, None),
+        KeyBinding::new("cmd-k", TogglePalette, None),
+        // Ces trois-là ne valent que dans la palette : `escape`, `up` et `down`
+        // pris globalement seraient repris à tout le reste de l'interface.
+        KeyBinding::new("escape", PaletteClose, Some("Palette")),
+        KeyBinding::new("up", PaletteUp, Some("Palette")),
+        KeyBinding::new("down", PaletteDown, Some("Palette")),
         KeyBinding::new("cmd-d", DuplicateNode, None),
         KeyBinding::new("cmd-alt-c", CopyNode, None),
         KeyBinding::new("cmd-alt-v", PasteNode, None),

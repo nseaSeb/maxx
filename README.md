@@ -62,6 +62,11 @@ panel.
 What `⌘⌥C` puts on the clipboard is Rust, not a format of maxx's own: a subtree
 copied here pastes into Zed, and an expression written there pastes back.
 
+`⌘K` opens the command palette. It has no list of its own — it *is* the menu
+bar, flattened, with the path that leads to each command and the keystroke it
+answers to, both read back rather than written a second time. Type words in any
+order: `settings add` finds `File ▸ Add to project ▸ The settings`.
+
 ## Language
 
 The interface is English by default and French is bundled; `⌘,` has the choice,

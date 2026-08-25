@@ -9,6 +9,7 @@ pub mod menu_model;
 pub mod menufile;
 pub mod menus;
 pub mod model;
+pub mod palette;
 pub mod parser;
 pub mod preferences;
 pub mod project;

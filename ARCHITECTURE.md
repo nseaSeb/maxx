@@ -47,6 +47,7 @@ parseur servent à garantir.
 | `tools.rs` | le catalogue des éditeurs et des terminaux, leur détection |
 | `run.rs` | tout ce qui suppose un système : `cargo`, terminal, éditeur, corbeille |
 | `theme.rs` | la palette, en `const` |
+| `palette.rs` | la palette ⌘K : la barre de menus, aplatie |
 | `locales/app.yml` | les traductions, une entrée par clé |
 
 ## Le cycle d'une vue

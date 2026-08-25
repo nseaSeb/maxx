@@ -532,3 +532,78 @@ fn a_drop_into_a_submenu_below_the_source_aims_true() {
     assert!(sous_b.items.is_empty(), "et pas dans le suivant");
     assert_eq!(menus.selected, Some(Selection::SubItem(0, 0, 0)));
 }
+
+/// La palette aplatit la barre de menus, et laisse de côté ce qui n'est pas une
+/// commande.
+///
+/// Elle n'a pas de liste à elle : c'est la barre de menus, aplatie. Ce test est
+/// ce qui tient la promesse — une commande ajoutée au menu y apparaît sans
+/// qu'on y touche, et une entrée qui n'est pas une commande n'y apparaît pas.
+#[test]
+fn the_palette_is_the_menu_bar_flattened() {
+    use gpui::{Menu, MenuItem};
+
+    let barre = vec![Menu {
+        name: "Fichier".into(),
+        items: vec![
+            MenuItem::action("Enregistrer", maxx::actions::Save),
+            MenuItem::separator(),
+            MenuItem::os_submenu("Services", gpui::SystemMenuType::Services),
+            MenuItem::action("Aucun projet récent", maxx::actions::NoRecentProject),
+            MenuItem::submenu(Menu {
+                name: "Ajouter au projet".into(),
+                items: vec![MenuItem::action("Les réglages", maxx::actions::AddSettingsModule)],
+            }),
+        ],
+    }];
+
+    let commandes = maxx::palette::flatten(barre);
+    let libellés: Vec<String> = commandes.iter().map(|c| c.label.to_string()).collect();
+
+    // Le séparateur et le menu du système ne sont pas des commandes ; le
+    // place-tenant des projets récents ne se lance pas.
+    assert_eq!(commandes.len(), 2, "{libellés:?}");
+
+    // Chaque ligne porte le chemin qui y mène, sans quoi deux « Ajouter » de
+    // menus différents seraient la même ligne.
+    assert_eq!(libellés[0], "Fichier ▸ Enregistrer");
+    assert_eq!(libellés[1], "Fichier ▸ Ajouter au projet ▸ Les réglages");
+
+    // Et le raccourci vient du clavier de maxx, pas d'une seconde table.
+    let raccourci = commandes[0].shortcut.as_ref().map(|keys| keys.to_string());
+    assert_eq!(raccourci.as_deref(), Some("⌘S"), "{raccourci:?}");
+    assert!(commandes[1].shortcut.is_none(), "cette entrée n'a pas de raccourci");
+}
+
+/// La recherche de la palette prend les mots dans n'importe quel ordre.
+#[test]
+fn the_palette_search_takes_words_in_any_order() {
+    use gpui::{Menu, MenuItem};
+
+    let barre = || {
+        vec![Menu {
+            name: "Fichier".into(),
+            items: vec![
+                MenuItem::action("Enregistrer", maxx::actions::Save),
+                MenuItem::submenu(Menu {
+                    name: "Ajouter au projet".into(),
+                    items: vec![MenuItem::action("Les réglages", maxx::actions::AddSettingsModule)],
+                }),
+            ],
+        }]
+    };
+    let cherche = |query: &str| -> Vec<String> {
+        maxx::palette::filter(maxx::palette::flatten(barre()), query)
+            .into_iter()
+            .map(|command| command.label.to_string())
+            .collect()
+    };
+
+    assert_eq!(cherche("").len(), 2, "une requête vide ne cache rien");
+
+    // Deux mots séparés par un menu entier, dans le désordre, et sans accent.
+    let trouvé = cherche("reglages ajouter");
+    assert_eq!(trouvé, vec!["Fichier ▸ Ajouter au projet ▸ Les réglages"], "{trouvé:?}");
+
+    assert!(cherche("zzzz").is_empty());
+}
