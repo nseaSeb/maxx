@@ -120,15 +120,11 @@ jobs:
   demo:
     name: la démo compile
     runs-on: macos-latest
-    # La démo ne bouge que quand les gabarits ou elle-même bougent : la
-    # reconstruire à chaque poussée coûterait 750 crates pour rien.
-    if: >-
-      github.event_name != 'push' ||
-      contains(join(github.event.commits.*.modified, ','), 'demo/') ||
-      contains(join(github.event.commits.*.added, ','), 'demo/') ||
-      contains(join(github.event.commits.*.modified, ','), 'src/scaffold.rs') ||
-      contains(join(github.event.commits.*.modified, ','), 'src/codegen.rs') ||
-      contains(join(github.event.commits.*.modified, ','), 'src/parser.rs')
+    # Le filtre par fichier touché a été retiré : `github.event.commits.*.modified`
+    # est un tableau de tableaux, et le `join` par-dessus ne donne pas ce qu'on
+    # croit — la démo a été sautée sur une poussée qui modifiait pourtant
+    # src/scaffold.rs. Un travail qui se saute quand il devrait tourner est pire
+    # qu'un travail qui tourne pour rien, surtout à deux minutes avec le cache.
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
