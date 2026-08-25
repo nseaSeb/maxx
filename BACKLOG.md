@@ -4,10 +4,13 @@ Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
 
 ## Composants
 
-- **Liste déroulante.** `Select` réclame un délégué et une entité d'état par
-  nœud, comme `Input` : il ne rentre pas dans une entrée de catalogue statique.
-  À faire avec la machinerie d'insertion de champs déjà écrite pour le champ
-  texte (`view::ensure_input_field`).
+- ~~Liste déroulante~~ — faite. Elle a demandé de généraliser la machinerie du
+  champ texte plutôt que de la copier : une entrée du catalogue porte
+  maintenant un `StateSpec` optionnel, et `view::ensure_state_field` sert les
+  deux. Ce qui reste de ce côté : le contenu de la liste est écrit dans
+  l'initialiseur, donc dans le code que vous éditez à la main. maxx pose deux
+  entrées pour que quelque chose s'affiche et ne prétend pas gérer la source
+  des données — un jour, peut-être, une propriété « Éléments ».
 
 ## Menus
 

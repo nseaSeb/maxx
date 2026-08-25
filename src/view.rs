@@ -116,11 +116,15 @@ impl View {
         fields
     }
 
-    /// The fields that can back a text input.
-    pub fn input_state_fields(&self) -> Vec<String> {
+    /// The fields that can back a component needing `ty`.
+    ///
+    /// Filtered on the type: a dropdown cannot be bound to the field of a text
+    /// input, and proposing it would be proposing something that will not
+    /// compile.
+    pub fn state_fields_of_type(&self, ty: &str) -> Vec<String> {
         self.state_fields()
             .into_iter()
-            .filter(|field| field.ty == "Entity<InputState>")
+            .filter(|field| field.ty == ty)
             .map(|field| field.name)
             .collect()
     }
@@ -236,8 +240,8 @@ impl View {
 
         let mut source = parser::splice(&self.source, &block).map_err(|error| error.to_string())?;
         source = ensure_imports(source, &registry::imports(&self.root));
-        for field in input_fields(&self.root) {
-            source = ensure_input_field(source, &field);
+        for (field, state) in state_fields_needed(&self.root) {
+            source = ensure_state_field(source, &field, &state);
         }
         for handler in registry::handlers(&self.root) {
             source = ensure_handler(source, &handler);
@@ -338,12 +342,12 @@ fn use_statements(source: &str) -> Vec<String> {
 }
 
 /// Field names referenced by `Input::new(&self.<field>)` in the tree.
-fn input_fields(root: &Node) -> Vec<String> {
-    let mut fields = Vec::new();
+fn state_fields_needed(root: &Node) -> Vec<(String, registry::StateSpec)> {
+    let mut fields: Vec<(String, registry::StateSpec)> = Vec::new();
     root.walk(&mut |_, node| {
-        if node.base.path() != Some("Input::new") {
+        let Some(state) = registry::of(node).and_then(|spec| spec.state) else {
             return;
-        }
+        };
         let Base::Known { args, .. } = &node.base else {
             return;
         };
@@ -355,32 +359,25 @@ fn input_fields(root: &Node) -> Vec<String> {
             // as it stands and would not compile.
             && name.chars().next().is_some_and(|first| first == '_' || first.is_alphabetic())
             && name.chars().all(|character| character == '_' || character.is_alphanumeric())
-            && !fields.contains(&name)
+            && !fields.iter().any(|(existing, _)| *existing == name)
         {
-            fields.push(name);
+            fields.push((name, state));
         }
     });
     fields
 }
 
-/// Makes sure the view struct carries `<field>: Entity<InputState>` and builds
-/// it in `new`.
+/// Makes sure the view struct carries `<field>: <type>` and builds it in `new`.
 ///
 /// Only the two anchors are touched. If either is missing — a hand-restructured
 /// file — nothing is inserted and the developer gets a plain compile error
 /// naming the field, which is more useful than a mangled file.
-fn ensure_input_field(source: String, field: &str) -> String {
-    if source.contains(&format!("{field}: Entity<InputState>")) {
+fn ensure_state_field(source: String, field: &str, state: &registry::StateSpec) -> String {
+    if source.contains(&format!("{field}: {}", state.ty)) {
         return source;
     }
 
-    let mut source = ensure_imports(
-        source,
-        &[
-            "use gpui::Entity;",
-            "use gpui_component::input::InputState;",
-        ],
-    );
+    let mut source = ensure_imports(source, state.imports);
 
     let Some(type_name) = view_type_name(&source) else {
         return source;
@@ -395,13 +392,12 @@ fn ensure_input_field(source: String, field: &str) -> String {
     };
 
     if let Some(brace) = struct_brace(&source, &type_name) {
-        let declaration = format!("    pub {field}: Entity<InputState>,\n");
+        let declaration = format!("    pub {field}: {},\n", state.ty);
         source = insert_into_block(source, brace, &declaration);
     }
 
     if let Some(brace) = self_brace(&source, &type_name) {
-        let initializer =
-            format!("            {field}: cx.new(|cx| InputState::new(window, cx)),\n");
+        let initializer = format!("            {field}: {},\n", state.initializer);
         source = insert_into_block(source, brace, &initializer);
         // The template's `new` ignores its arguments; the field needs them.
         source = source.replace(

@@ -320,6 +320,13 @@ silencieuse.
 ## Où brancher quoi
 
 - **Un composant de plus** : `registry.rs`, une entrée. Rien d'autre à toucher.
+  S'il a besoin d'une entité que la vue possède — un champ texte, une liste
+  déroulante — l'entrée porte en plus un `StateSpec` : le type du champ, ses
+  imports, et l'expression que `new` lui donne. C'est tout ce que `view::save`
+  a besoin de savoir pour déclarer le champ et l'initialiser, et la liste des
+  champs proposés dans l'inspecteur est filtrée sur ce type — proposer le champ
+  d'un champ texte à une liste déroulante serait proposer ce qui ne compile
+  pas.
 - **Un réglage de plus** : un champ dans `settings::Preferences` avec son
   défaut, une ligne dans `documented_defaults`, puis un `SettingItem` dans
   `preferences.rs`. Le champ lit et écrit les réglages, il ne copie rien.

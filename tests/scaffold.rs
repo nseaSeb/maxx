@@ -1075,3 +1075,48 @@ fn the_settings_module_brings_what_it_needs() {
     let body = std::fs::read_to_string(root.join("src/reglages.rs")).unwrap();
     assert!(!body.contains("maxx::"), "les réglages ne doivent rien devoir à maxx");
 }
+
+#[test]
+fn a_dropdown_declares_the_field_it_needs() {
+    let root = scratch("maxx_select_field");
+    scaffold::create_project(&root, "essai").expect("le projet doit être créé");
+    let path = root.join("src/ui/accueil.rs");
+
+    let mut view = View::load(&path).expect("la vue doit se relire");
+    let select = maxx::registry::by_id("select").expect("la liste déroulante doit être au catalogue");
+    view.root
+        .children
+        .push(maxx::registry::instantiate("select").unwrap());
+
+    // Lier le champ, comme le fait l'inspecteur.
+    let index = view.root.children.len() - 1;
+    let prop = select
+        .props
+        .iter()
+        .find(|prop| prop.label == "Champ lié")
+        .unwrap();
+    maxx::registry::write_binding(&mut view.root.children[index], prop, Some("&self.pays"));
+    view.save().expect("la vue doit s'enregistrer");
+
+    let source = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        source.contains("pub pays: Entity<SelectState<SearchableVec<SharedString>>>,"),
+        "{source}"
+    );
+    assert!(source.contains("SelectState::new("), "{source}");
+    assert!(source.contains("use gpui_component::select::{SearchableVec, SelectState};"), "{source}");
+    assert!(source.contains("use gpui_component::select::Select;"), "{source}");
+    // `new` prend ses arguments : le gabarit les ignorait.
+    assert!(source.contains("pub fn new(window: &mut Window, cx: &mut Context<Self>)"), "{source}");
+
+    // Et une seconde liste ne redéclare pas le même champ.
+    let mut view = View::load(&path).expect("la vue doit se relire");
+    view.root
+        .children
+        .push(maxx::registry::instantiate("select").unwrap());
+    let index = view.root.children.len() - 1;
+    maxx::registry::write_binding(&mut view.root.children[index], prop, Some("&self.pays"));
+    view.save().expect("la vue doit s'enregistrer");
+    let source = std::fs::read_to_string(&path).unwrap();
+    assert_eq!(source.matches("pub pays:").count(), 1, "{source}");
+}

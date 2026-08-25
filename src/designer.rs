@@ -481,7 +481,7 @@ impl Workspace {
             // The state panel knows which fields can back an input; making the
             // name be typed again when the answer is on screen is the tool
             // contradicting itself.
-            Kind::Field if !self.input_fields().is_empty() => {
+            Kind::Field if !self.state_fields().is_empty() => {
                 let current = current.clone();
                 row.child(
                     div()

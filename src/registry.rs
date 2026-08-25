@@ -69,6 +69,24 @@ pub struct Spec {
     pub default_args: &'static [&'static str],
     /// Properties the inspector exposes.
     pub props: &'static [Prop],
+    /// The field this component needs on the view, when it needs one.
+    ///
+    /// A text input and a dropdown are not values but entities the view owns:
+    /// they cannot be written as an expression in the region, only bound to a
+    /// field that `new` builds. This is what tells `view::save` which field to
+    /// declare, and with what.
+    pub state: Option<StateSpec>,
+}
+
+/// The field a stateful component binds to.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StateSpec {
+    /// The declared type, verbatim.
+    pub ty: &'static str,
+    /// The `use` lines the field itself needs, beyond the component's own.
+    pub imports: &'static [&'static str],
+    /// The expression `new` initializes it with.
+    pub initializer: &'static str,
 }
 
 const GAPS: &[&str] = &["gap_0", "gap_1", "gap_2", "gap_3", "gap_4", "gap_6", "gap_8"];
@@ -111,6 +129,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "Alignement", target: Target::Family(ALIGNS), kind: Kind::Choice },
             Prop { label: "Élastique", target: Target::Flag("flex_1"), kind: Kind::Bool },
         ],
+        state: None,
     },
     Spec {
         id: "row",
@@ -125,6 +144,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "Alignement", target: Target::Family(ALIGNS), kind: Kind::Choice },
             Prop { label: "Élastique", target: Target::Flag("flex_1"), kind: Kind::Bool },
         ],
+        state: None,
     },
     Spec {
         id: "label",
@@ -134,6 +154,7 @@ pub const CATALOGUE: &[Spec] = &[
         container: false,
         default_args: &["Étiquette"],
         props: &[Prop { label: "Texte", target: Target::BaseArg(0), kind: Kind::Text }],
+        state: None,
     },
     Spec {
         id: "input",
@@ -143,6 +164,33 @@ pub const CATALOGUE: &[Spec] = &[
         container: false,
         default_args: &[],
         props: &[Prop { label: "Champ lié", target: Target::BaseArg(0), kind: Kind::Field }],
+        state: Some(StateSpec {
+            ty: "Entity<InputState>",
+            imports: &["use gpui::Entity;", "use gpui_component::input::InputState;"],
+            initializer: "cx.new(|cx| InputState::new(window, cx))",
+        }),
+    },
+    Spec {
+        id: "select",
+        label: "Liste déroulante",
+        base: "Select::new",
+        import: "use gpui_component::select::Select;",
+        container: false,
+        default_args: &[],
+        props: &[Prop { label: "Champ lié", target: Target::BaseArg(0), kind: Kind::Field }],
+        // Le contenu de la liste est dans l'initialiseur, donc dans le code que
+        // vous éditez à la main : maxx pose deux entrées pour que quelque chose
+        // s'affiche, et ne prétend pas gérer la source des données.
+        state: Some(StateSpec {
+            ty: "Entity<SelectState<SearchableVec<SharedString>>>",
+            imports: &[
+                "use gpui::Entity;",
+                "use gpui::SharedString;",
+                "use gpui_component::IndexPath;",
+                "use gpui_component::select::{SearchableVec, SelectState};",
+            ],
+            initializer: "cx.new(|cx| {\n                SelectState::new(\n                    SearchableVec::new(vec![\n                        SharedString::from(\"Premier\"),\n                        SharedString::from(\"Second\"),\n                    ]),\n                    Some(IndexPath::new(0)),\n                    window,\n                    cx,\n                )\n            })",
+        }),
     },
     Spec {
         id: "button",
@@ -159,6 +207,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "Désactivé", target: Target::Method("disabled"), kind: Kind::Bool },
             Prop { label: "Action", target: Target::Method("on_click"), kind: Kind::Handler },
         ],
+        state: None,
     },
     Spec {
         id: "checkbox",
@@ -172,6 +221,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text },
             Prop { label: "Cochée", target: Target::Method("checked"), kind: Kind::Bool },
         ],
+        state: None,
     },
     Spec {
         id: "switch",
@@ -185,6 +235,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text },
             Prop { label: "Activé", target: Target::Method("checked"), kind: Kind::Bool },
         ],
+        state: None,
     },
     Spec {
         id: "group_box",
@@ -194,6 +245,7 @@ pub const CATALOGUE: &[Spec] = &[
         container: true,
         default_args: &[],
         props: &[Prop { label: "Titre", target: Target::Method("title"), kind: Kind::Text }],
+        state: None,
     },
     Spec {
         id: "divider",
@@ -203,6 +255,7 @@ pub const CATALOGUE: &[Spec] = &[
         container: false,
         default_args: &[],
         props: &[Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text }],
+        state: None,
     },
     Spec {
         id: "spacer",
@@ -212,6 +265,7 @@ pub const CATALOGUE: &[Spec] = &[
         container: false,
         default_args: &[],
         props: &[Prop { label: "Élastique", target: Target::Flag("flex_1"), kind: Kind::Bool }],
+        state: None,
     },
 ];
 

@@ -101,6 +101,10 @@ la fait lire un champ de la vue à la place :
 Label::new("Titre")                 →   Label::new(self.titre.clone())
 ```
 
+La liste déroulante marche pareil : elle est liée à un champ de la vue, que
+maxx déclare et initialise avec deux entrées d'exemple. Ce que la liste contient
+est du code ordinaire, à vous.
+
 Les champs se déclarent dans la section « État », qui les insère dans la struct
 et dans `new`. Un `usize` ou un `f32` est rendu par `.to_string()`, un
 `SharedString` par `.clone()`.

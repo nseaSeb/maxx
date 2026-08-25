@@ -406,11 +406,23 @@ impl Workspace {
         }
     }
 
-    /// The fields of the view able to back a text input.
-    pub(crate) fn input_fields(&self) -> Vec<String> {
-        self.view()
-            .map(|view| view.input_state_fields())
-            .unwrap_or_default()
+    /// The fields of the view able to back the selected component.
+    ///
+    /// Filtered on the type the component needs: offering the field of a text
+    /// input to a dropdown would be offering something that will not compile.
+    pub(crate) fn state_fields(&self) -> Vec<String> {
+        let Some(view) = self.view() else {
+            return Vec::new();
+        };
+        let Some(state) = view
+            .root
+            .at(&view.selected)
+            .and_then(registry::of)
+            .and_then(|spec| spec.state)
+        else {
+            return Vec::new();
+        };
+        view.state_fields_of_type(state.ty)
     }
 
     /// The inspector field bound to `prop`, if it has been built.
@@ -1083,10 +1095,10 @@ impl Workspace {
         prop: &'static crate::registry::Prop,
         cx: &mut Context<Self>,
     ) {
+        let fields = self.state_fields();
         let Some(view) = self.view() else {
             return;
         };
-        let fields = view.input_state_fields();
         if fields.is_empty() {
             return;
         }
