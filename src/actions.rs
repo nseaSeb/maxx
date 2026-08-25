@@ -213,7 +213,7 @@ pub fn register_handlers(cx: &mut App) {
 
     cx.on_action(|_: &OpenTerminal, cx: &mut App| {
         if let Some(path) = active_workspace_path(cx) {
-            crate::run::open_terminal(&path);
+            crate::tools::open_terminal(cx, &path);
         }
     });
     cx.on_action(|_: &OpenInZed, cx: &mut App| {
@@ -221,7 +221,7 @@ pub fn register_handlers(cx: &mut App) {
     });
     cx.on_action(|_: &OpenProjectInZed, cx: &mut App| {
         if let Some(path) = active_workspace_path(cx) {
-            crate::run::open_editor(&path);
+            crate::tools::open_in_editor(cx, &path, None);
         }
     });
     cx.on_action(|_: &Minimize, cx: &mut App| {

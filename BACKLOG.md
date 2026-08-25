@@ -134,28 +134,19 @@ Le second suppose le premier.
 
 ## Choisir son éditeur et son terminal
 
-`open_editor` essaie `zed` puis `open -a Zed`, `open_terminal` essaie Ghostty
-puis Terminal : deux chaînes en dur, sans recours si l'utilisateur tient à
-autre chose. À remplacer par une détection, une liste, et un choix rangé dans
-les réglages de maxx.
+Fait : `src/tools.rs` tient le catalogue, la détection et la table des syntaxes
+d'ouverture à une ligne ; l'écran de préférences en propose le choix, et la
+barre de menus comme le bouton de l'inspecteur nomment l'éditeur retenu.
 
-La détection, par système : sur macOS, balayage de `/Applications` plus les
-binaires sur le `PATH` ; sur Linux, les fichiers `.desktop` de
-`/usr/share/applications` ; sur Windows, la base de registre. Et partout, en
-dernier recours, `$VISUAL`, `$EDITOR`, `$TERMINAL`, qui coûtent une ligne et
-couvrent le cas de celui qui sait ce qu'il veut.
+Ce qui reste de ce côté :
 
-Le vrai travail n'est pas la détection mais `open_editor_at` : ouvrir un
-fichier *à une ligne* a une syntaxe par éditeur — `zed fichier:ligne`,
-`code -g fichier:ligne`, `subl fichier:ligne`, `nvim +ligne fichier`,
-`idea --line N fichier`. C'est une table, pas une heuristique, et c'est elle
-qui fait vivre le bouton `→ Zed` de l'inspecteur — dont le libellé devra
-suivre l'éditeur choisi.
-
-Piège à ne pas manquer : `hx`, `nvim`, `vim`, `emacs -nw` sont des éditeurs de
-terminal. « Ouvrir dedans » veut dire lancer le terminal choisi qui lance
-l'éditeur — les deux réglages ne sont pas indépendants.
-
-Relevé sur la machine de développement, à titre d'exemple de ce qu'une
-détection trouve : applications Zed et Xcode, terminaux Ghostty et Terminal,
-binaires `zed`, `hx`, `nvim`, `vim`.
+- **La détection hors macOS.** Aujourd'hui : la commande sur le `PATH` partout,
+  plus le paquet `/Applications` sur macOS. Linux devrait lire les `.desktop`
+  de `/usr/share/applications`, Windows la base de registre — sans quoi un
+  éditeur installé mais absent du `PATH` reste invisible.
+- **Un éditeur hors catalogue.** Le champ n'accepte que ce que la table
+  connaît. Une entrée libre — commande plus forme de l'argument de ligne —
+  couvrirait le reste du monde.
+- **Terminal.app ne sait pas recevoir de commande** autrement que par
+  AppleScript, donc un éditeur de terminal n'y démarre pas. maxx le dit au lieu
+  de faire semblant.

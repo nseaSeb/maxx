@@ -38,6 +38,10 @@ pub struct Preferences {
     pub show_status_bar: bool,
     /// Whether the output panel is shown.
     pub show_output: bool,
+    /// Which editor files are handed to, or `auto`.
+    pub editor: String,
+    /// Which terminal is opened, or `auto`.
+    pub terminal: String,
 }
 
 impl Default for Preferences {
@@ -46,6 +50,8 @@ impl Default for Preferences {
             show_project_panel: true,
             show_status_bar: true,
             show_output: false,
+            editor: crate::tools::AUTOMATIC.into(),
+            terminal: crate::tools::AUTOMATIC.into(),
         }
     }
 }
@@ -188,10 +194,20 @@ pub fn documented_defaults() -> String {
   "show_status_bar": {},
 
   // Ce que cargo écrit pendant un lancement. ⌘J le bascule.
-  "show_output": {}
+  "show_output": {},
+
+  // L'éditeur qui reçoit les fichiers, et le terminal qui s'ouvre sur le
+  // projet. « auto » prend le premier installé — pour l'éditeur, $VISUAL et
+  // $EDITOR passent d'abord. Les valeurs possibles sont listées dans le schéma.
+  "editor": "{}",
+  "terminal": "{}"
 }}
 "#,
-        defaults.show_project_panel, defaults.show_status_bar, defaults.show_output
+        defaults.show_project_panel,
+        defaults.show_status_bar,
+        defaults.show_output,
+        defaults.editor,
+        defaults.terminal
     )
 }
 

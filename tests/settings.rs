@@ -16,7 +16,9 @@ fn writing_a_key_leaves_every_other_byte_alone() {
   "show_project_panel": true,
 
   "show_status_bar": true,
-  "show_output": false
+  "show_output": false,
+  "editor": "auto",
+  "terminal": "auto"
 }
 "#;
 
@@ -246,6 +248,7 @@ fn a_hand_written_file_with_every_trap_at_once_survives() {
         show_project_panel: false,
         show_status_bar: false,
         show_output: true,
+        ..Preferences::default()
     };
     let patched = patch_preferences(source, &preferences);
 

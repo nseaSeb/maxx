@@ -37,6 +37,7 @@ parseur servent à garantir.
 | `settings.rs` | ce que maxx retient d'un lancement à l'autre |
 | `actions.rs` | les actions, leurs gestionnaires, le clavier |
 | `menus.rs` | la barre de menus de maxx |
+| `tools.rs` | le catalogue des éditeurs et des terminaux, leur détection |
 | `run.rs` | tout ce qui suppose un système : `cargo`, terminal, éditeur, corbeille |
 | `theme.rs` | la palette, en `const` |
 
@@ -179,6 +180,25 @@ en ligne de commande — il passe par `open_workspace_window`, qui construit
 Tout effet de bord attaché à « ouvrir un projet » doit donc être câblé aux deux
 endroits. C'est exactement ce qui a fait que les projets récents ne
 s'enregistraient pas au premier essai.
+
+## Éditeur et terminal
+
+`tools.rs` tient une table, pas une heuristique, et c'est le point : ouvrir un
+fichier *à une ligne* s'écrit différemment chez chacun — `zed fichier:12`,
+`code -g fichier:12`, `nvim +12 fichier`, `idea --line 12 fichier` — et il n'y a
+pas de majorité à suivre. Confondre deux de ces formes n'échoue pas franchement :
+`code fichier:12` ouvre un fichier nommé « fichier:12 ».
+
+Le piège qui ne se voit pas au moment de choisir : `hx`, `nvim` et `vim` ne sont
+pas des applications mais des programmes qui ont besoin d'un terminal autour
+d'eux. Les deux réglages ne sont donc pas indépendants, et tous les terminaux ne
+savent pas recevoir une commande — celui de macOS n'y donne accès que par
+AppleScript, qui réclame une permission d'automatisation au milieu d'un clic.
+
+`auto`, le défaut, prend le premier installé du catalogue ; pour l'éditeur,
+`$VISUAL` et `$EDITOR` passent avant, parce que qui les a réglés a déjà dit ce
+qu'il voulait. La détection cherche la commande sur le `PATH` et, sur macOS, le
+paquet dans `/Applications`.
 
 ## Le système, et rien d'autre
 

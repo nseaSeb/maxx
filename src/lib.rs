@@ -18,6 +18,7 @@ pub mod scaffold;
 pub mod settings;
 pub mod view;
 pub mod theme;
+pub mod tools;
 pub mod workspace;
 
 use gpui::{App, Application};

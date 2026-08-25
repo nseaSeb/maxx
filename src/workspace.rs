@@ -535,7 +535,7 @@ impl Workspace {
         }
 
         match menus.handler_line(action) {
-            Some(line) => crate::run::open_editor_at(&menus.path, line),
+            Some(line) => crate::tools::open_in_editor(cx, &menus.path, Some(line)),
             None => {
                 self.message = Some(SharedString::from(format!(
                     "« {action} » n'est pas encore câblée — ⌘S l'ajoute au fichier"
@@ -856,7 +856,7 @@ impl Workspace {
             .or_else(|| self.project().map(|project| project.root.clone()));
 
         match path {
-            Some(path) => crate::run::open_editor(&path),
+            Some(path) => crate::tools::open_in_editor(cx, &path, None),
             None => {
                 self.message = Some(SharedString::from("aucun projet ouvert"));
                 cx.notify();
@@ -876,7 +876,7 @@ impl Workspace {
             return;
         };
         match view.method_line(&name) {
-            Some(line) => crate::run::open_editor_at(&view.path, line),
+            Some(line) => crate::tools::open_in_editor(cx, &view.path, Some(line)),
             None => {
                 self.message = Some(SharedString::from(format!(
                     "« {name} » n'est pas encore écrite — ⌘S l'ajoute au fichier"

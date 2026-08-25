@@ -27,6 +27,7 @@ impl Workspace {
         SettingsView::new("preferences")
             .sidebar_width(px(200.))
             .page(appearance_page())
+            .page(tools_page())
             .page(projects_page(cx))
             .page(file_page(cx))
             .into_any_element()
@@ -74,6 +75,67 @@ fn appearance_page() -> SettingPage {
                     ),
                 )
                 .description("Ce que `cargo` écrit pendant un lancement. ⌘J le bascule."),
+            ),
+    )
+}
+
+/// Which editor and which terminal maxx hands things to.
+fn tools_page() -> SettingPage {
+    let editors: Vec<(SharedString, SharedString)> = crate::tools::editor_options()
+        .into_iter()
+        .map(|(value, label)| (SharedString::from(value), SharedString::from(label)))
+        .collect();
+    let terminals: Vec<(SharedString, SharedString)> = crate::tools::terminal_options()
+        .into_iter()
+        .map(|(value, label)| (SharedString::from(value), SharedString::from(label)))
+        .collect();
+
+    // A terminal editor is driven through the chosen terminal, so the two
+    // choices are not independent — worth saying rather than leaving to be
+    // discovered on a click that does nothing.
+    let bound = crate::tools::EDITORS
+        .iter()
+        .any(|editor| editor.terminal_bound && editor.installed());
+
+    SettingPage::new("Outils").group(
+        SettingGroup::new()
+            .title("Éditeur et terminal")
+            .description(if bound {
+                "Seul ce qui est installé est proposé. Un éditeur de terminal — \
+                 Helix, Neovim, Vim — est lancé dans le terminal choisi ci-dessous, \
+                 qui doit donc savoir recevoir une commande."
+            } else {
+                "Seul ce qui est installé est proposé."
+            })
+            .item(
+                SettingItem::new(
+                    "Éditeur",
+                    SettingField::dropdown(
+                        editors,
+                        |cx| SharedString::from(settings::prefs(cx).editor.clone()),
+                        |value, cx| {
+                            settings::update_prefs(cx, |prefs| prefs.editor = value.to_string());
+                            // The menu bar names the editor, so it has to be
+                            // handed over again.
+                            cx.set_menus(crate::menus::app_menus(cx));
+                            crate::workspace::notify_all(cx);
+                        },
+                    ),
+                )
+                .description("Ce qu'ouvrent ⌘⌥Z et le bouton → de l'inspecteur."),
+            )
+            .item(
+                SettingItem::new(
+                    "Terminal",
+                    SettingField::dropdown(
+                        terminals,
+                        |cx| SharedString::from(settings::prefs(cx).terminal.clone()),
+                        |value, cx| {
+                            settings::update_prefs(cx, |prefs| prefs.terminal = value.to_string());
+                        },
+                    ),
+                )
+                .description("Ce qu'ouvre ⌘⌥T, sur le dossier du projet."),
             ),
     )
 }
@@ -137,9 +199,9 @@ fn file_page(cx: &mut Context<Workspace>) -> SettingPage {
             .item(SettingItem::render(move |_, _, _| {
                 let path = settings::settings_path();
                 action_button("prefs-open-file", "Ouvrir dans l'éditeur", path.is_none(), {
-                    move |_| {
+                    move |cx| {
                         if let Some(path) = settings::settings_path() {
-                            crate::run::open_editor(&path);
+                            crate::tools::open_in_editor(cx, &path, None);
                         }
                     }
                 })

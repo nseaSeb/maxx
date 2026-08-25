@@ -129,8 +129,14 @@ pub fn app_menus(cx: &App) -> Vec<Menu> {
             items: vec![
                 MenuItem::action("Révéler dans le Finder", RevealInFinder),
                 MenuItem::action("Ouvrir dans le Terminal", OpenTerminal),
-                MenuItem::action("Ouvrir le fichier dans Zed", OpenInZed),
-                MenuItem::action("Ouvrir le projet dans Zed", OpenProjectInZed),
+                MenuItem::action(
+                    format!("Ouvrir le fichier dans {}", crate::tools::editor_label(cx)),
+                    OpenInZed,
+                ),
+                MenuItem::action(
+                    format!("Ouvrir le projet dans {}", crate::tools::editor_label(cx)),
+                    OpenProjectInZed,
+                ),
             ],
         },
         Menu {

@@ -7,6 +7,8 @@
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+
+use crate::tools::{Editor, LineArgument, Terminal, on_path};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 /// What the runner thread sends back.
@@ -62,46 +64,133 @@ fn spawn_cargo(root: PathBuf, subcommand: &'static str) -> Receiver<Message> {
     receiver
 }
 
-/// Opens a terminal in `path`.
+/// Opens `terminal` at `path`.
 ///
-/// Ghostty needs its own `--working-directory` flag: `open -a Ghostty <dir>`
-/// launches the application but does not necessarily start the shell there.
-/// Terminal.app, which every Mac has, is the fallback and does honour a
-/// directory argument.
-pub fn open_terminal(path: &Path) {
-    if Path::new("/Applications/Ghostty.app").exists() {
-        let opened = Command::new("open")
-            .arg("-na")
-            .arg("Ghostty")
-            .arg("--args")
-            .arg(format!("--working-directory={}", path.display()))
+/// Two ways in, and the first one matters: a terminal with a command line tool
+/// takes its working directory as a flag, while `open -a <App> <dir>` launches
+/// the application without necessarily starting the shell there. Terminal.app,
+/// which every Mac has, is the fallback that does honour a directory argument.
+pub fn open_terminal(terminal: Option<&Terminal>, path: &Path) {
+    let Some(terminal) = terminal else {
+        return;
+    };
+
+    if !terminal.command.is_empty()
+        && let Some(flag) = terminal.directory_flag
+        && on_path(terminal.command)
+        && Command::new(terminal.command)
+            .arg(flag)
+            .arg(path)
             .status()
-            .map(|status| status.success())
-            .unwrap_or(false);
-        if opened {
-            return;
+            .is_ok_and(|status| status.success())
+    {
+        return;
+    }
+
+    if let Some(bundle) = terminal.bundle {
+        // `-n` and `--args` are what carry the flag through to a bundle that
+        // has no command line tool of its own.
+        if let Some(flag) = terminal.directory_flag {
+            let opened = Command::new("open")
+                .arg("-na")
+                .arg(bundle)
+                .arg("--args")
+                .arg(format!("{flag}={}", path.display()))
+                .status()
+                .is_ok_and(|status| status.success());
+            if opened {
+                return;
+            }
         }
+        let _ = Command::new("open").arg("-a").arg(bundle).arg(path).status();
     }
-    let _ = Command::new("open").arg("-a").arg("Terminal").arg(path).status();
 }
 
-/// Opens `path` in Zed, through its command line tool when it is installed and
-/// through the application bundle otherwise.
-pub fn open_editor(path: &Path) {
-    if Command::new("zed").arg(path).status().is_ok() {
-        return;
+/// The argument list that opens `path` in `editor`, at `line` when given.
+///
+/// A table, not a heuristic: every editor spells this differently, and there
+/// is no majority to follow.
+pub fn editor_arguments(editor: &Editor, path: &Path, line: Option<usize>) -> Vec<String> {
+    let file = path.display().to_string();
+    let Some(line) = line else {
+        return vec![file];
+    };
+    match editor.line {
+        LineArgument::Suffix => vec![format!("{file}:{line}")],
+        LineArgument::Flag(flag) => vec![flag.to_string(), format!("{file}:{line}")],
+        LineArgument::PlusLine => vec![format!("+{line}"), file],
+        LineArgument::Named(name) => vec![name.to_string(), line.to_string(), file],
     }
-    let _ = Command::new("open").arg("-a").arg("Zed").arg(path).status();
 }
 
-/// Opens `path` in Zed at `line`.
-pub fn open_editor_at(path: &Path, line: usize) {
-    let target = format!("{}:{}", path.display(), line);
-    if Command::new("zed").arg(&target).status().is_ok() {
+/// Opens `path` in a windowed editor.
+///
+/// Through its command line tool when it has one, and through the application
+/// bundle otherwise — losing the line number in that second case, because
+/// `open -a` has nowhere to put it.
+pub fn open_editor(editor: &Editor, path: &Path, line: Option<usize>) {
+    let arguments = editor_arguments(editor, path, line);
+    if on_path(editor.command)
+        && Command::new(editor.command)
+            .args(&arguments)
+            .status()
+            .is_ok_and(|status| status.success())
+    {
         return;
     }
-    let _ = Command::new("open").arg("-a").arg("Zed").arg(path).status();
+    if let Some(bundle) = editor.bundle {
+        let _ = Command::new("open").arg("-a").arg(bundle).arg(path).status();
+    }
 }
+
+/// Opens `path` in an editor that draws inside a terminal.
+///
+/// The two settings are not independent here: the editor needs a terminal
+/// around it, and not every terminal can be handed a command — Terminal.app's
+/// only way in is AppleScript, which asks for an automation permission in the
+/// middle of a click.
+pub fn open_editor_in_terminal(
+    editor: &Editor,
+    terminal: Option<&Terminal>,
+    path: &Path,
+    line: Option<usize>,
+) {
+    let Some(terminal) = terminal else {
+        return;
+    };
+    let Some(flag) = terminal.command_flag else {
+        eprintln!(
+            "{} a besoin d'un terminal capable de lancer une commande ; {} n'en est pas un",
+            editor.label, terminal.label
+        );
+        return;
+    };
+
+    let arguments = editor_arguments(editor, path, line);
+    let directory = path.parent().unwrap_or(path);
+
+    let mut command = Command::new(terminal.command);
+    if let Some(directory_flag) = terminal.directory_flag {
+        command.arg(directory_flag).arg(directory);
+    }
+    command.arg(flag).arg(editor.command).args(&arguments);
+
+    if on_path(terminal.command) && command.status().is_ok() {
+        return;
+    }
+
+    if let Some(bundle) = terminal.bundle {
+        let mut passed = vec![flag.to_string(), editor.command.to_string()];
+        passed.extend(arguments);
+        let _ = Command::new("open")
+            .arg("-na")
+            .arg(bundle)
+            .arg("--args")
+            .args(&passed)
+            .status();
+    }
+}
+
 
 /// Kills a run by its operating system pid.
 ///

@@ -154,6 +154,11 @@ Ce qui est connu et reporté est dans [`BACKLOG.md`](BACKLOG.md).
 
 ## Réglages
 
+maxx détecte les éditeurs et les terminaux installés et laisse choisir lequel
+reçoit vos fichiers — `⌘⌥Z` et le bouton `→` de l'inspecteur suivent ce choix,
+jusqu'au numéro de ligne, que chaque éditeur épelle à sa façon. Les éditeurs de
+terminal (Helix, Neovim, Vim) sont lancés dans le terminal choisi.
+
 `⌘,` ouvre l'écran de réglages, comme un onglet et non comme une boîte
 modale : il se referme avec `⌘W` et laisse revenir à la vue en cours.
 

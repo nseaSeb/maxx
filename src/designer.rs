@@ -249,7 +249,10 @@ impl Workspace {
                                 .text_xs()
                                 .cursor_pointer()
                                 .hover(|this| this.bg(rgb(theme::HOVER_BG)))
-                                .child("→ Zed")
+                                .child(SharedString::from(format!(
+                                    "→ {}",
+                                    crate::tools::editor_label(cx)
+                                )))
                                 .on_click(
                                     cx.listener(|this, _, _, cx| this.open_menu_handler(cx)),
                                 ),
