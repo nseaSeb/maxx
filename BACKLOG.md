@@ -4,6 +4,20 @@ Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
 
 ## Composants
 
+- ~~Élargir le catalogue~~ — fait, cinq entrées de plus : bouton radio, lien,
+  alerte, pastille et barre de progression. Une seule a demandé de la
+  machinerie, la barre : sa valeur est un `f32` nu, là où `Kind::Number`
+  écrivait toujours `px(…)`. D'où `Kind::Ratio`, et `pixel_literal` qui n'est
+  plus qu'un enrobage de `float_literal`.
+
+  Ce qui reste hors de portée sans une nouvelle sorte d'argument : **l'icône**,
+  dont le constructeur prend une variante d'énumération et non une chaîne ;
+  **le curseur**, qui vit dans une entité comme le champ texte ; **les variantes
+  de la pastille**, qui sont des constructeurs (`Tag::primary()`) et non des
+  méthodes, donc changer de variante changerait la base du nœud. Et **le badge**
+  n'implémente pas `Styled` : les propriétés communes ne compileraient pas
+  dessus.
+
 - ~~Liste déroulante~~ — faite. Elle a demandé de généraliser la machinerie du
   champ texte plutôt que de la copier : une entrée du catalogue porte
   maintenant un `StateSpec` optionnel, et `view::ensure_state_field` sert les

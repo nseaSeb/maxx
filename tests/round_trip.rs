@@ -423,3 +423,62 @@ fn a_lifetime_is_not_a_char_literal() {
     let close = maxx::parser::matching_brace(source, open).unwrap();
     assert_eq!(&source[close..], "}\n", "le bloc doit se fermer sur l'accolade de l'impl");
 }
+
+/// Chaque entrée du catalogue s'écrit, se relit, et retombe sur elle-même.
+///
+/// Le catalogue est une table, donc y ajouter une ligne ne coûte rien — et
+/// c'est justement pour ça qu'une ligne fausse passe inaperçue : un `import`
+/// qui ne correspond pas à la `base`, ou une propriété dont la cible n'existe
+/// pas sur le composant, ne se voit qu'à la compilation du projet généré.
+#[test]
+fn every_catalogue_entry_writes_and_reads_back() {
+    for spec in maxx::registry::CATALOGUE {
+        let node = maxx::registry::instantiate(spec.id)
+            .unwrap_or_else(|| panic!("{} doit s'instancier", spec.id));
+        assert_eq!(
+            node.base.path(),
+            Some(spec.base),
+            "{} : la base écrite n'est pas celle de la table",
+            spec.id
+        );
+        assert_eq!(
+            maxx::registry::of(&node).map(|found| found.id),
+            Some(spec.id),
+            "{} : le nœud écrit ne se retrouve pas dans le catalogue",
+            spec.id
+        );
+        assert!(
+            spec.import.starts_with("use ") && spec.import.ends_with(';'),
+            "{} : l'import n'est pas une ligne `use` complète",
+            spec.id
+        );
+    }
+}
+
+/// Un nombre nu s'écrit sans `px`, contrairement à une longueur.
+///
+/// `Progress::value` prend un `f32` : lui donner `px(50.)` ne compilerait pas
+/// dans le projet généré, et l'erreur n'apparaîtrait qu'à ce moment-là.
+#[test]
+fn a_plain_number_is_written_without_px() {
+    let mut node = maxx::registry::instantiate("progress").unwrap();
+    let spec = maxx::registry::of(&node).unwrap();
+    let value =
+        maxx::registry::props(spec).into_iter().find(|prop| prop.label == "Valeur").unwrap();
+
+    assert!(maxx::registry::validate(value, "50").is_none());
+    assert!(maxx::registry::validate(value, "12.5").is_none());
+    assert!(maxx::registry::validate(value, "").is_none());
+    assert!(maxx::registry::validate(value, "beaucoup").is_some());
+
+    maxx::registry::write(&mut node, value, "50");
+    assert_eq!(node.call("value").unwrap().args[0].to_source(), "50.");
+    assert_eq!(maxx::registry::read(&node, value).as_deref(), Some("50"));
+
+    maxx::registry::write(&mut node, value, "12.5");
+    assert_eq!(node.call("value").unwrap().args[0].to_source(), "12.5");
+
+    // Vidé, l'appel disparaît plutôt que de s'écrire à zéro.
+    maxx::registry::write(&mut node, value, "");
+    assert!(node.call("value").is_none());
+}

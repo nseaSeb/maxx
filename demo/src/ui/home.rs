@@ -1,11 +1,16 @@
 use gpui::{ClickEvent, Context, Entity, SharedString, Window, prelude::*};
+use gpui_component::alert::Alert;
 use gpui_component::button::Button;
 use gpui_component::checkbox::Checkbox;
 use gpui_component::divider::Divider;
 use gpui_component::group_box::GroupBox;
 use gpui_component::input::{Input, InputState};
 use gpui_component::label::Label;
+use gpui_component::link::Link;
+use gpui_component::progress::Progress;
+use gpui_component::radio::Radio;
 use gpui_component::switch::Switch;
+use gpui_component::tag::Tag;
 use gpui_component::{h_flex, v_flex};
 
 pub struct Home {
@@ -58,6 +63,13 @@ impl Render for Home {
                                 .child(Checkbox::new("reread").label("Read back before writing"))
                                 .child(Switch::new("watch").label("Watch the disk")),
                         )
+                        .child(
+                            h_flex()
+                                .gap_4()
+                                .child(Radio::new("draft").label("Draft").checked(true))
+                                .child(Tag::new().child(Label::new("beta"))),
+                        )
+                        .child(Progress::new().value(60.))
                         .child(Divider::horizontal())
                         .child(Label::new(self.summary.clone())),
                 ),
@@ -72,6 +84,12 @@ impl Render for Home {
                             .on_click(cx.listener(Self::on_open)),
                     )
                     .child(Label::new("or ⌘I")),
+            )
+            .child(Alert::new("note", "Every one of these is written by maxx.").title("Note"))
+            .child(
+                Link::new("gpui")
+                    .href("https://gpui.rs")
+                    .child(Label::new("gpui.rs")),
             )
         // maxx:end
     }

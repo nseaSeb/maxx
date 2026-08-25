@@ -37,6 +37,11 @@ pub enum Kind {
     Handler,
     /// A length in pixels, written as `px(<value>.)`.
     Number,
+    /// A bare number, written as a float literal: `.value(50.)`.
+    ///
+    /// Distinct from [`Kind::Number`], which is a length and wears `px(…)`.
+    /// Writing a ratio as a length would not compile in the generated project.
+    Ratio,
     /// A colour, written as `rgb(0x<value>)`.
     Color,
 }
@@ -259,6 +264,78 @@ pub const CATALOGUE: &[Spec] = &[
         state: None,
     },
     Spec {
+        id: "radio",
+        label: "Bouton radio",
+        base: "Radio::new",
+        import: "use gpui_component::radio::Radio;",
+        container: false,
+        default_args: &["radio"],
+        props: &[
+            Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
+            Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text },
+            Prop { label: "Sélectionné", target: Target::Method("checked"), kind: Kind::Bool },
+            Prop { label: "Désactivé", target: Target::Method("disabled"), kind: Kind::Bool },
+        ],
+        state: None,
+    },
+    Spec {
+        id: "link",
+        label: "Lien",
+        base: "Link::new",
+        import: "use gpui_component::link::Link;",
+        // `Link` est un `ParentElement` : son texte est un enfant, pas un
+        // argument. Une étiquette déposée dedans est ce qui l'écrit.
+        container: true,
+        default_args: &["lien"],
+        props: &[
+            Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
+            Prop { label: "Adresse", target: Target::Method("href"), kind: Kind::Text },
+            Prop { label: "Désactivé", target: Target::Method("disabled"), kind: Kind::Bool },
+        ],
+        state: None,
+    },
+    Spec {
+        id: "alert",
+        label: "Alerte",
+        base: "Alert::new",
+        import: "use gpui_component::alert::Alert;",
+        container: false,
+        default_args: &["alerte", "Message"],
+        props: &[
+            Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
+            Prop { label: "Message", target: Target::BaseArg(1), kind: Kind::Text },
+            Prop { label: "Titre", target: Target::Method("title"), kind: Kind::Text },
+        ],
+        state: None,
+    },
+    Spec {
+        id: "tag",
+        label: "Pastille",
+        base: "Tag::new",
+        import: "use gpui_component::tag::Tag;",
+        container: true,
+        default_args: &[],
+        props: &[
+            Prop { label: "Contour", target: Target::Flag("outline"), kind: Kind::Bool },
+            Prop {
+                label: "Arrondi complet",
+                target: Target::Flag("rounded_full"),
+                kind: Kind::Bool,
+            },
+        ],
+        state: None,
+    },
+    Spec {
+        id: "progress",
+        label: "Barre de progression",
+        base: "Progress::new",
+        import: "use gpui_component::progress::Progress;",
+        container: false,
+        default_args: &[],
+        props: &[Prop { label: "Valeur", target: Target::Method("value"), kind: Kind::Ratio }],
+        state: None,
+    },
+    Spec {
         id: "spacer",
         label: "Espace élastique",
         base: "div",
@@ -270,12 +347,17 @@ pub const CATALOGUE: &[Spec] = &[
     },
 ];
 
+/// `120` becomes `px(120.)`, `12.5` becomes `px(12.5)`.
+fn pixel_literal(value: &str) -> Option<String> {
+    Some(format!("px({})", float_literal(value)?))
+}
+
 /// `120` and `12.5` become Rust float literals; `.5`, `inf` and `NaN` are
 /// refused.
 ///
 /// `f32::from_str` accepts spellings `rustc` does not, and emitting one leaves
 /// the generated project unbuildable.
-fn pixel_literal(value: &str) -> Option<String> {
+fn float_literal(value: &str) -> Option<String> {
     let value = value.trim();
     let digits = value.strip_prefix('-').unwrap_or(value);
     if digits.is_empty() || !digits.starts_with(|c: char| c.is_ascii_digit()) {
@@ -288,11 +370,7 @@ fn pixel_literal(value: &str) -> Option<String> {
     if !number.is_finite() {
         return None;
     }
-    Some(if value.ends_with('.') || value.contains('.') {
-        format!("px({value})")
-    } else {
-        format!("px({value}.)")
-    })
+    Some(if value.contains('.') { value.to_string() } else { format!("{value}.") })
 }
 
 /// Why a value was refused, for the inspector to say so.
@@ -304,6 +382,9 @@ pub fn validate(prop: &Prop, value: &str) -> Option<&'static str> {
     match prop.kind {
         Kind::Number if !value.is_empty() && pixel_literal(value).is_none() => {
             Some("une longueur est un nombre de pixels, par exemple 120")
+        }
+        Kind::Ratio if !value.is_empty() && float_literal(value).is_none() => {
+            Some("un nombre, par exemple 50 ou 12.5")
         }
         Kind::Color => {
             let hex = value.trim_start_matches('#');
@@ -437,7 +518,7 @@ fn is_identifier(value: &str) -> bool {
 /// but not edited.
 pub fn editable(node: &Node, prop: &Prop) -> bool {
     match (prop.target, prop.kind) {
-        (Target::Method(_), Kind::Number | Kind::Color) => !node.is_opaque(),
+        (Target::Method(_), Kind::Number | Kind::Color | Kind::Ratio) => !node.is_opaque(),
         (Target::Method(name), Kind::Text) => match node.call(name).and_then(|c| c.args.first()) {
             // A literal, or nothing yet: free to type in.
             None | Some(Arg::Str(_)) => !node.is_opaque(),
@@ -557,10 +638,11 @@ pub fn read(node: &Node, prop: &Prop) -> Option<String> {
             }),
             Base::Opaque(_) => None,
         },
-        Target::Method(name) if matches!(prop.kind, Kind::Number | Kind::Color) => {
+        Target::Method(name) if matches!(prop.kind, Kind::Number | Kind::Color | Kind::Ratio) => {
             let source = node.call(name)?.args.first()?.to_source();
             match prop.kind {
                 Kind::Number => number_value(&source),
+                Kind::Ratio => Some(source.trim_end_matches('.').to_string()),
                 _ => color_value(&source),
             }
         }
@@ -616,6 +698,13 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
             if value.trim().is_empty() {
                 node.remove_call(name);
             } else if let Some(literal) = pixel_literal(value) {
+                node.set_call(name, Arg::Verbatim(literal));
+            }
+        }
+        Target::Method(name) if matches!(prop.kind, Kind::Ratio) => {
+            if value.trim().is_empty() {
+                node.remove_call(name);
+            } else if let Some(literal) = float_literal(value) {
                 node.set_call(name, Arg::Verbatim(literal));
             }
         }

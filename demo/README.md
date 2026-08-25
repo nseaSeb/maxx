@@ -11,8 +11,8 @@ cargo run
 ## What it shows
 
 **The catalogue's components**, all in `src/ui/home.rs`: group box, label, text
-field bound to a field of the view, checkbox, switch, divider, button with a
-tooltip and a handler.
+field bound to a field of the view, checkbox, switch, radio, tag, progress bar,
+divider, alert, link, and a button with a tooltip and a handler.
 
 **A window opened from the menu bar** — `Window > Open the inspector`, or `⌘I`,
 or the button on the home view. That is the gesture bringing together two traps

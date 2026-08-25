@@ -6,6 +6,7 @@
 
 use gpui::prelude::*;
 use gpui::{AnyElement, Context, Div, SharedString, div, px, rgb};
+use gpui_component::alert::Alert;
 use gpui_component::button::Button;
 use gpui_component::checkbox::Checkbox;
 use gpui_component::divider::Divider;
@@ -596,7 +597,7 @@ impl Workspace {
                 )
                 .child(binding_toggle(spec, prop, true, cx))
             }
-            Kind::Text | Kind::Field | Kind::Handler | Kind::Number | Kind::Color => {
+            Kind::Text | Kind::Field | Kind::Handler | Kind::Number | Kind::Color | Kind::Ratio => {
                 match self.prop_input(prop) {
                     Some(state) if matches!(prop.kind, Kind::Handler) => {
                         row.child(div().flex_1().child(Input::new(state).small())).child(
@@ -1032,6 +1033,31 @@ fn preview(
         Some("Button::new") => Button::new(SharedString::from(format!("preview-{path:?}")))
             .label(call_text(node, "label", "Bouton"))
             .into_any_element(),
+        Some("Radio::new") => {
+            gpui_component::radio::Radio::new(SharedString::from(format!("preview-{path:?}")))
+                .label(call_text(node, "label", "Bouton radio"))
+                .checked(call_bool(node, "checked"))
+                .into_any_element()
+        }
+        Some("Alert::new") => Alert::new(
+            SharedString::from(format!("preview-{path:?}")),
+            SharedString::from(text(1).to_string()),
+        )
+        .title(call_text(node, "title", ""))
+        .into_any_element(),
+        Some("Progress::new") => gpui_component::progress::Progress::new()
+            .value(call_number(node, "value").unwrap_or(0.))
+            .into_any_element(),
+        // Deux conteneurs dont le contenu est un enfant du modèle, pas un
+        // argument : leur aperçu doit donc porter les zones de dépôt.
+        Some("Link::new") => {
+            gpui_component::link::Link::new(SharedString::from(format!("preview-{path:?}")))
+                .children(children_with_zones(node, path, selected, false, cx))
+                .into_any_element()
+        }
+        Some("Tag::new") => gpui_component::tag::Tag::new()
+            .children(children_with_zones(node, path, selected, false, cx))
+            .into_any_element(),
         // A live text input on the canvas would swallow the clicks the designer
         // needs, so the preview is a faithful lookalike.
         Some("Input::new") => div()
@@ -1065,6 +1091,11 @@ fn call_text(node: &Node, name: &str, fallback: &str) -> String {
         .and_then(|arg| arg.as_str())
         .unwrap_or(fallback)
         .to_string()
+}
+
+/// The numeric argument of a one-argument call, when it reads as a number.
+fn call_number(node: &Node, name: &str) -> Option<f32> {
+    node.call(name)?.args.first()?.to_source().trim_end_matches('.').parse().ok()
 }
 
 /// The boolean argument of a one-argument call, `false` when absent.
