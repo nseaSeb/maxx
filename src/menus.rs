@@ -9,7 +9,7 @@ use crate::actions::*;
 /// An entry carries the index rather than the path: a gpui action is a value
 /// the menu bar keeps, and the settings are the one place the paths live.
 fn recent_projects_menu(cx: &App) -> MenuItem {
-    let recent = &crate::settings::get(cx).recent_projects;
+    let recent = &crate::settings::state(cx).recent_projects;
     if recent.is_empty() {
         // A submenu with nothing in it looks broken; a disabled-looking entry
         // that does nothing says what is going on.

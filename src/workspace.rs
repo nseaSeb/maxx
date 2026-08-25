@@ -306,16 +306,16 @@ impl Workspace {
 
     /// Toggles the project panel (View > Project Panel, `cmd-b`).
     pub fn toggle_project_panel(&mut self, cx: &mut Context<Self>) {
-        crate::settings::update(cx, |settings| {
-            settings.show_project_panel = !settings.show_project_panel;
+        crate::settings::update_prefs(cx, |preferences| {
+            preferences.show_project_panel = !preferences.show_project_panel;
         });
         cx.notify();
     }
 
     /// Toggles the status bar (View > Status Bar).
     pub fn toggle_status_bar(&mut self, cx: &mut Context<Self>) {
-        crate::settings::update(cx, |settings| {
-            settings.show_status_bar = !settings.show_status_bar;
+        crate::settings::update_prefs(cx, |preferences| {
+            preferences.show_status_bar = !preferences.show_status_bar;
         });
         cx.notify();
     }
@@ -1078,7 +1078,7 @@ impl Workspace {
         self.run_output.clear();
         self.run_state = crate::run::State::Running;
         self.run_pid = None;
-        crate::settings::update(cx, |settings| settings.show_output = true);
+        crate::settings::update_prefs(cx, |preferences| preferences.show_output = true);
         self.message = None;
 
         let receiver = if prewarm {
@@ -1149,8 +1149,8 @@ impl Workspace {
 
     /// Shows or hides the output panel.
     pub fn toggle_output(&mut self, cx: &mut Context<Self>) {
-        crate::settings::update(cx, |settings| {
-            settings.show_output = !settings.show_output;
+        crate::settings::update_prefs(cx, |preferences| {
+            preferences.show_output = !preferences.show_output;
         });
         cx.notify();
     }
@@ -1830,7 +1830,7 @@ impl Workspace {
     /// The same list as the one in the File menu, put where someone who has
     /// just launched maxx is already looking.
     fn render_recent_projects(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let recent = crate::settings::get(cx).recent_projects.clone();
+        let recent = crate::settings::state(cx).recent_projects.clone();
         if recent.is_empty() {
             return None;
         }
@@ -2067,8 +2067,8 @@ impl Render for Workspace {
         // Kept in memory only: writing the file on every frame of a drag would
         // be absurd. `settings::flush` at quit puts it away.
         let bounds = window.bounds();
-        crate::settings::stage(cx, |settings| {
-            settings.window = Some(crate::settings::WindowGeometry {
+        crate::settings::stage_state(cx, |state| {
+            state.window = Some(crate::settings::WindowGeometry {
                 x: bounds.origin.x.into(),
                 y: bounds.origin.y.into(),
                 width: bounds.size.width.into(),
@@ -2078,7 +2078,7 @@ impl Render for Workspace {
 
         self.sync_prop_inputs(window, cx);
         self.sync_menu_inputs(window, cx);
-        let visible = crate::settings::get(cx).clone();
+        let visible = crate::settings::prefs(cx).clone();
         let show_panel = visible.show_project_panel && self.project.is_some();
 
         div()
@@ -2140,7 +2140,7 @@ pub fn open_workspace_window(path: Option<PathBuf>, cx: &mut App) {
         .map(|project| project.name.clone())
         .unwrap_or_else(|| "maxx".into());
 
-    let geometry = crate::settings::get(cx).window;
+    let geometry = crate::settings::state(cx).window;
     // Une géométrie enregistrée sur un écran qui n'est plus branché rendrait la
     // fenêtre invisible ; gpui rabat une fenêtre hors champ sur l'écran
     // principal, donc il n'y a rien de plus à faire ici.
@@ -2273,11 +2273,11 @@ fn panel_icon(
 
 /// Puts `path` at the head of the recent projects and refreshes the menu bar.
 fn remember_project(path: &std::path::Path, cx: &mut App) {
-    let before = crate::settings::get(cx).recent_projects.clone();
-    crate::settings::update(cx, |settings| {
-        settings.remember_project(path);
+    let before = crate::settings::state(cx).recent_projects.clone();
+    crate::settings::update_state(cx, |state| {
+        state.remember_project(path);
     });
-    if crate::settings::get(cx).recent_projects != before {
+    if crate::settings::state(cx).recent_projects != before {
         // The recent list is a submenu, and a gpui menu bar is a value handed
         // over once: changing it means handing over a new one.
         cx.set_menus(crate::menus::app_menus(cx));

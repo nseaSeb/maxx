@@ -1,22 +1,54 @@
 //! What maxx remembers between two launches.
 //!
-//! One TOML file, hand-editable, in the place the running system puts
-//! configuration. TOML rather than JSON because the rest of a Rust project is
-//! already TOML, and because a file the user is invited to open should accept
-//! comments — even if writing it back drops them, which is why maxx only ever
-//! rewrites the whole file from the values it holds.
+//! Two files, the way Zed splits them, because they are not the same kind of
+//! thing:
 //!
-//! Everything here has a default that reproduces the behaviour maxx had before
-//! it read any settings: a missing, empty or damaged file must never be worse
-//! than no file at all.
+//! - `settings.json` belongs to the user. It is written by hand as much as by
+//!   maxx, so maxx patches only the key it changes and leaves the rest of the
+//!   bytes alone — the same rule it applies to a `.rs` file. Comments and
+//!   layout survive.
+//! - `state.json` belongs to the machine: recent projects, window geometry.
+//!   Nobody edits it, so it is rewritten whole.
+//!
+//! JSON with comments, read through `serde_json_lenient` — the crate Zed reads
+//! its own settings with, already in the tree through gpui. Plain JSON cannot
+//! hold a comment, and a settings file you cannot annotate is a settings file
+//! you have to keep a wiki about.
+//!
+//! Everything has a default that reproduces the behaviour maxx had before it
+//! read anything: a missing, partial or damaged file must never be worse than
+//! no file at all.
 
 use std::path::{Path, PathBuf};
 
 use gpui::{App, Global};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// How many projects the "Open Recent" list keeps.
 const RECENT_LIMIT: usize = 10;
+
+/// What the user chooses. Lives in `settings.json`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct Preferences {
+    /// Whether the project panel is shown.
+    pub show_project_panel: bool,
+    /// Whether the status bar is shown.
+    pub show_status_bar: bool,
+    /// Whether the output panel is shown.
+    pub show_output: bool,
+}
+
+impl Default for Preferences {
+    fn default() -> Self {
+        Self {
+            show_project_panel: true,
+            show_status_bar: true,
+            show_output: false,
+        }
+    }
+}
 
 /// The saved position and size of the workspace window.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -31,117 +63,17 @@ pub struct WindowGeometry {
     pub height: f32,
 }
 
-/// Everything maxx keeps between two launches.
-///
-/// `serde(default)` on the struct is what makes an old file — or one a hand
-/// edit truncated — still load: a missing key falls back to the default rather
-/// than failing the whole parse.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// What maxx notices on its own. Lives in `state.json`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct Settings {
+pub struct State {
     /// Projects opened before, most recent first.
     pub recent_projects: Vec<PathBuf>,
-    /// Whether the project panel is shown.
-    pub show_project_panel: bool,
-    /// Whether the status bar is shown.
-    pub show_status_bar: bool,
-    /// Whether the output panel is shown.
-    pub show_output: bool,
     /// Where the workspace window was left.
     pub window: Option<WindowGeometry>,
 }
 
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            recent_projects: Vec::new(),
-            show_project_panel: true,
-            show_status_bar: true,
-            show_output: false,
-            window: None,
-        }
-    }
-}
-
-impl Settings {
-    /// Reads the settings file, falling back to the defaults.
-    ///
-    /// A damaged file is reported on stderr and then ignored. Refusing to start
-    /// over a stray comma would be a poor trade, and overwriting it silently
-    /// would lose whatever the user was in the middle of writing — so it stays
-    /// on disk, untouched, until something else asks for a save.
-    pub fn load() -> Self {
-        match Self::path() {
-            Some(path) => Self::load_from(&path),
-            None => Self::default(),
-        }
-    }
-
-    /// Reads a settings file by path.
-    ///
-    /// Split out from [`load`](Self::load) so it can be exercised without
-    /// touching the settings of the machine running the tests — and so a
-    /// future per-project settings file can reuse it.
-    pub fn load_from(path: &Path) -> Self {
-        let Ok(source) = std::fs::read_to_string(path) else {
-            return Self::default();
-        };
-        match toml::from_str(&source) {
-            Ok(settings) => settings,
-            Err(error) => {
-                eprintln!("{} illisible : {error}", path.display());
-                Self::default()
-            }
-        }
-    }
-
-    /// Writes the settings file, creating its directory.
-    ///
-    /// Written to a neighbouring temporary file and renamed over the target:
-    /// a crash halfway through a direct write leaves a truncated file, which
-    /// the next launch would read as a damaged one.
-    pub fn save(&self) -> std::io::Result<()> {
-        match Self::path() {
-            Some(path) => self.save_to(&path),
-            None => Ok(()),
-        }
-    }
-
-    /// Writes a settings file by path.
-    pub fn save_to(&self, path: &Path) -> std::io::Result<()> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let body = toml::to_string_pretty(self)
-            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
-        let temporary = path.with_extension("toml.tmp");
-        std::fs::write(&temporary, header() + &body)?;
-        std::fs::rename(&temporary, path)
-    }
-
-    /// Where the settings file lives on this system.
-    ///
-    /// The three conventions, in order: `XDG_CONFIG_HOME` when the user set it,
-    /// `APPDATA` on Windows, and otherwise the home directory — under
-    /// `Library/Application Support` on macOS, `.config` elsewhere.
-    pub fn path() -> Option<PathBuf> {
-        let directory = if cfg!(target_os = "windows") {
-            PathBuf::from(std::env::var("APPDATA").ok()?).join("maxx")
-        } else if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME")
-            && !xdg.is_empty()
-        {
-            PathBuf::from(xdg).join("maxx")
-        } else {
-            let home = PathBuf::from(std::env::var("HOME").ok()?);
-            if cfg!(target_os = "macos") {
-                home.join("Library/Application Support/maxx")
-            } else {
-                home.join(".config/maxx")
-            }
-        };
-        Some(directory.join("settings.toml"))
-    }
-
+impl State {
     /// Puts `path` at the head of the recent list.
     ///
     /// Answers whether the list changed, so the caller can skip rewriting the
@@ -165,66 +97,357 @@ impl Settings {
     }
 }
 
+/// The directory the files live in.
+///
+/// The three conventions, in order: `XDG_CONFIG_HOME` when the user set it,
+/// `APPDATA` on Windows, and otherwise the home directory — under
+/// `Library/Application Support` on macOS, `.config` elsewhere.
+pub fn directory() -> Option<PathBuf> {
+    if cfg!(target_os = "windows") {
+        return Some(PathBuf::from(std::env::var("APPDATA").ok()?).join("maxx"));
+    }
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME")
+        && !xdg.is_empty()
+    {
+        return Some(PathBuf::from(xdg).join("maxx"));
+    }
+    let home = PathBuf::from(std::env::var("HOME").ok()?);
+    Some(if cfg!(target_os = "macos") {
+        home.join("Library/Application Support/maxx")
+    } else {
+        home.join(".config/maxx")
+    })
+}
+
+/// The file the user edits.
+pub fn settings_path() -> Option<PathBuf> {
+    Some(directory()?.join("settings.json"))
+}
+
+/// The file maxx writes for itself.
+pub fn state_path() -> Option<PathBuf> {
+    Some(directory()?.join("state.json"))
+}
+
+/// The JSON Schema maxx writes beside the settings, for editor completion.
+pub fn schema_path() -> Option<PathBuf> {
+    Some(directory()?.join("settings-schema.json"))
+}
+
+/// Reads a JSON document, tolerating comments and trailing commas.
+///
+/// A damaged file is reported and then ignored, and left untouched on disk:
+/// refusing to start over a stray comma would be a poor trade, and rewriting
+/// it would lose whatever the user was in the middle of writing.
+pub fn read_json<T: Default + serde::de::DeserializeOwned>(path: &Path) -> T {
+    let Ok(source) = std::fs::read_to_string(path) else {
+        return T::default();
+    };
+    match serde_json_lenient::from_str_lenient(&source) {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("{} illisible : {error}", path.display());
+            T::default()
+        }
+    }
+}
+
+/// Writes `body` to `path` through a temporary file.
+///
+/// A direct write interrupted halfway leaves a truncated file, which the next
+/// launch would read as a damaged one.
+fn write_atomically(path: &Path, body: &str) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let temporary = path.with_extension("tmp");
+    std::fs::write(&temporary, body)?;
+    std::fs::rename(&temporary, path)
+}
+
+/// The settings file maxx writes when there is none.
+///
+/// Every key, with its default and a line saying what it does — the file is its
+/// own documentation, which is the part of Zed's settings worth copying before
+/// any question of format.
+pub fn documented_defaults() -> String {
+    let defaults = Preferences::default();
+    format!(
+        r#"// Réglages de maxx.
+//
+// Ce fichier est à vous. maxx ne réécrit que la clé qu'il change : vos
+// commentaires et votre mise en forme restent en place. Les commentaires et
+// les virgules finales sont acceptés à la lecture.
+{{
+  "$schema": "./settings-schema.json",
+
+  // L'explorateur, à gauche. ⌘B fait la même chose.
+  "show_project_panel": {},
+
+  // La ligne du bas : nom de la vue, messages, conflits.
+  "show_status_bar": {},
+
+  // Ce que cargo écrit pendant un lancement. ⌘J le bascule.
+  "show_output": {}
+}}
+"#,
+        defaults.show_project_panel, defaults.show_status_bar, defaults.show_output
+    )
+}
+
+/// Replaces the value of a top-level `key`, keeping every other byte.
+///
+/// The same move maxx makes on a `.rs` file: find the span, splice, leave the
+/// rest alone. The document is a flat object, so a scan that knows about
+/// strings, escapes and nesting is enough — no need for a whole parser to
+/// change one boolean, and no way for one to reformat the file behind the
+/// user's back.
+///
+/// Answers `None` when the key is not there, which is the caller's cue to add
+/// it before the closing brace.
+pub fn splice_key(source: &str, key: &str, value: &str) -> Option<String> {
+    let needle = format!("\"{key}\"");
+    let key_at = source.find(&needle)?;
+    let after_key = key_at + needle.len();
+    let colon = source[after_key..].find(':')? + after_key;
+
+    let bytes = source.as_bytes();
+    let mut index = colon + 1;
+    while index < bytes.len() && bytes[index].is_ascii_whitespace() {
+        index += 1;
+    }
+    let start = index;
+
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+        } else {
+            match byte {
+                b'"' => in_string = true,
+                b'[' | b'{' => depth += 1,
+                b']' | b'}' if depth > 0 => depth -= 1,
+                // The value ends at the comma or the brace closing the object
+                // it sits in — never at one nested inside it.
+                b',' | b'}' | b']' if depth == 0 => break,
+                _ => {}
+            }
+        }
+        index += 1;
+    }
+
+    let end = start + source[start..index].trim_end().len();
+    Some(format!("{}{value}{}", &source[..start], &source[end..]))
+}
+
+/// Adds `key` just before the closing brace of a flat object.
+pub fn append_key(source: &str, key: &str, value: &str) -> String {
+    let Some(brace) = source.rfind('}') else {
+        return format!("{{\n  \"{key}\": {value}\n}}\n");
+    };
+    let head = source[..brace].trim_end();
+    let separator = if head.ends_with('{') { "" } else { "," };
+    format!("{head}{separator}\n  \"{key}\": {value}\n{}", &source[brace..])
+}
+
+/// Writes the preferences into `source`, changing as few bytes as possible.
+pub fn patch_preferences(source: &str, preferences: &Preferences) -> String {
+    let Ok(serde_json_lenient::Value::Object(values)) = serde_json_lenient::to_value(preferences)
+    else {
+        return source.to_string();
+    };
+
+    let mut out = source.to_string();
+    for (key, value) in values {
+        let rendered = value.to_string();
+        out = match splice_key(&out, &key, &rendered) {
+            Some(patched) => patched,
+            None => append_key(&out, &key, &rendered),
+        };
+    }
+    out
+}
+
+/// Writes the preferences to their file.
+fn save_preferences(preferences: &Preferences) -> std::io::Result<()> {
+    let Some(path) = settings_path() else {
+        return Ok(());
+    };
+    let source = match std::fs::read_to_string(&path) {
+        Ok(source) if source.contains('{') => source,
+        // No file yet, or one with nothing usable in it: start from the
+        // documented defaults, so the user has something to read.
+        _ => documented_defaults(),
+    };
+    write_atomically(&path, &patch_preferences(&source, preferences))
+}
+
+/// Writes the machine state, whole.
+pub fn save_state(state: &State) -> std::io::Result<()> {
+    let Some(path) = state_path() else {
+        return Ok(());
+    };
+    let body = serde_json_lenient::to_string_pretty(state)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+    write_atomically(&path, &format!("{body}\n"))
+}
+
+/// Writes the JSON Schema of the preferences beside them.
+///
+/// What makes a settings file pleasant to edit is not its format but the
+/// completion an editor gives over it, and that comes from a schema. maxx
+/// already derives one for its actions, so this costs a call.
+fn save_schema() {
+    let Some(path) = schema_path() else {
+        return;
+    };
+    let schema = schemars::schema_for!(Preferences);
+    if let Ok(body) = serde_json_lenient::to_string_pretty(&schema) {
+        let _ = write_atomically(&path, &format!("{body}\n"));
+    }
+}
+
+/// The old single TOML file, read once and split in two.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct LegacyToml {
+    recent_projects: Vec<PathBuf>,
+    show_project_panel: Option<bool>,
+    show_status_bar: Option<bool>,
+    show_output: Option<bool>,
+    window: Option<WindowGeometry>,
+}
+
+/// Imports `settings.toml` from the version that had one, once.
+///
+/// The old file is renamed rather than deleted: it is the user's, and a
+/// migration that eats data is a migration nobody trusts.
+fn migrate_from_toml() {
+    let (Some(directory), Some(settings)) = (directory(), settings_path()) else {
+        return;
+    };
+    let legacy = directory.join("settings.toml");
+    if settings.exists() || !legacy.exists() {
+        return;
+    }
+    let Ok(source) = std::fs::read_to_string(&legacy) else {
+        return;
+    };
+    let Ok(old) = toml::from_str::<LegacyToml>(&source) else {
+        return;
+    };
+
+    let mut preferences = Preferences::default();
+    if let Some(value) = old.show_project_panel {
+        preferences.show_project_panel = value;
+    }
+    if let Some(value) = old.show_status_bar {
+        preferences.show_status_bar = value;
+    }
+    if let Some(value) = old.show_output {
+        preferences.show_output = value;
+    }
+    let _ = save_preferences(&preferences);
+    let _ = save_state(&State {
+        recent_projects: old.recent_projects,
+        window: old.window,
+    });
+    let _ = std::fs::rename(&legacy, legacy.with_extension("toml.repris"));
+}
+
 /// The settings of the running application.
-struct Store(Settings);
+struct Store {
+    preferences: Preferences,
+    state: State,
+}
 
 impl Global for Store {}
 
 /// Loads the settings into the application.
-///
-/// Called once, before the first window: everything downstream reads them
-/// through [`get`].
 pub fn init(cx: &mut App) {
-    let mut settings = Settings::load();
-    settings.forget_missing_projects();
-    cx.set_global(Store(settings));
+    migrate_from_toml();
+    save_schema();
+
+    let preferences = match settings_path() {
+        Some(path) => {
+            if !path.exists() {
+                // Written out so there is something to open and read, the way
+                // Zed ships a commented default.
+                let _ = write_atomically(&path, &documented_defaults());
+            }
+            read_json(&path)
+        }
+        None => Preferences::default(),
+    };
+    let mut state: State = match state_path() {
+        Some(path) => read_json(&path),
+        None => State::default(),
+    };
+    state.forget_missing_projects();
+
+    cx.set_global(Store { preferences, state });
 }
 
-/// The settings as they stand.
-pub fn get(cx: &App) -> &Settings {
-    &cx.global::<Store>().0
+/// The preferences as they stand.
+pub fn prefs(cx: &App) -> &Preferences {
+    &cx.global::<Store>().preferences
 }
 
-/// Changes the settings and writes them to disk.
-///
-/// Saved on every change rather than at quit: the file is a few hundred bytes,
-/// and a workshop that loses your preferences when it crashes is a workshop
-/// whose preferences you stop setting.
-pub fn update(cx: &mut App, change: impl FnOnce(&mut Settings)) {
-    let mut settings = cx.global::<Store>().0.clone();
-    change(&mut settings);
-    if settings == cx.global::<Store>().0 {
+/// The machine state as it stands.
+pub fn state(cx: &App) -> &State {
+    &cx.global::<Store>().state
+}
+
+/// Changes a preference and writes it, touching only the key that moved.
+pub fn update_prefs(cx: &mut App, change: impl FnOnce(&mut Preferences)) {
+    let mut preferences = cx.global::<Store>().preferences.clone();
+    change(&mut preferences);
+    if preferences == cx.global::<Store>().preferences {
         return;
     }
-    if let Err(error) = settings.save() {
+    if let Err(error) = save_preferences(&preferences) {
         eprintln!("réglages non enregistrés : {error}");
     }
-    cx.set_global(Store(settings));
+    cx.global_mut::<Store>().preferences = preferences;
 }
 
-/// The comment maxx puts at the top of the file it writes.
-fn header() -> String {
-    "# Réglages de maxx. Écrit par l'application : les commentaires que vous\n\
-     # ajoutez ici disparaissent au prochain enregistrement.\n\n"
-        .to_string()
+/// Changes the machine state and writes it.
+pub fn update_state(cx: &mut App, change: impl FnOnce(&mut State)) {
+    let mut state = cx.global::<Store>().state.clone();
+    change(&mut state);
+    if state == cx.global::<Store>().state {
+        return;
+    }
+    if let Err(error) = save_state(&state) {
+        eprintln!("état non enregistré : {error}");
+    }
+    cx.global_mut::<Store>().state = state;
 }
 
-/// Changes the settings in memory, without touching the disk.
+/// Changes the machine state in memory, without touching the disk.
 ///
-/// For the values that move continuously — the window being dragged or
-/// resized — where writing a file per frame would be absurd. [`flush`] puts
-/// them away at quit.
-pub fn stage(cx: &mut App, change: impl FnOnce(&mut Settings)) {
-    let mut settings = cx.global::<Store>().0.clone();
-    change(&mut settings);
-    if settings != cx.global::<Store>().0 {
-        cx.set_global(Store(settings));
+/// For what moves continuously — the window being dragged — where writing a
+/// file per frame would be absurd. [`flush`] puts it away at quit.
+pub fn stage_state(cx: &mut App, change: impl FnOnce(&mut State)) {
+    let mut state = cx.global::<Store>().state.clone();
+    change(&mut state);
+    if state != cx.global::<Store>().state {
+        cx.global_mut::<Store>().state = state;
     }
 }
 
-/// Writes whatever [`stage`] left in memory.
+/// Writes whatever [`stage_state`] left in memory.
 pub fn flush(cx: &App) {
-    if let Err(error) = cx.global::<Store>().0.save() {
-        eprintln!("réglages non enregistrés : {error}");
+    if let Err(error) = save_state(&cx.global::<Store>().state) {
+        eprintln!("état non enregistré : {error}");
     }
 }

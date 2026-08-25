@@ -115,19 +115,40 @@ texte échappent à `⌘Z`.
 
 ## Les réglages
 
-`settings.rs` tient un TOML unique dans le répertoire de configuration du
-système. Il est chargé une fois au démarrage dans un `Global`, et c'est la
+Deux fichiers, comme Zed les sépare, parce que ce ne sont pas deux fois la même
+chose.
+
+`settings.json` est à l'utilisateur. Il s'édite à la main autant que par maxx,
+donc **maxx n'y réécrit que la clé qu'il change** : `splice_key` repère la
+tranche d'octets de la valeur et la remplace, exactement comme `parser::splice`
+le fait dans un `.rs`. Commentaires et mise en forme survivent. Un fichier
+absent est écrit avec tous ses défauts et une ligne d'explication par clé —
+c'est cette partie-là des réglages de Zed qui vaut d'être copiée, avant toute
+question de format.
+
+`state.json` est à la machine : projets récents, géométrie de la fenêtre.
+Personne ne l'édite, il est réécrit en entier.
+
+Le format est du JSON à commentaires, lu par `serde_json_lenient` — le crate
+avec lequel Zed lit les siens, déjà dans l'arbre via gpui. Le JSON strict ne
+sait pas porter un commentaire, et un fichier de réglages qu'on ne peut pas
+annoter est un fichier dont il faut tenir la documentation ailleurs. Un schéma
+JSON est écrit à côté, dérivé de la structure par `schemars`, pour que l'éditeur
+complète et signale les fautes de frappe.
+
+Les réglages sont chargés une fois au démarrage dans un `Global`, et c'est la
 **seule** source : le workspace ne garde pas de copie de l'état des panneaux, il
-lit les réglages au rendu. C'est ce qui empêche l'écran de préférences, la barre
-de menus et la fenêtre de diverger.
+lit au rendu. C'est ce qui empêche l'écran de préférences, la barre de menus et
+la fenêtre de diverger — et c'est nécessaire, le `SettingField` de
+gpui-component lisant et écrivant l'application sans passer par la vue.
 
-Deux voies d'écriture, volontairement distinctes :
+Trois voies d'écriture, volontairement distinctes :
 
-- `update` change et écrit le fichier tout de suite. Pour ce qui bouge par
-  gestes discrets — une bascule, un projet ouvert.
-- `stage` change en mémoire seulement, `flush` écrit à l'extinction. Pour ce qui
-  bouge en continu : la géométrie de la fenêtre, où un fichier par image serait
-  absurde. Corollaire assumé : un `kill -9` perd la géométrie.
+- `update_prefs` change une préférence et rustine le fichier de l'utilisateur.
+- `update_state` change l'état machine et le réécrit.
+- `stage_state` change en mémoire seulement, `flush` écrit à l'extinction. Pour
+  ce qui bouge en continu : la géométrie de la fenêtre, où un fichier par image
+  serait absurde. Corollaire assumé : un `kill -9` perd la géométrie.
 
 Le principe de lecture : un fichier absent, partiel ou abîmé n'est jamais pire
 que pas de fichier. `serde(default)` fait retomber une clé manquante sur son
@@ -135,10 +156,9 @@ défaut plutôt que d'échouer la lecture entière, et un fichier illisible est
 signalé puis laissé intact — l'écraser perdrait ce que l'utilisateur était en
 train d'y écrire.
 
-`load_from` et `save_to` prennent un chemin, à côté de `load` et `save`. Ce
-n'est pas de la généralité gratuite : les tests d'intégration d'un même binaire
-tournent en parallèle dans un seul processus, donc isoler un test en posant
-`XDG_CONFIG_HOME` faisait échouer ses voisins de manière non déterministe.
+Le `settings.toml` de la version précédente est repris une fois au démarrage,
+scindé en deux, puis renommé `settings.toml.repris` — pas supprimé : une
+migration qui mange des données est une migration que personne ne croit.
 
 ## Ouvrir un projet : deux chemins, pas un
 
@@ -164,9 +184,9 @@ trois dorsales. Le détail est dans `BACKLOG.md`, section Portabilité.
 ## Où brancher quoi
 
 - **Un composant de plus** : `registry.rs`, une entrée. Rien d'autre à toucher.
-- **Un réglage de plus** : un champ dans `settings::Settings` avec son défaut,
-  puis un `SettingItem` dans `preferences.rs`. Le champ lit et écrit les
-  réglages, il ne copie rien.
+- **Un réglage de plus** : un champ dans `settings::Preferences` avec son
+  défaut, une ligne dans `documented_defaults`, puis un `SettingItem` dans
+  `preferences.rs`. Le champ lit et écrit les réglages, il ne copie rien.
 - **Une entrée de menu de plus** : une action dans `actions.rs`, son gestionnaire,
   et la ligne dans `menus.rs`. Une action qui porte une donnée ne peut pas venir
   de la macro `actions!` — voir `OpenRecent`.

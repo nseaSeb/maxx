@@ -17,7 +17,8 @@ quote = "1"
 # Déjà compilés dans l'arbre par gpui : les prendre en dépendance directe ne
 # coûte rien de plus au build.
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"
+toml = "0.8"                 # lecture unique de l'ancien settings.toml
+serde_json_lenient = "0.2"   # le JSON à commentaires, celui que Zed lit
 schemars = "1"
 
 [profile.dev]

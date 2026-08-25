@@ -43,9 +43,9 @@ fn appearance_page() -> SettingPage {
                 SettingItem::new(
                     "Panneau du projet",
                     SettingField::switch(
-                        |cx| settings::get(cx).show_project_panel,
+                        |cx| settings::prefs(cx).show_project_panel,
                         |value, cx| {
-                            settings::update(cx, |settings| settings.show_project_panel = value);
+                            settings::update_prefs(cx, |prefs| prefs.show_project_panel = value);
                         },
                     ),
                 )
@@ -55,9 +55,9 @@ fn appearance_page() -> SettingPage {
                 SettingItem::new(
                     "Barre d'état",
                     SettingField::switch(
-                        |cx| settings::get(cx).show_status_bar,
+                        |cx| settings::prefs(cx).show_status_bar,
                         |value, cx| {
-                            settings::update(cx, |settings| settings.show_status_bar = value);
+                            settings::update_prefs(cx, |prefs| prefs.show_status_bar = value);
                         },
                     ),
                 )
@@ -67,9 +67,9 @@ fn appearance_page() -> SettingPage {
                 SettingItem::new(
                     "Panneau de sortie",
                     SettingField::switch(
-                        |cx| settings::get(cx).show_output,
+                        |cx| settings::prefs(cx).show_output,
                         |value, cx| {
-                            settings::update(cx, |settings| settings.show_output = value);
+                            settings::update_prefs(cx, |prefs| prefs.show_output = value);
                         },
                     ),
                 )
@@ -80,7 +80,7 @@ fn appearance_page() -> SettingPage {
 
 /// The recent projects, listed and clearable.
 fn projects_page(cx: &mut Context<Workspace>) -> SettingPage {
-    let recent = settings::get(cx).recent_projects.clone();
+    let recent = settings::state(cx).recent_projects.clone();
     let count = recent.len();
 
     SettingPage::new("Projets").group(
@@ -101,9 +101,9 @@ fn projects_page(cx: &mut Context<Workspace>) -> SettingPage {
                 div().flex().flex_col().gap_1().children(rows)
             }))
             .item(SettingItem::render(|_, _, cx| {
-                let empty = settings::get(cx).recent_projects.is_empty();
+                let empty = settings::state(cx).recent_projects.is_empty();
                 action_button("prefs-clear-recent", "Vider la liste", empty, |cx| {
-                    settings::update(cx, |settings| settings.recent_projects.clear());
+                    settings::update_state(cx, |state| state.recent_projects.clear());
                     cx.set_menus(crate::menus::app_menus(cx));
                 })
             })),
@@ -112,7 +112,7 @@ fn projects_page(cx: &mut Context<Workspace>) -> SettingPage {
 
 /// Where the settings live, and how to edit them by hand.
 fn file_page(cx: &mut Context<Workspace>) -> SettingPage {
-    let path = settings::Settings::path();
+    let path = settings::settings_path();
     let shown = path
         .as_ref()
         .map(|path| path.to_string_lossy().into_owned())
@@ -123,9 +123,10 @@ fn file_page(cx: &mut Context<Workspace>) -> SettingPage {
         SettingGroup::new()
             .title("Fichier de réglages")
             .description(
-                "Tout ce qui est ici s'édite aussi à la main. maxx réécrit le \
-                 fichier entier quand il enregistre, donc les commentaires que \
-                 vous y ajoutez disparaissent.",
+                "Tout ce qui est ici s'édite aussi à la main, commentaires \
+                 compris : maxx ne réécrit que la clé qu'il change. Les projets \
+                 récents et la position de la fenêtre vivent à côté, dans \
+                 state.json, que maxx tient seul.",
             )
             .item(SettingItem::render(move |_, _, _| {
                 div()
@@ -134,14 +135,10 @@ fn file_page(cx: &mut Context<Workspace>) -> SettingPage {
                     .child(SharedString::from(shown.clone()))
             }))
             .item(SettingItem::render(move |_, _, _| {
-                let path = settings::Settings::path();
+                let path = settings::settings_path();
                 action_button("prefs-open-file", "Ouvrir dans l'éditeur", path.is_none(), {
                     move |_| {
-                        if let Some(path) = settings::Settings::path() {
-                            // Written before opening: the file may not exist
-                            // yet, and an editor opening on nothing is worse
-                            // than an editor opening on the defaults.
-                            let _ = settings::Settings::load().save();
+                        if let Some(path) = settings::settings_path() {
                             crate::run::open_editor(&path);
                         }
                     }

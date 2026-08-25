@@ -106,12 +106,15 @@ L'écran de préférences existe (`⌘,`, `src/preferences.rs`), bâti sur
 lit et écrit les réglages directement, sans copie, donc rien ne peut y diverger
 de ce qui est sur le disque. Il grandira avec les réglages qu'on lui donnera.
 
-**Séparer les préférences de l'état**, comme Zed le fait — `settings.json` à la
-main d'un côté, une base d'état de l'autre. Aujourd'hui un seul TOML mélange ce
-qu'on édite volontiers (panneaux affichés) et ce qu'on n'édite jamais (projets
-récents, géométrie de la fenêtre). Deux fichiers, `settings.toml` et
-`state.toml`, suffiraient : SQLite n'apporterait rien à ces quelques centaines
-d'octets, et coûterait une dépendance et un format illisible à la main.
+La séparation préférences / état est faite : `settings.json` à l'utilisateur,
+`state.json` à la machine, du JSON à commentaires lu comme Zed lit le sien, et
+une écriture qui ne touche que la clé changée. SQLite n'apporterait rien à ces
+quelques centaines d'octets et coûterait un format illisible à la main.
+
+Ce qui reste de ce côté : **des réglages par projet**, `.maxx/settings.json`
+superposé aux réglages globaux — c'est la couche que Zed appelle
+`.zed/settings.json`, et elle n'a de sens qu'une fois qu'il y aura des réglages
+qui méritent d'être différents d'un projet à l'autre.
 
 **Ce que maxx retient d'un projet** : projets récents, dernière vue ouverte,
 dossiers dépliés, largeur des panneaux pour ce projet. N'appartient pas au

@@ -1,53 +1,98 @@
-//! Les réglages doivent survivre à un aller-retour sur disque, et surtout à un
-//! fichier absent, vide ou abîmé : maxx doit démarrer dans tous les cas.
+//! Les réglages doivent survivre à un aller-retour sur disque, à un fichier
+//! absent, vide ou abîmé — et surtout, l'écriture d'une clé ne doit rien
+//! changer d'autre dans le fichier.
 
 use std::path::PathBuf;
 
-use maxx::settings::Settings;
+use maxx::settings::{Preferences, State, append_key, patch_preferences, splice_key};
 
-/// Un fichier de réglages à nous.
-///
-/// `load_from` et `save_to` prennent un chemin, donc rien ici ne touche aux
-/// réglages de la machine — et les tests peuvent tourner en parallèle, ce
-/// qu'une variable d'environnement partagée interdisait.
-fn scratch(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(name);
-    let _ = std::fs::remove_dir_all(&root);
-    root.join("settings.toml")
+#[test]
+fn writing_a_key_leaves_every_other_byte_alone() {
+    let source = r#"// Mes réglages à moi.
+{
+  "$schema": "./settings-schema.json",
+
+  // J'y tiens, à ce commentaire.
+  "show_project_panel": true,
+
+  "show_status_bar": true,
+  "show_output": false
+}
+"#;
+
+    let preferences = Preferences {
+        show_project_panel: false,
+        ..Preferences::default()
+    };
+    let patched = patch_preferences(source, &preferences);
+
+    assert!(patched.contains("// Mes réglages à moi."));
+    assert!(patched.contains("// J'y tiens, à ce commentaire."));
+    assert!(patched.contains("\"$schema\": \"./settings-schema.json\""));
+    assert!(patched.contains("\"show_project_panel\": false"));
+    // Les deux autres n'ont pas bougé de valeur, donc pas de reformatage.
+    assert!(patched.contains("\"show_status_bar\": true"));
+    assert!(patched.contains("\"show_output\": false"));
+    assert_eq!(patched.lines().count(), source.lines().count());
 }
 
 #[test]
-fn settings_survive_a_round_trip() {
-    let path = scratch("maxx_settings_round_trip");
+fn a_missing_key_is_added_rather_than_the_file_rewritten() {
+    let source = "{\n  \"show_output\": true\n}\n";
+    let patched = patch_preferences(source, &Preferences::default());
 
-    let settings = Settings {
-        show_project_panel: false,
+    assert!(patched.contains("\"show_project_panel\": true"), "{patched}");
+    assert!(patched.contains("\"show_status_bar\": true"), "{patched}");
+    // La valeur présente a été mise à jour sur place, pas dupliquée.
+    assert_eq!(patched.matches("\"show_output\"").count(), 1, "{patched}");
+    assert!(patched.contains("\"show_output\": false"), "{patched}");
+}
+
+#[test]
+fn a_comment_holding_a_brace_does_not_derail_the_patch() {
+    let source = "{\n  // un } et une \" dans un commentaire\n  \"show_output\": false\n}\n";
+    let preferences = Preferences {
         show_output: true,
-        recent_projects: vec![PathBuf::from("/tmp/a"), PathBuf::from("/tmp/b")],
-        window: Some(maxx::settings::WindowGeometry {
-            x: 12.0,
-            y: 34.0,
-            width: 800.0,
-            height: 600.0,
-        }),
-        ..Settings::default()
+        ..Preferences::default()
     };
-    settings.save_to(&path).expect("les réglages doivent s'écrire");
+    let patched = patch_preferences(source, &preferences);
 
-    assert!(path.exists(), "{} n'existe pas", path.display());
-    let source = std::fs::read_to_string(&path).unwrap();
-    assert!(source.starts_with("# Réglages de maxx."), "{source}");
+    assert!(patched.contains("// un } et une \" dans un commentaire"), "{patched}");
+    assert!(patched.contains("\"show_output\": true"), "{patched}");
+}
 
-    assert_eq!(Settings::load_from(&path), settings);
+#[test]
+fn splicing_stops_at_the_end_of_the_value_it_replaces() {
+    let source = "{\n  \"a\": [1, {\"b\": 2}],\n  \"c\": 3\n}";
+    let patched = splice_key(source, "a", "[]").expect("la clé est là");
+    assert_eq!(patched, "{\n  \"a\": [],\n  \"c\": 3\n}");
+
+    assert!(splice_key(source, "absente", "1").is_none());
+}
+
+#[test]
+fn appending_a_key_to_an_empty_object_stays_valid() {
+    assert_eq!(append_key("{}", "a", "1"), "{\n  \"a\": 1\n}");
+    assert_eq!(append_key("{\n  \"a\": 1\n}", "b", "2"), "{\n  \"a\": 1,\n  \"b\": 2\n}");
+}
+
+#[test]
+fn the_documented_defaults_are_readable_and_hold_the_defaults() {
+    let source = maxx::settings::documented_defaults();
+    assert!(source.contains("// Réglages de maxx."), "{source}");
+
+    let preferences: Preferences =
+        serde_json_lenient::from_str_lenient(&source).expect("les commentaires sont tolérés");
+    assert_eq!(preferences, Preferences::default());
 }
 
 #[test]
 fn a_damaged_file_falls_back_to_the_defaults() {
-    let path = scratch("maxx_settings_damaged");
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    std::fs::write(&path, "ceci n'est pas du TOML = = =\n").unwrap();
+    let path = std::env::temp_dir().join("maxx_settings_damaged.json");
+    std::fs::write(&path, "ceci n'est pas du JSON = = =\n").unwrap();
 
-    assert_eq!(Settings::load_from(&path), Settings::default());
+    let preferences: Preferences = maxx::settings::read_json(&path);
+    assert_eq!(preferences, Preferences::default());
     // Le fichier abîmé reste sur le disque : l'écraser perdrait ce que
     // l'utilisateur était en train d'y écrire.
     assert!(path.exists());
@@ -55,45 +100,43 @@ fn a_damaged_file_falls_back_to_the_defaults() {
 
 #[test]
 fn a_partial_file_keeps_the_defaults_for_what_it_omits() {
-    let path = scratch("maxx_settings_partial");
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    std::fs::write(&path, "show_output = true\n").unwrap();
+    let path = std::env::temp_dir().join("maxx_settings_partial.json");
+    std::fs::write(&path, "{ \"show_output\": true }\n").unwrap();
 
-    let settings = Settings::load_from(&path);
-    assert!(settings.show_output);
-    assert!(settings.show_project_panel, "défaut perdu");
-    assert!(settings.show_status_bar, "défaut perdu");
-    assert!(settings.recent_projects.is_empty());
+    let preferences: Preferences = maxx::settings::read_json(&path);
+    assert!(preferences.show_output);
+    assert!(preferences.show_project_panel, "défaut perdu");
+    assert!(preferences.show_status_bar, "défaut perdu");
 }
 
 #[test]
 fn the_recent_list_moves_deduplicates_and_stops_at_ten() {
-    let mut settings = Settings::default();
+    let mut state = State::default();
 
-    assert!(settings.remember_project(&PathBuf::from("/tmp/un")));
-    assert!(settings.remember_project(&PathBuf::from("/tmp/deux")));
+    assert!(state.remember_project(&PathBuf::from("/tmp/un")));
+    assert!(state.remember_project(&PathBuf::from("/tmp/deux")));
     assert_eq!(
-        settings.recent_projects,
+        state.recent_projects,
         vec![PathBuf::from("/tmp/deux"), PathBuf::from("/tmp/un")]
     );
 
     // Rouvrir celui qui est déjà en tête ne change rien — donc ni fichier
     // réécrit, ni barre de menus reconstruite.
-    assert!(!settings.remember_project(&PathBuf::from("/tmp/deux")));
+    assert!(!state.remember_project(&PathBuf::from("/tmp/deux")));
 
     // Rouvrir un ancien le remonte, sans le dupliquer.
-    assert!(settings.remember_project(&PathBuf::from("/tmp/un")));
+    assert!(state.remember_project(&PathBuf::from("/tmp/un")));
     assert_eq!(
-        settings.recent_projects,
+        state.recent_projects,
         vec![PathBuf::from("/tmp/un"), PathBuf::from("/tmp/deux")]
     );
 
     for index in 0..15 {
-        settings.remember_project(&PathBuf::from(format!("/tmp/projet_{index}")));
+        state.remember_project(&PathBuf::from(format!("/tmp/projet_{index}")));
     }
-    assert_eq!(settings.recent_projects.len(), 10);
+    assert_eq!(state.recent_projects.len(), 10);
     assert_eq!(
-        settings.recent_projects[0],
+        state.recent_projects[0],
         PathBuf::from("/tmp/projet_14"),
         "le plus récent doit être en tête"
     );
@@ -105,11 +148,11 @@ fn a_project_that_no_longer_exists_leaves_the_list() {
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
 
-    let mut settings = Settings {
+    let mut state = State {
         recent_projects: vec![root.clone(), root.join("parti")],
-        ..Settings::default()
+        ..State::default()
     };
-    settings.forget_missing_projects();
+    state.forget_missing_projects();
 
-    assert_eq!(settings.recent_projects, vec![root]);
+    assert_eq!(state.recent_projects, vec![root]);
 }

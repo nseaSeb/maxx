@@ -100,7 +100,7 @@ pub fn register_handlers(cx: &mut App) {
     cx.on_action(new_project);
 
     cx.on_action(|action: &OpenRecent, cx: &mut App| {
-        let path = crate::settings::get(cx)
+        let path = crate::settings::state(cx)
             .recent_projects
             .get(action.index)
             .cloned();
@@ -110,7 +110,7 @@ pub fn register_handlers(cx: &mut App) {
         }
     });
     cx.on_action(|_: &ClearRecentProjects, cx: &mut App| {
-        crate::settings::update(cx, |settings| settings.recent_projects.clear());
+        crate::settings::update_state(cx, |state| state.recent_projects.clear());
         cx.set_menus(crate::menus::app_menus(cx));
     });
     cx.on_action(|_: &NoRecentProject, _cx: &mut App| {});

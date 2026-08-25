@@ -157,12 +157,20 @@ Ce qui est connu et reporté est dans [`BACKLOG.md`](BACKLOG.md).
 `⌘,` ouvre l'écran de réglages, comme un onglet et non comme une boîte
 modale : il se referme avec `⌘W` et laisse revenir à la vue en cours.
 
-maxx écrit ce qu'il retient dans un TOML — `~/Library/Application Support/maxx/`
-sur macOS, `$XDG_CONFIG_HOME` ou `~/.config` ailleurs. Il s'édite à la main :
-projets récents, panneaux affichés, position de la fenêtre. Un fichier absent,
-partiel ou abîmé n'empêche jamais maxx de démarrer — chaque valeur a un défaut,
-et un fichier illisible est signalé puis laissé tel quel, pour ne pas écraser ce
-que vous étiez en train d'y écrire.
+Deux fichiers dans `~/Library/Application Support/maxx/` — `$XDG_CONFIG_HOME`
+ou `~/.config` ailleurs, `%APPDATA%` sur Windows.
+
+`settings.json` est à vous. Du JSON à commentaires, comme celui de Zed, écrit
+avec ses défauts et une ligne d'explication par clé la première fois. **maxx n'y
+réécrit que la clé qu'il change** : vos commentaires et votre mise en forme
+restent. Un schéma est déposé à côté, pour que votre éditeur complète.
+
+`state.json` est à maxx : projets récents, position de la fenêtre. Personne ne
+l'édite, il est réécrit en entier.
+
+Un fichier absent, partiel ou abîmé n'empêche jamais maxx de démarrer — chaque
+valeur a un défaut, et un fichier illisible est signalé puis laissé tel quel,
+pour ne pas écraser ce que vous étiez en train d'y écrire.
 
 ## Licence
 

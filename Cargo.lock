@@ -3341,6 +3341,7 @@ dependencies = [
  "quote",
  "schemars",
  "serde",
+ "serde_json_lenient",
  "syn 3.0.4",
  "toml 0.8.23",
 ]
