@@ -28,12 +28,7 @@ impl Accueil {
     /// maxx pose le gestionnaire vide et vous laissez le corps. Sans
     /// `cx.notify()`, le compteur changerait sans que l'écran bouge — c'est
     /// l'oubli classique.
-    pub fn on_ouvrir(
-        &mut self,
-        _event: &ClickEvent,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn on_ouvrir(&mut self, _event: &ClickEvent, _window: &mut Window, cx: &mut Context<Self>) {
         self.ouvertures += 1;
         self.resume = match self.ouvertures {
             1 => "L'inspecteur a été ouvert une fois.".into(),
@@ -52,28 +47,20 @@ impl Render for Accueil {
             .p_4()
             .child(Label::new("Démonstration de maxx"))
             .child(
-                GroupBox::new()
-                    .title("Composants")
-                    .child(
-                        v_flex()
-                            .gap_2()
-                            .child(Label::new("Chaque élément ci-dessous vient du catalogue."))
-                            .child(Input::new(&self.nom))
-                            .child(
-                                h_flex()
-                                    .gap_4()
-                                    .child(
-                                        Checkbox::new("relire")
-                                            .label("Relire avant d'écrire"),
-                                    )
-                                    .child(
-                                        Switch::new("veille")
-                                            .label("Surveiller le disque"),
-                                    ),
-                            )
-                            .child(Divider::horizontal())
-                            .child(Label::new(self.resume.clone())),
-                    ),
+                GroupBox::new().title("Composants").child(
+                    v_flex()
+                        .gap_2()
+                        .child(Label::new("Chaque élément ci-dessous vient du catalogue."))
+                        .child(Input::new(&self.nom))
+                        .child(
+                            h_flex()
+                                .gap_4()
+                                .child(Checkbox::new("relire").label("Relire avant d'écrire"))
+                                .child(Switch::new("veille").label("Surveiller le disque")),
+                        )
+                        .child(Divider::horizontal())
+                        .child(Label::new(self.resume.clone())),
+                ),
             )
             .child(
                 h_flex()

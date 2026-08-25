@@ -54,12 +54,15 @@ impl Default for Preferences {
             show_output: false,
             editor: crate::tools::AUTOMATIC.into(),
             terminal: crate::tools::AUTOMATIC.into(),
-            // Éteint par défaut, et c'est le point délicat : rustfmt met en
-            // forme le fichier entier, pas seulement la zone que maxx gère.
-            // Sur un projet déjà passé au formateur, cela ne change rien
-            // ailleurs ; sur un projet qui ne l'utilise pas, cela imposerait
-            // un style que personne n'a demandé.
-            format_on_save: false,
+            // Allumé, et ce n'est pas un excès de zèle. Un éditeur Rust
+            // formate à l'enregistrement — c'est le défaut de Zed comme de
+            // rust-analyzer —, et ce que `codegen` écrit n'est pas ce que
+            // rustfmt écrirait. Sans ce réglage, chaque enregistrement dans
+            // l'éditeur reformate la zone gérée, que maxx réécrit à sa façon à
+            // l'enregistrement suivant : une partie de bras de fer, et un
+            // diff parasite à chaque tour. maxx applique donc lui-même ce que
+            // l'éditeur appliquerait de toute façon.
+            format_on_save: true,
         }
     }
 }
@@ -223,8 +226,11 @@ pub fn documented_defaults() -> String {
 
   // Passer rustfmt sur le fichier après chaque enregistrement, pour que ce que
   // maxx écrit suive les conventions du projet — son rustfmt.toml compris.
-  // Attention : rustfmt met en forme le fichier entier, pas seulement la zone
-  // que maxx gère. Sur un projet déjà formaté, cela ne change rien ailleurs.
+  //
+  // Allumé : un éditeur Rust formate à l'enregistrement, et ce que maxx écrit
+  // n'est pas ce que rustfmt écrirait. Sans cela, l'éditeur et maxx se
+  // reformatent mutuellement la zone gérée à chaque tour. Éteignez-le si votre
+  // projet n'utilise pas rustfmt — il met en forme le fichier entier.
   "format_on_save": {}
 }}
 "#,

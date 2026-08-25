@@ -1163,9 +1163,7 @@ fn main_rs() -> String {
     r#"mod menus;
 mod ui;
 
-use gpui::{
-    App, Application, Bounds, WindowBounds, WindowOptions, prelude::*, px, size,
-};
+use gpui::{App, Application, Bounds, WindowBounds, WindowOptions, prelude::*, px, size};
 use gpui_component::Root;
 
 use crate::ui::accueil::Accueil;

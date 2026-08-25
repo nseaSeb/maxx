@@ -1,0 +1,2 @@
+# Vide, donc rustfmt par défaut : la démo doit être mise en forme exactement
+# comme un projet généré ailleurs, que le rustfmt.toml de maxx ne touche pas.

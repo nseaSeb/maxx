@@ -319,10 +319,22 @@ au disque pour repérer ce qui a changé en dehors de lui. Laisser la copie
 derrière ferait croire à l'enregistrement suivant que quelqu'un a touché au
 fichier : maxx s'accusant lui-même.
 
-Pourquoi éteint par défaut : rustfmt met en forme le fichier entier, donc
-au-delà de la zone gérée, ce qui contredit la promesse du reste. Sur un projet
-déjà passé au formateur, cela ne change rien ailleurs — c'est le cas où le
-réglage se justifie, et c'est à l'utilisateur de le dire.
+Pourquoi allumé par défaut, et c'est le point de conception : un éditeur Rust
+formate à l'enregistrement — c'est le défaut de Zed comme de rust-analyzer — et
+`codegen` n'écrit pas ce que rustfmt écrirait. Vérifié plutôt que supposé :
+rustfmt réécrit la zone gérée de la démo. Sans ce réglage, l'éditeur reformate
+ce que maxx a écrit, maxx le réécrit à sa façon à l'enregistrement suivant, et
+les deux se renvoient la balle avec un diff parasite à chaque tour. maxx
+applique donc lui-même ce que l'éditeur appliquerait de toute façon.
+
+Conséquence à énoncer honnêtement : **l'aller-retour de maxx est neutre à
+rustfmt près**, et c'est cette composition-là que `tests/demo.rs` vérifie. Le
+gabarit, lui, sort déjà au format de rustfmt — un projet fraîchement généré en
+ressort inchangé, ce qu'un test constate.
+
+Il reste que rustfmt met en forme le fichier entier, donc au-delà de la zone
+gérée. Sur un projet déjà passé au formateur cela ne change rien ailleurs ; sur
+un projet qui l'ignore, le réglage s'éteint.
 
 ## La démo comme référence
 

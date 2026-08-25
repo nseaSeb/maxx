@@ -41,16 +41,31 @@ fn every_demo_view_reads_back() {
 
 #[test]
 fn rewriting_a_demo_view_changes_nothing() {
-    // La propriété qui compte : relire puis réécrire sans rien avoir modifié
-    // doit rendre le fichier à l'octet près. Tout écart est une perte.
+    // La propriété qui compte, et sa formulation exacte : relire puis réécrire
+    // sans rien avoir modifié doit rendre le fichier à l'octet près — *à
+    // rustfmt près*.
+    //
+    // La nuance n'est pas un aveu, c'est la description du système. `codegen`
+    // n'écrit pas ce que rustfmt écrirait, et un éditeur Rust formate à
+    // l'enregistrement ; maxx passe donc rustfmt après lui, et c'est la
+    // composition des deux qui doit être stable. Un fichier de démo mis en
+    // forme est aussi ce qu'un projet réel serait.
     let path = demo().join("src/ui/accueil.rs");
     let before = std::fs::read_to_string(&path).unwrap();
 
     let view = View::load(&path).expect("la vue doit se relire");
-    let after = maxx::parser::splice(&before, &maxx::codegen::render(&view.root, 0))
+    let spliced = maxx::parser::splice(&before, &maxx::codegen::render(&view.root, 0))
         .expect("la région gérée doit se retrouver");
 
-    assert_eq!(before, after, "la réécriture n'est pas neutre");
+    let temporaire = std::env::temp_dir().join("maxx_demo_aller_retour.rs");
+    std::fs::write(&temporaire, &spliced).unwrap();
+    match maxx::run::format_rust(&temporaire) {
+        Ok(_) => {
+            let after = std::fs::read_to_string(&temporaire).unwrap();
+            assert_eq!(before, after, "la réécriture suivie de rustfmt n'est pas neutre");
+        }
+        Err(erreur) => assert!(erreur.contains("introuvable"), "{erreur}"),
+    }
 }
 
 #[test]

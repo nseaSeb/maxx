@@ -238,10 +238,13 @@ terminal (Helix, Neovim, Vim) sont lancés dans le terminal choisi.
 
 Réglages ▸ Outils ▸ **Mettre en forme à l'enregistrement** passe `rustfmt` sur
 le fichier après chaque écriture, en respectant le `rustfmt.toml` du projet.
-Éteint par défaut, et pour une raison : rustfmt met en forme le fichier
-*entier*, pas seulement la zone que maxx gère. Sur un projet déjà formaté cela
-ne change rien ailleurs ; sur un projet qui n'utilise pas rustfmt, cela
-imposerait un style que personne n'a demandé.
+Allumé, et ce n'est pas un excès de zèle : un éditeur Rust formate à
+l'enregistrement — c'est le défaut de Zed comme de rust-analyzer — et ce que
+maxx écrit n'est pas ce que rustfmt écrirait. Sans ce réglage, l'éditeur et
+maxx se reformatent mutuellement la zone gérée à chaque tour, avec un diff
+parasite à la clé. maxx applique donc lui-même ce que l'éditeur appliquerait de
+toute façon. Éteignez-le si votre projet n'utilise pas rustfmt : il met en forme
+le fichier entier.
 
 `⌘,` ouvre l'écran de réglages, comme un onglet et non comme une boîte
 modale : il se referme avec `⌘W` et laisse revenir à la vue en cours.

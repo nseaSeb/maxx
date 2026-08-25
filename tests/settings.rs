@@ -19,7 +19,7 @@ fn writing_a_key_leaves_every_other_byte_alone() {
   "show_output": false,
   "editor": "auto",
   "terminal": "auto",
-  "format_on_save": false
+  "format_on_save": true
 }
 "#;
 
