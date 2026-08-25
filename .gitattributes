@@ -1,0 +1,12 @@
+# Les fins de ligne sont LF dans le dépôt, et LF à l'extraction — y compris sur
+# Windows.
+#
+# Ce n'est pas une préférence : les tests lisent des fichiers versionnés et les
+# comparent à ce que maxx écrit, qui est toujours en LF. Une extraction en CRLF
+# fait échouer ces comparaisons pour une raison qui n'a rien à voir avec le
+# code. C'est exactement ce qui a fait rougir la première CI Windows.
+* text=auto eol=lf
+
+# Le verrou et les gabarits sont lus par des tests : jamais de conversion.
+Cargo.lock -text
+demo/** -text

@@ -34,3 +34,21 @@ opt-level = 0
 
 [profile.dev.package."*"]
 opt-level = 2
+
+# Le profil de la CI, et la raison d'être de chaque ligne.
+#
+# `[profile.dev.package."*"]` compile les 750 crates de dépendances en O2 pour
+# que l'interface soit fluide pendant le développement. La CI n'ouvre aucune
+# fenêtre : elle paie cette optimisation sans jamais en profiter, et c'est la
+# part dominante de son temps. Ici, les dépendances repassent en O0.
+#
+# Et pas d'informations de débogage : personne ne pose de point d'arrêt dans un
+# runner, alors que leur écriture — les PDB sur Windows — pèse lourd à l'édition
+# de liens, répétée pour chacun des binaires de test.
+[profile.ci]
+inherits = "test"
+debug = false
+
+[profile.ci.package."*"]
+opt-level = 0
+debug = false

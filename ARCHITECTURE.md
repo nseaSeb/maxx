@@ -241,6 +241,20 @@ partirait dans un paquet crates.io, et attache les binaires des trois systèmes
 commit étant déjà celui qu'on voulait publier : ce portail double le filet
 hebdomadaire au moment où l'erreur coûte le plus cher, il ne le remplace pas.
 
+Ce que le premier run Windows a appris, chiffres à l'appui : `cargo check`
+18 min, `clippy` 16 s derrière lui, `cargo test` **37 min**. Les deux premiers
+s'arrêtent aux métadonnées ; seul `cargo test` produit du code machine et lie
+les binaires. Retirer le `check` séparé ne gagne donc presque rien — le coût
+est ailleurs, et il se réduit autrement : un profil `ci` qui compile les
+dépendances en O0 au lieu de O2, sans informations de débogage, et une
+exclusion Defender sur les runners Windows, où l'antivirus inspecte chacun des
+dizaines de milliers de fichiers que rustc écrit.
+
+Il n'y a pas d'équivalent local pour Windows : Docker sur un Mac lance des
+conteneurs Linux, un conteneur Windows exigeant un hôte Windows.
+`scripts/verifier-linux.sh` rejoue la branche Linux, et c'est tout ce qu'on
+peut rejouer.
+
 `ci.yml` coûte cher — environ 750 crates par branche, une dizaine de minutes à
 froid, le double sur Windows — donc elle est dosée : une poussée ne vérifie que
 macOS, les trois systèmes tournent sur les pull requests, sur demande
