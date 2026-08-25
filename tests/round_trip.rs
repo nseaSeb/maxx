@@ -223,7 +223,7 @@ fn an_invalid_field_name_is_refused() {
         maxx::registry::write(&mut node, prop, refused);
         assert_eq!(
             maxx::codegen::render(&node, 0),
-            "Input::new(&self.champ)",
+            "Input::new(&self.field)",
             "« {refused} » ne doit pas être écrit dans le source"
         );
     }
@@ -481,4 +481,66 @@ fn a_plain_number_is_written_without_px() {
     // Vidé, l'appel disparaît plutôt que de s'écrire à zéro.
     maxx::registry::write(&mut node, value, "");
     assert!(node.call("value").is_none());
+}
+
+/// Un sous-arbre copié se relit depuis le texte que le presse-papier porte.
+///
+/// Le presse-papier ne porte pas un format à maxx mais du Rust : ce qui est
+/// copié ici se colle dans Zed, et ce qui s'y écrit se colle ici. Les deux
+/// bouts du voyage passent donc par `codegen::render` et `parser::parse_expr`,
+/// et ce test est ce qui les tient d'accord.
+#[test]
+fn a_subtree_survives_the_clipboard() {
+    let mut column = maxx::registry::instantiate("column").unwrap();
+    let mut button = maxx::registry::instantiate("button").unwrap();
+    let spec = maxx::registry::of(&button).unwrap();
+    let label = spec.props.iter().find(|prop| prop.label == "Libellé").unwrap();
+    maxx::registry::write(&mut button, label, "Envoyer");
+    column.push_child(button);
+    column.push_child(maxx::registry::instantiate("input").unwrap());
+
+    let source = maxx::codegen::render(&column, 0);
+    let back = maxx::parser::parse_expr(&source).expect("le texte copié doit se relire");
+    assert_eq!(back, column, "le tour par le texte ne doit rien changer");
+}
+
+/// Ce qui n'est pas une expression gpui ne devient pas un nœud opaque.
+#[test]
+fn clipboard_prose_is_not_an_expression() {
+    let node = maxx::parser::parse_expr("bonjour, ceci n'est pas du Rust");
+    assert!(node.is_err(), "du texte quelconque doit être refusé, pas adopté");
+}
+
+/// Un champ d'état copié est relié à un champ neuf, pas à celui de l'original.
+///
+/// Deux `Input` sur `&self.field` compilent et se recopient l'un l'autre à
+/// l'exécution : le défaut ne se voit qu'en lançant le projet.
+#[test]
+fn a_copied_input_gets_a_field_of_its_own() {
+    let mut root = maxx::registry::instantiate("column").unwrap();
+    root.push_child(maxx::registry::instantiate("input").unwrap());
+
+    let mut copy = root.children[0].clone();
+    maxx::registry::rebind_state_fields(&mut copy, &root);
+    root.push_child(copy);
+
+    let first = maxx::registry::read(&root.children[0], binding()).unwrap();
+    let second = maxx::registry::read(&root.children[1], binding()).unwrap();
+    assert_eq!(first, "field");
+    assert_eq!(second, "field_2", "le second champ ne peut pas être le premier");
+
+    // Et un sous-arbre qui en porte deux les distingue aussi entre eux.
+    let mut pair = maxx::registry::instantiate("column").unwrap();
+    pair.push_child(maxx::registry::instantiate("input").unwrap());
+    pair.push_child(maxx::registry::instantiate("input").unwrap());
+    maxx::registry::rebind_state_fields(&mut pair, &root);
+    let names: Vec<_> =
+        pair.children.iter().map(|child| maxx::registry::read(child, binding()).unwrap()).collect();
+    assert_eq!(names, vec!["field_3", "field_4"]);
+}
+
+/// La propriété « Champ lié » du champ texte.
+fn binding() -> &'static maxx::registry::Prop {
+    let spec = maxx::registry::by_id("input").unwrap();
+    spec.props.iter().find(|prop| prop.label == "Champ lié").unwrap()
 }

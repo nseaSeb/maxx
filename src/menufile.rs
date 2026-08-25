@@ -532,7 +532,7 @@ fn ensure_action(source: String, name: &str) -> String {
         if let Some(offset) = source.find(anchor) {
             let handler = format!(
                 "    cx.on_action(|_: &{name}, _cx: &mut App| {{\n\
-                 \x20       // Écrit par maxx ; à toi de le remplir.\n\
+                 \x20       // Written by maxx; the body is yours.\n\
                  \x20   }});\n"
             );
             source.insert_str(offset, &handler);

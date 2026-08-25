@@ -158,7 +158,7 @@ pub const CATALOGUE: &[Spec] = &[
         base: "Label::new",
         import: "use gpui_component::label::Label;",
         container: false,
-        default_args: &["Étiquette"],
+        default_args: &["Label"],
         props: &[Prop { label: "Texte", target: Target::BaseArg(0), kind: Kind::Text }],
         state: None,
     },
@@ -195,7 +195,7 @@ pub const CATALOGUE: &[Spec] = &[
                 "use gpui_component::IndexPath;",
                 "use gpui_component::select::{SearchableVec, SelectState};",
             ],
-            initializer: "cx.new(|cx| {\n                SelectState::new(\n                    SearchableVec::new(vec![\n                        SharedString::from(\"Premier\"),\n                        SharedString::from(\"Second\"),\n                    ]),\n                    Some(IndexPath::new(0)),\n                    window,\n                    cx,\n                )\n            })",
+            initializer: "cx.new(|cx| {\n                SelectState::new(\n                    SearchableVec::new(vec![\n                        SharedString::from(\"First\"),\n                        SharedString::from(\"Second\"),\n                    ]),\n                    Some(IndexPath::new(0)),\n                    window,\n                    cx,\n                )\n            })",
         }),
     },
     Spec {
@@ -204,7 +204,7 @@ pub const CATALOGUE: &[Spec] = &[
         base: "Button::new",
         import: "use gpui_component::button::Button;",
         container: false,
-        default_args: &["bouton"],
+        default_args: &["button"],
         props: &[
             Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
             Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text },
@@ -221,7 +221,7 @@ pub const CATALOGUE: &[Spec] = &[
         base: "Checkbox::new",
         import: "use gpui_component::checkbox::Checkbox;",
         container: false,
-        default_args: &["case"],
+        default_args: &["checkbox"],
         props: &[
             Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
             Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text },
@@ -235,7 +235,7 @@ pub const CATALOGUE: &[Spec] = &[
         base: "Switch::new",
         import: "use gpui_component::switch::Switch;",
         container: false,
-        default_args: &["interrupteur"],
+        default_args: &["switch"],
         props: &[
             Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
             Prop { label: "Libellé", target: Target::Method("label"), kind: Kind::Text },
@@ -286,7 +286,7 @@ pub const CATALOGUE: &[Spec] = &[
         // `Link` est un `ParentElement` : son texte est un enfant, pas un
         // argument. Une étiquette déposée dedans est ce qui l'écrit.
         container: true,
-        default_args: &["lien"],
+        default_args: &["link"],
         props: &[
             Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
             Prop { label: "Adresse", target: Target::Method("href"), kind: Kind::Text },
@@ -300,7 +300,7 @@ pub const CATALOGUE: &[Spec] = &[
         base: "Alert::new",
         import: "use gpui_component::alert::Alert;",
         container: false,
-        default_args: &["alerte", "Message"],
+        default_args: &["alert", "Message"],
         props: &[
             Prop { label: "Identifiant", target: Target::BaseArg(0), kind: Kind::Text },
             Prop { label: "Message", target: Target::BaseArg(1), kind: Kind::Text },
@@ -482,7 +482,7 @@ pub fn instantiate(id: &str) -> Option<Node> {
     let args = if spec.id == "input" {
         // A text input needs an `InputState` on the view; the scaffold adds the
         // field, the chain references it.
-        vec![Arg::Verbatim("&self.champ".into())]
+        vec![Arg::Verbatim("&self.field".into())]
     } else {
         spec.default_args.iter().map(|value| Arg::Str((*value).into())).collect()
     };
@@ -492,10 +492,12 @@ pub fn instantiate(id: &str) -> Option<Node> {
         *slot = args;
     }
     match spec.id {
-        "button" => node.set_call("label", Arg::Str("Bouton".into())),
-        "checkbox" => node.set_call("label", Arg::Str("Case à cocher".into())),
-        "switch" => node.set_call("label", Arg::Str("Interrupteur".into())),
-        "group_box" => node.set_call("title", Arg::Str("Cadre".into())),
+        "button" => node.set_call("label", Arg::Str("Button".into())),
+        "checkbox" => node.set_call("label", Arg::Str("Checkbox".into())),
+        "switch" => node.set_call("label", Arg::Str("Switch".into())),
+        "radio" => node.set_call("label", Arg::Str("Radio".into())),
+        "group_box" => node.set_call("title", Arg::Str("Group".into())),
+        "alert" => node.set_call("title", Arg::Str("Note".into())),
         // A spacer with no `flex_1` takes no room and cannot be found again.
         "spacer" => node.set_flag("flex_1", true),
         _ => {}
@@ -599,10 +601,40 @@ pub fn suggested_handler(node: &Node) -> String {
 }
 
 /// A field name not already bound by another input in the tree.
-pub fn unique_input_field(root: &Node) -> String {
+/// Gives every state-backed node of `subtree` a field name `root` does not
+/// already use.
+///
+/// Two text inputs sharing `&self.field` compile and then mirror each other at
+/// runtime — the same defect `insert_component` avoids when it drops a fresh
+/// one. A copy carries the binding with it, so the copy has to be re-bound
+/// before it joins the tree; `view::save` then declares the new fields.
+pub fn rebind_state_fields(subtree: &mut Node, root: &Node) {
+    // Grown as we go: the names handed out here are not in `root` yet, and two
+    // inputs of the same subtree must not be given the same one either.
+    let mut taken = state_fields(root);
+
+    fn walk(node: &mut Node, taken: &mut Vec<String>) {
+        let rebindable = of(node).is_some_and(|spec| spec.state.is_some());
+        if rebindable && let Base::Known { args, .. } = &mut node.base {
+            let name = next_field(taken);
+            taken.push(name.clone());
+            match args.first_mut() {
+                Some(arg) => *arg = Arg::Verbatim(format!("&self.{name}")),
+                None => args.push(Arg::Verbatim(format!("&self.{name}"))),
+            }
+        }
+        for child in &mut node.children {
+            walk(child, taken);
+        }
+    }
+    walk(subtree, &mut taken);
+}
+
+/// The names of the view fields every state-backed node of `root` binds to.
+fn state_fields(root: &Node) -> Vec<String> {
     let mut used = Vec::new();
     root.walk(&mut |_, node| {
-        if node.base.path() != Some("Input::new") {
+        if of(node).is_none_or(|spec| spec.state.is_none()) {
             return;
         }
         if let Base::Known { args, .. } = &node.base
@@ -614,15 +646,23 @@ pub fn unique_input_field(root: &Node) -> String {
             used.push(name);
         }
     });
+    used
+}
 
+/// The first `field`, `field_2`, … that `taken` does not hold.
+fn next_field(taken: &[String]) -> String {
     let mut index = 1;
     loop {
-        let candidate = if index == 1 { "champ".to_string() } else { format!("champ_{index}") };
-        if !used.contains(&candidate) {
+        let candidate = if index == 1 { "field".to_string() } else { format!("field_{index}") };
+        if !taken.contains(&candidate) {
             return candidate;
         }
         index += 1;
     }
+}
+
+pub fn unique_input_field(root: &Node) -> String {
+    next_field(&state_fields(root))
 }
 
 /// Reads the current value of a property, as text for the inspector.

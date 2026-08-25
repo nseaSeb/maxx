@@ -44,6 +44,9 @@ actions!(
         Copy,
         Paste,
         SelectAll,
+        DuplicateNode,
+        CopyNode,
+        PasteNode,
         AddMenu,
         AddMenuEntry,
         AddMenuSeparator,
@@ -136,6 +139,15 @@ pub fn register_handlers(cx: &mut App) {
     });
     cx.on_action(|_: &Save, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.save_view(cx));
+    });
+    cx.on_action(|_: &DuplicateNode, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.duplicate_selected(cx));
+    });
+    cx.on_action(|_: &CopyNode, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.copy_selection(cx));
+    });
+    cx.on_action(|_: &PasteNode, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.paste_node(cx));
     });
     cx.on_action(|_: &DeleteNode, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.delete_selected(cx));
@@ -269,6 +281,9 @@ pub fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-shift-r", ReloadView, None),
         KeyBinding::new("cmd-ctrl-up", MoveMenuUp, None),
         KeyBinding::new("cmd-ctrl-down", MoveMenuDown, None),
+        KeyBinding::new("cmd-d", DuplicateNode, None),
+        KeyBinding::new("cmd-alt-c", CopyNode, None),
+        KeyBinding::new("cmd-alt-v", PasteNode, None),
         KeyBinding::new("cmd-shift-backspace", DeleteNode, None),
         KeyBinding::new("cmd-shift-w", CloseFolder, None),
         KeyBinding::new("cmd-w", CloseWindow, None),

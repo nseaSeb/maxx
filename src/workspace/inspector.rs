@@ -358,6 +358,122 @@ impl Workspace {
 
     /// Inserts a component into the selected container, or beside the selected
     /// node when it cannot hold children.
+    /// Where a new node goes, given the selection.
+    ///
+    /// Inside the selected node when it takes children, just after it
+    /// otherwise. Answers `None`, having said why, when there is nowhere: the
+    /// root is not a container, so nothing can be dropped beside it.
+    fn insertion_point(&mut self, cx: &mut Context<Self>) -> Option<crate::model::Path> {
+        let view = self.view()?;
+        let selected = view.selected.clone();
+        let target = view.root.at(&selected)?;
+        let accepts_children = registry::of(target).is_some_and(|spec| spec.container);
+
+        if accepts_children {
+            let mut path = selected;
+            path.push(target.children.len());
+            return Some(path);
+        }
+        if selected.is_empty() {
+            self.message = Some(SharedString::from(
+                "la racine n'accepte pas d'enfant — sélectionnez une colonne ou une ligne",
+            ));
+            cx.notify();
+            return None;
+        }
+        let mut path = selected;
+        let last = path.last_mut().expect("not empty");
+        *last += 1;
+        Some(path)
+    }
+
+    /// Copies the selected node, and everything under it, next to itself.
+    ///
+    /// The copy is re-bound before it lands: a duplicated text input that kept
+    /// `&self.field` would mirror the original at runtime while compiling
+    /// perfectly, which is the worst kind of defect to ship from a copy
+    /// gesture.
+    pub fn duplicate_selected(&mut self, cx: &mut Context<Self>) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        if view.selected.is_empty() {
+            self.message = Some(SharedString::from("la racine ne se duplique pas"));
+            cx.notify();
+            return;
+        }
+        let Some(mut copy) = view.root.at(&view.selected).cloned() else {
+            return;
+        };
+        registry::rebind_state_fields(&mut copy, &view.root);
+
+        // Beside the original, not inside it: duplicating a column that takes
+        // children would otherwise nest the copy in the original.
+        let mut destination = view.selected.clone();
+        *destination.last_mut().expect("not the root") += 1;
+
+        self.checkpoint();
+        let view = self.view_mut().expect("just borrowed");
+        if view.root.insert(&destination, copy) {
+            view.selected = destination;
+        }
+        cx.notify();
+    }
+
+    /// Puts the selected node on the clipboard, as Rust source.
+    ///
+    /// Rust and not a private format: what is copied here pastes into Zed, and
+    /// what is written there pastes back. The clipboard is one more place where
+    /// the `.rs` is the truth.
+    pub fn copy_selection(&mut self, cx: &mut Context<Self>) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        let Some(node) = view.root.at(&view.selected) else {
+            return;
+        };
+        let source = crate::codegen::render(node, 0);
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(source));
+        self.message = Some(SharedString::from("nœud copié"));
+        cx.notify();
+    }
+
+    /// Reads a builder expression from the clipboard and inserts it.
+    ///
+    /// An expression maxx cannot read is refused rather than dropped in as an
+    /// opaque node: pasting is a deliberate gesture, and silently turning it
+    /// into something unmodifiable would be a surprise.
+    pub fn paste_node(&mut self, cx: &mut Context<Self>) {
+        let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) else {
+            self.message = Some(SharedString::from("le presse-papier est vide"));
+            cx.notify();
+            return;
+        };
+        let mut node = match crate::parser::parse_expr(&text) {
+            Ok(node) if !node.is_opaque() => node,
+            _ => {
+                self.message =
+                    Some(SharedString::from("le presse-papier ne porte pas une expression gpui"));
+                cx.notify();
+                return;
+            }
+        };
+        let Some(destination) = self.insertion_point(cx) else {
+            return;
+        };
+        let Some(view) = self.view() else {
+            return;
+        };
+        registry::rebind_state_fields(&mut node, &view.root);
+
+        self.checkpoint();
+        let view = self.view_mut().expect("just borrowed");
+        if view.root.insert(&destination, node) {
+            view.selected = destination;
+        }
+        cx.notify();
+    }
+
     pub fn insert_component(&mut self, id: &str, cx: &mut Context<Self>) {
         let Some(mut node) = registry::instantiate(id) else {
             return;
@@ -375,27 +491,8 @@ impl Workspace {
             }
         }
 
-        let selected = view.selected.clone();
-        let accepts_children =
-            view.root.at(&selected).and_then(registry::of).is_some_and(|spec| spec.container);
-        let child_count = view.root.at(&selected).map(|node| node.children.len()).unwrap_or(0);
-
-        let destination = if accepts_children {
-            let mut path = selected.clone();
-            path.push(child_count);
-            path
-        } else if selected.is_empty() {
-            // The root is not a container: there is nowhere to put it.
-            self.message = Some(SharedString::from(
-                "la racine n'accepte pas d'enfant — sélectionnez une colonne ou une ligne",
-            ));
-            cx.notify();
+        let Some(destination) = self.insertion_point(cx) else {
             return;
-        } else {
-            let mut path = selected.clone();
-            let last = path.last_mut().expect("not empty");
-            *last += 1;
-            path
         };
 
         self.checkpoint();

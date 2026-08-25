@@ -340,6 +340,18 @@ pub fn parse(source: &str) -> Result<(Node, Region), Error> {
     Ok((node_from_expr(&expr, inner), region))
 }
 
+/// Reads a lone builder expression, outside any file.
+///
+/// What the clipboard carries is Rust source, not a private format: a subtree
+/// copied here pastes into Zed, and an expression written by hand there pastes
+/// back. So the same reader that handles a managed region handles the
+/// clipboard, and neither can drift from the other.
+pub fn parse_expr(source: &str) -> Result<Node, Error> {
+    let source = source.trim();
+    let expr: Expr = syn::parse_str(source).map_err(Error::Syntax)?;
+    Ok(node_from_expr(&expr, source))
+}
+
 /// Removes the region's own indentation from every line.
 ///
 /// A line that begins inside a multi-line string literal is part of the user's

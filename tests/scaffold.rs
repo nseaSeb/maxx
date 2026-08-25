@@ -63,9 +63,9 @@ fn saving_a_text_input_adds_the_field_and_the_import() {
     let source = std::fs::read_to_string(&path).unwrap();
     assert!(source.contains("use gpui_component::input::Input;"));
     assert!(source.contains("use gpui_component::input::InputState;"));
-    assert!(source.contains("pub champ: Entity<InputState>,"));
-    assert!(source.contains("champ: cx.new(|cx| InputState::new(window, cx)),"));
-    assert!(source.contains("Input::new(&self.champ)"));
+    assert!(source.contains("pub field: Entity<InputState>,"));
+    assert!(source.contains("field: cx.new(|cx| InputState::new(window, cx)),"));
+    assert!(source.contains("Input::new(&self.field)"));
 
     // And it still reads back.
     let reloaded = View::load(&path).unwrap();
@@ -120,7 +120,7 @@ fn two_text_fields_do_not_share_one_state() {
     let mut root = maxx::model::Node::known("v_flex");
     root.children.push(maxx::registry::instantiate("input").unwrap());
     let second = maxx::registry::unique_input_field(&root);
-    assert_eq!(second, "champ_2");
+    assert_eq!(second, "field_2");
 }
 
 #[test]
@@ -156,14 +156,14 @@ fn a_button_action_writes_a_method_stub() {
         .expect("le bouton a une propriété Action");
 
     let name = maxx::registry::suggested_handler(&button);
-    assert_eq!(name, "on_bouton");
+    assert_eq!(name, "on_button");
     maxx::registry::write(&mut button, action, &name);
     view.root.push_child(button);
     view.save().expect("l'enregistrement doit réussir");
 
     let source = std::fs::read_to_string(&path).unwrap();
-    assert!(source.contains(".on_click(cx.listener(Self::on_bouton))"));
-    assert!(source.contains("pub fn on_bouton("));
+    assert!(source.contains(".on_click(cx.listener(Self::on_button))"));
+    assert!(source.contains("pub fn on_button("));
     assert!(source.contains("use gpui::ClickEvent;"));
     // `cx` must be named, not `_cx`, for the listener call to compile.
     assert!(source.contains("_window: &mut Window, cx: &mut Context<Self>"));
@@ -172,11 +172,11 @@ fn a_button_action_writes_a_method_stub() {
     let mut reloaded = View::load(&path).unwrap();
     assert_eq!(
         maxx::registry::read(&reloaded.root.children[1], action).as_deref(),
-        Some("on_bouton")
+        Some("on_button")
     );
     reloaded.save().unwrap();
     let twice = std::fs::read_to_string(&path).unwrap();
-    assert_eq!(twice.matches("pub fn on_bouton(").count(), 1);
+    assert_eq!(twice.matches("pub fn on_button(").count(), 1);
 }
 
 #[test]
@@ -443,10 +443,10 @@ fn insertions_land_in_the_view_not_in_a_helper_type() {
     assert!(!ligne.contains("on_go"), "le stub ne va pas dans le type auxiliaire");
 
     let home = &written[written.find("pub struct Home").unwrap()..];
-    assert!(home.contains("pub champ: Entity<InputState>,"));
+    assert!(home.contains("pub field: Entity<InputState>,"));
     assert!(home.contains("pub fn on_go("));
     // And the initializer goes in the struct literal, not in the signature.
-    assert!(home.contains("Self {\n            champ: cx.new("));
+    assert!(home.contains("Self {\n            field: cx.new("));
 }
 
 #[test]

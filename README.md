@@ -55,8 +55,12 @@ and registers it in `src/ui/mod.rs`.
 
 On the canvas: click to select, drag to move, double-click a button to give it
 an action. Columns resize by their handle, and their width is remembered. `⌘S`
-writes the file, `⌘Z` / `⌘⇧Z` undo and redo, `⌘⇧⌫` deletes the selected node,
-`⌘B` hides the project panel.
+writes the file, `⌘Z` / `⌘⇧Z` undo and redo, `⌘D` duplicates the selected node,
+`⌘⌥C` and `⌘⌥V` copy and paste it, `⌘⇧⌫` deletes it, and `⌘B` hides the project
+panel.
+
+What `⌘⌥C` puts on the clipboard is Rust, not a format of maxx's own: a subtree
+copied here pastes into Zed, and an expression written there pastes back.
 
 ## The demo
 

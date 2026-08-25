@@ -419,7 +419,7 @@ fn ensure_handler(source: String, name: &str) -> String {
     };
 
     let stub = format!(
-        "\n    /// Écrit par maxx ; à toi de le remplir.\n         \x20   pub fn {name}(\n         \x20       &mut self,\n         \x20       _event: &ClickEvent,\n         \x20       _window: &mut Window,\n         \x20       _cx: &mut Context<Self>,\n         \x20   ) {{\n    }}\n"
+        "\n    /// Written by maxx; the body is yours.\n         \x20   pub fn {name}(\n         \x20       &mut self,\n         \x20       _event: &ClickEvent,\n         \x20       _window: &mut Window,\n         \x20       _cx: &mut Context<Self>,\n         \x20   ) {{\n    }}\n"
     );
     source.insert_str(close, &stub);
     source

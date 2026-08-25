@@ -49,6 +49,21 @@ Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
 
 ## Confort
 
+- ~~Copier, coller, dupliquer un nœud~~ — faits. `⌘D` duplique, `⌘⌥C` et `⌘⌥V`
+  copient et collent. Pas `⌘C` / `⌘V` : ils appartiennent aux champs texte de
+  l'inspecteur, et les leur reprendre casserait la saisie.
+
+  Le presse-papier porte du Rust, pas un format à maxx : `codegen::render` à
+  l'aller, `parser::parse_expr` au retour, donc un sous-arbre copié se colle
+  dans Zed et une expression écrite là se colle ici. Un texte que maxx ne sait
+  pas lire est refusé plutôt qu'accepté en nœud opaque — coller est un geste
+  volontaire, et rendre l'inmodifiable en silence serait une surprise.
+
+  Le point qui n'allait pas de soi : une copie porte le champ d'état de
+  l'original. Deux `Input` sur `&self.field` compilent et se recopient l'un
+  l'autre à l'exécution. D'où `registry::rebind_state_fields`, appelé avant que
+  la copie rejoigne l'arbre.
+
 - ~~Panneaux redimensionnables~~ — faits, par `gpui_component::resizable` et
   non par `dock`, qui apportait un modèle de fenêtres flottantes dont maxx n'a
   pas l'usage. L'explorateur et l'inspecteur ont leur poignée, avec des bornes
