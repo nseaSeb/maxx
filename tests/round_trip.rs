@@ -564,3 +564,23 @@ fn the_palette_search_forgives_the_accents() {
     assert!(maxx::designer::matches_query(label, "label"));
     assert!(!maxx::designer::matches_query(label, "bouton"));
 }
+
+/// Une liaison écrite à la main et qui ne heurte rien est gardée telle quelle.
+///
+/// C'est la contrepartie de la promesse du presse-papier : ce qui s'écrit dans
+/// Zed revient ici. Renommer `&self.search` en `&self.field` déclarerait un
+/// second champ pour celui qu'il a déjà.
+#[test]
+fn a_binding_that_collides_with_nothing_is_kept() {
+    let mut root = maxx::registry::instantiate("column").unwrap();
+    root.push_child(maxx::registry::instantiate("input").unwrap());
+
+    let mut pasted = maxx::parser::parse_expr("Input::new(&self.search)").expect("doit se relire");
+    maxx::registry::rebind_state_fields(&mut pasted, &root);
+    assert_eq!(maxx::registry::read(&pasted, binding()).as_deref(), Some("search"));
+
+    // Et celle qui heurte est renommée, elle.
+    let mut collides = maxx::parser::parse_expr("Input::new(&self.field)").expect("doit se relire");
+    maxx::registry::rebind_state_fields(&mut collides, &root);
+    assert_eq!(maxx::registry::read(&collides, binding()).as_deref(), Some("field_2"));
+}

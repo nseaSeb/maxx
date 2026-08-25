@@ -321,6 +321,11 @@ impl Workspace {
             // sous-menu, et rien ne va dans un menu illisible.
             return;
         }
+        // La sélection après le dépôt peut désigner le même rang qu'avant tout
+        // en désignant une autre entrée. `sync_menu_inputs` ne compare que la
+        // sélection : sans cet oubli forcé, les boîtes gardent le texte de
+        // l'entrée précédente, et la frappe suivante l'écrit sur celle-ci.
+        self.menu_synced = None;
         cx.notify();
     }
 

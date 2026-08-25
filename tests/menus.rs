@@ -497,3 +497,38 @@ fn the_three_refusals_of_a_drop() {
     assert_eq!(menus.menus[0].items.len(), 4, "rien n'a été perdu");
     assert!(menus.menus[illisible].items.is_empty());
 }
+
+/// Une entrée déposée dans un sous-menu situé plus bas vise le bon.
+///
+/// Le retrait décale la liste de premier niveau, donc le sous-menu désigné par
+/// son rang n'est plus au même rang au moment du dépôt. Sans correction,
+/// l'entrée atterrissait dans le sous-menu suivant.
+#[test]
+fn a_drop_into_a_submenu_below_the_source_aims_true() {
+    let mut menus = barre();
+    menus.menus[0].items = vec![
+        ItemDef::Action {
+            label: "Entree".into(),
+            action: "Entree".into(),
+            os_action: None,
+            shortcut: None,
+        },
+        ItemDef::Submenu(MenuDef::named("SousA")),
+        ItemDef::Submenu(MenuDef::named("SousB")),
+    ];
+
+    assert!(menus.move_to(Selection::Item(0, 0), Drop::SubItem(0, 1, 0)));
+
+    let sous_a = &menus.menus[0].items[0];
+    let sous_b = &menus.menus[0].items[1];
+    let ItemDef::Submenu(sous_a) = sous_a else { panic!("SousA a disparu") };
+    let ItemDef::Submenu(sous_b) = sous_b else { panic!("SousB a disparu") };
+    assert_eq!(sous_a.name, "SousA");
+    assert_eq!(
+        sous_a.items.iter().map(|item| item.label()).collect::<Vec<_>>(),
+        vec!["Entree"],
+        "l'entrée doit être dans le sous-menu visé"
+    );
+    assert!(sous_b.items.is_empty(), "et pas dans le suivant");
+    assert_eq!(menus.selected, Some(Selection::SubItem(0, 0, 0)));
+}

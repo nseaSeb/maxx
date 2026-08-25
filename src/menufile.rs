@@ -210,6 +210,23 @@ fn to_drop(selection: Selection) -> Drop {
     }
 }
 
+/// The drop, re-aimed for the removal that precedes it.
+///
+/// A drop into a submenu names that submenu by its rank among the entries of
+/// its menu. Taking a top-level entry out of the same menu, from above it,
+/// moves that submenu one rank up — and a drop that does not follow lands in
+/// the next submenu down, or fails against whatever the shifted slot now holds.
+fn aimed_after_removal(from: Selection, to: Drop) -> Drop {
+    match (from, to) {
+        (Selection::Item(menu, item), Drop::SubItem(target, sub, at))
+            if menu == target && item < sub =>
+        {
+            Drop::SubItem(target, sub - 1, at)
+        }
+        _ => to,
+    }
+}
+
 /// An insertion index, adjusted for the removal that precedes it.
 ///
 /// Taking the row out shifts every later slot of the same list one to the left,
@@ -606,6 +623,9 @@ impl MenuFile {
                 let Some(item) = self.take(from) else {
                     return false;
                 };
+                // `accepts` a vu la liste d'avant ; `put` verra celle d'après,
+                // dans laquelle le retrait a pu déplacer la cible elle-même.
+                let to = aimed_after_removal(from, to);
                 let at = match to {
                     Drop::Item(_, at) | Drop::SubItem(_, _, at) => {
                         if same_list {

@@ -601,26 +601,41 @@ pub fn suggested_handler(node: &Node) -> String {
 }
 
 /// A field name not already bound by another input in the tree.
-/// Gives every state-backed node of `subtree` a field name `root` does not
-/// already use.
+/// Renames the bindings of `subtree` that would collide with `root`'s.
 ///
 /// Two text inputs sharing `&self.field` compile and then mirror each other at
 /// runtime — the same defect `insert_component` avoids when it drops a fresh
-/// one. A copy carries the binding with it, so the copy has to be re-bound
-/// before it joins the tree; `view::save` then declares the new fields.
+/// one. A copy carries the original's binding, so a duplicate always collides
+/// and is always renamed; `view::save` then declares the new fields.
+///
+/// A binding that collides with nothing is left exactly as it is. That is what
+/// an `Input::new(&self.search)` written by hand in Zed and pasted here keeps:
+/// renaming it would contradict the promise that what is written there comes
+/// back, and would declare a second field for the one it already has.
 pub fn rebind_state_fields(subtree: &mut Node, root: &Node) {
-    // Grown as we go: the names handed out here are not in `root` yet, and two
-    // inputs of the same subtree must not be given the same one either.
+    // Grown as we go: a name handed out here is not in `root`, and two inputs
+    // of the same subtree must not be given the same one either.
     let mut taken = state_fields(root);
 
     fn walk(node: &mut Node, taken: &mut Vec<String>) {
-        let rebindable = of(node).is_some_and(|spec| spec.state.is_some());
-        if rebindable && let Base::Known { args, .. } = &mut node.base {
-            let name = next_field(taken);
-            taken.push(name.clone());
-            match args.first_mut() {
-                Some(arg) => *arg = Arg::Verbatim(format!("&self.{name}")),
-                None => args.push(Arg::Verbatim(format!("&self.{name}"))),
+        if of(node).is_some_and(|spec| spec.state.is_some())
+            && let Base::Known { args, .. } = &mut node.base
+        {
+            let current = args
+                .first()
+                .map(|arg| arg.to_source())
+                .and_then(|source| source.strip_prefix("&self.").map(str::to_string));
+            match current {
+                Some(name) if !taken.contains(&name) => taken.push(name),
+                _ => {
+                    let name = next_field(taken);
+                    taken.push(name.clone());
+                    let arg = Arg::Verbatim(format!("&self.{name}"));
+                    match args.first_mut() {
+                        Some(slot) => *slot = arg,
+                        None => args.push(arg),
+                    }
+                }
             }
         }
         for child in &mut node.children {
