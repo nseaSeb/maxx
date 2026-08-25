@@ -301,6 +301,29 @@ impl Workspace {
     ///
     /// Only inside a menu of the bar: a submenu of a submenu is a place nobody
     /// finds twice, and the model stops at one level on purpose.
+    /// Moves a menu or an entry to where it was dropped.
+    ///
+    /// The one gesture that carries an entry from one menu to another: the two
+    /// reorder keys stay inside their list on purpose, and this is where the
+    /// boundary is meant to be crossed.
+    pub fn drop_menu_row(
+        &mut self,
+        from: crate::menufile::Selection,
+        to: crate::menufile::Drop,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(menus) = self.menu_file.as_mut() else {
+            return;
+        };
+        if !menus.move_to(from, to) {
+            // Rien n'a bougé : reposé où il était, ou refusé par le modèle —
+            // un menu n'est pas une entrée, un sous-menu ne va pas dans un
+            // sous-menu, et rien ne va dans un menu illisible.
+            return;
+        }
+        cx.notify();
+    }
+
     pub fn add_submenu(&mut self, cx: &mut Context<Self>) {
         self.open_menu_bar(cx);
         let Some(menus) = self.menu_file.as_mut() else {

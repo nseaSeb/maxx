@@ -177,8 +177,10 @@ Minimize.
 The "Shortcut" field writes into `key_bindings` and refuses a keystroke gpui
 could not read — an unreadable keystroke makes the application refuse to start.
 
-Entries are reordered with `⌘⌃↑` and `⌘⌃↓`, and a menu can hold a submenu — one
-level, which is already one more than most applications use well.
+Entries are reordered with `⌘⌃↑` and `⌘⌃↓`, or dragged — the keys stay inside
+one list, the drag is what carries an entry from one menu to another. A menu can
+hold a submenu — one level, which is already one more than most applications use
+well.
 
 That file has a managed region of its own: open it from the explorer and maxx
 shows a menu editor. Adding an entry with an unknown action declares that action

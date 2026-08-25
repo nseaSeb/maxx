@@ -150,6 +150,74 @@ fn step(index: usize, up: bool, length: usize) -> Option<usize> {
     if up { index.checked_sub(1) } else { Some(index + 1).filter(|target| *target < length) }
 }
 
+/// Where a dragged row is about to land.
+///
+/// An index between two rows, not a row: dropping *on* a row leaves it
+/// ambiguous whether it means before or after, and an insertion index is what
+/// the model needs anyway.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Drop {
+    /// Between two menus of the bar, at this index.
+    Menu(usize),
+    /// Between two entries of the menu at this index.
+    Item(usize, usize),
+    /// Between two entries of the submenu at these indices.
+    SubItem(usize, usize, usize),
+}
+
+/// The list a drop points into, named as a selection of its first slot.
+fn drop_selection(to: Drop) -> Option<Selection> {
+    match to {
+        Drop::Menu(_) => None,
+        Drop::Item(menu, _) => Some(Selection::Item(menu, 0)),
+        Drop::SubItem(menu, sub, _) => Some(Selection::SubItem(menu, sub, 0)),
+    }
+}
+
+/// Which list a selection lives in, ignoring the position inside it.
+fn from_list(selection: Selection) -> (usize, Option<usize>) {
+    match selection {
+        Selection::Menu(menu) => (menu, None),
+        Selection::Item(menu, _) => (menu, None),
+        Selection::SubItem(menu, sub, _) => (menu, Some(sub)),
+    }
+}
+
+/// Which list a drop points into.
+fn to_list(to: Drop) -> (usize, Option<usize>) {
+    match to {
+        Drop::Menu(menu) => (menu, None),
+        Drop::Item(menu, _) => (menu, None),
+        Drop::SubItem(menu, sub, _) => (menu, Some(sub)),
+    }
+}
+
+/// The position a selection occupies in its list.
+fn index_of(selection: Selection) -> usize {
+    match selection {
+        Selection::Menu(index) | Selection::Item(_, index) | Selection::SubItem(_, _, index) => {
+            index
+        }
+    }
+}
+
+/// The drop position that stands for where a selection already is.
+fn to_drop(selection: Selection) -> Drop {
+    match selection {
+        Selection::Menu(index) => Drop::Menu(index),
+        Selection::Item(menu, index) => Drop::Item(menu, index),
+        Selection::SubItem(menu, sub, index) => Drop::SubItem(menu, sub, index),
+    }
+}
+
+/// An insertion index, adjusted for the removal that precedes it.
+///
+/// Taking the row out shifts every later slot of the same list one to the left,
+/// so a drop announced after the source has to follow.
+fn shift(from: usize, at: usize) -> usize {
+    if at > from { at - 1 } else { at }
+}
+
 /// Where a menu file's editing cursor sits.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Selection {
@@ -483,6 +551,148 @@ impl MenuFile {
                     _ => Selection::Item(selection.menu(), target),
                 });
                 true
+            }
+        }
+    }
+
+    /// Moves what `from` names to where `to` points, and answers whether it
+    /// moved.
+    ///
+    /// This is the gesture `move_selected` deliberately refuses: an entry
+    /// crosses from one menu to another, which two reorder keys should never
+    /// do by accident but a drag says plainly.
+    ///
+    /// Three refusals, and each is a rule of the model rather than a caution:
+    /// a menu is not an entry and cannot become one; a submenu does not go
+    /// inside a submenu, because there is only one level; and nothing goes
+    /// into a menu maxx could not read, whose entries are source text.
+    pub fn move_to(&mut self, from: Selection, to: Drop) -> bool {
+        if !self.accepts(to) {
+            return false;
+        }
+        match (from, to) {
+            (Selection::Menu(index), Drop::Menu(at)) => {
+                if index >= self.menus.len() || at > self.menus.len() {
+                    return false;
+                }
+                let at = shift(index, at);
+                if at == index {
+                    return false;
+                }
+                let menu = self.menus.remove(index);
+                self.menus.insert(at, menu);
+                self.selected = Some(Selection::Menu(at));
+                true
+            }
+            (Selection::Menu(_), _) | (_, Drop::Menu(_)) => false,
+            (Selection::Item(..) | Selection::SubItem(..), _) => {
+                // Un sous-menu déposé dans un sous-menu ferait un second
+                // niveau, que ni le modèle ni la sélection ne portent.
+                let submenu = matches!(self.item_at(from), Some(ItemDef::Submenu(_)));
+                if submenu && matches!(to, Drop::SubItem(..)) {
+                    return false;
+                }
+                // Et déposé dans lui-même, il se détacherait de la barre.
+                if let (Selection::Item(menu, item), Drop::SubItem(to_menu, to_item, _)) =
+                    (from, to)
+                    && menu == to_menu
+                    && item == to_item
+                {
+                    return false;
+                }
+
+                let same_list = from_list(from) == to_list(to);
+                let index = index_of(from);
+                let Some(item) = self.take(from) else {
+                    return false;
+                };
+                let at = match to {
+                    Drop::Item(_, at) | Drop::SubItem(_, _, at) => {
+                        if same_list {
+                            shift(index, at)
+                        } else {
+                            at
+                        }
+                    }
+                    Drop::Menu(_) => unreachable!("handled above"),
+                };
+                if same_list && at == index {
+                    // Reposé où il était : le remettre, et ne rien signaler.
+                    self.put(to, at, item);
+                    return false;
+                }
+                if !self.put(to, at, item.clone()) {
+                    // Plutôt que de le perdre, il retourne d'où il vient.
+                    self.put(to_drop(from), index, item);
+                    return false;
+                }
+                self.selected = Some(match to {
+                    Drop::Item(menu, _) => Selection::Item(menu, at),
+                    Drop::SubItem(menu, sub, _) => Selection::SubItem(menu, sub, at),
+                    Drop::Menu(_) => unreachable!("handled above"),
+                });
+                true
+            }
+        }
+    }
+
+    /// Whether `to` points into something maxx may write.
+    fn accepts(&self, to: Drop) -> bool {
+        match to {
+            Drop::Menu(_) => true,
+            Drop::Item(menu, _) => self.menus.get(menu).is_some_and(|menu| !menu.is_opaque()),
+            Drop::SubItem(menu, sub, _) => self
+                .menus
+                .get(menu)
+                .filter(|menu| !menu.is_opaque())
+                .and_then(|menu| menu.items.get(sub))
+                .is_some_and(|item| matches!(item, ItemDef::Submenu(inner) if !inner.is_opaque())),
+        }
+    }
+
+    /// The entry `selection` names.
+    fn item_at(&self, selection: Selection) -> Option<&ItemDef> {
+        match selection {
+            Selection::Menu(_) => None,
+            Selection::Item(menu, item) => self.menus.get(menu)?.items.get(item),
+            Selection::SubItem(menu, sub, item) => match self.menus.get(menu)?.items.get(sub)? {
+                ItemDef::Submenu(inner) => inner.items.get(item),
+                _ => None,
+            },
+        }
+    }
+
+    /// Removes and answers the entry `selection` names.
+    fn take(&mut self, selection: Selection) -> Option<ItemDef> {
+        let (list, index) = self.list_at(selection)?;
+        (index < list.len()).then(|| list.remove(index))
+    }
+
+    /// Inserts `item` at `index` of the list `to` points into.
+    fn put(&mut self, to: Drop, index: usize, item: ItemDef) -> bool {
+        let Some(selection) = drop_selection(to) else {
+            return false;
+        };
+        let Some((list, _)) = self.list_at(selection) else {
+            return false;
+        };
+        if index > list.len() {
+            return false;
+        }
+        list.insert(index, item);
+        true
+    }
+
+    /// The list a selection lives in, and its index in it.
+    fn list_at(&mut self, selection: Selection) -> Option<(&mut Vec<ItemDef>, usize)> {
+        match selection {
+            Selection::Menu(_) => None,
+            Selection::Item(menu, item) => Some((&mut self.menus.get_mut(menu)?.items, item)),
+            Selection::SubItem(menu, sub, item) => {
+                match self.menus.get_mut(menu)?.items.get_mut(sub)? {
+                    ItemDef::Submenu(inner) => Some((&mut inner.items, item)),
+                    _ => None,
+                }
             }
         }
     }

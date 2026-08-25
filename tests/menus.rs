@@ -2,7 +2,7 @@
 //! passer une entrée d'un menu à l'autre, ni sortir des bornes.
 
 use maxx::menu_model::{ItemDef, MenuDef};
-use maxx::menufile::{MenuFile, Selection};
+use maxx::menufile::{Drop, MenuFile, Selection};
 
 /// Enveloppe des menus dans le plus petit fichier qui porte une zone gérée.
 fn fichier_de(menus: &[MenuDef]) -> String {
@@ -422,4 +422,78 @@ pub fn app_menus() -> Vec<Menu> {
     // Et il ressort intact.
     let rendu = fichier_de(&menus.menus);
     assert!(rendu.contains("Encore"), "{rendu}");
+}
+
+/// Une entrée traverse d'un menu à l'autre — ce que les deux touches refusent.
+#[test]
+fn an_entry_can_be_dragged_into_another_menu() {
+    let mut menus = barre();
+    assert!(menus.move_to(Selection::Item(0, 2), Drop::Item(1, 0)));
+
+    assert_eq!(menus.menus[0].items.len(), 2, "elle a quitté son menu");
+    assert_eq!(menus.menus[1].items.len(), 1);
+    assert_eq!(menus.menus[1].items[0].label(), "Quitter");
+    assert_eq!(menus.selected, Some(Selection::Item(1, 0)), "et la sélection la suit");
+}
+
+/// Un menu se réordonne parmi les menus, et pas ailleurs.
+#[test]
+fn a_menu_is_dragged_among_the_menus() {
+    let mut menus = barre();
+    assert!(menus.move_to(Selection::Menu(0), Drop::Menu(2)));
+    assert_eq!(menus.menus[0].name, "Édition");
+    assert_eq!(menus.menus[1].name, "Fichier");
+    assert_eq!(menus.selected, Some(Selection::Menu(1)));
+}
+
+/// Déposée plus bas dans sa propre liste, l'entrée tient compte de son retrait.
+#[test]
+fn a_drop_after_the_source_accounts_for_the_removal() {
+    let mut menus = barre();
+    let labels = |menus: &MenuFile| -> Vec<String> {
+        menus.menus[0].items.iter().map(|item| item.label()).collect()
+    };
+    let avant = labels(&menus);
+
+    // La première entrée passe à la fin : l'index de dépôt vaut 3, mais le
+    // retrait a décalé la liste d'un cran.
+    assert!(menus.move_to(Selection::Item(0, 0), Drop::Item(0, 3)));
+    assert_eq!(labels(&menus), vec![avant[1].clone(), avant[2].clone(), avant[0].clone()]);
+}
+
+/// Reposée où elle était, l'entrée ne bouge pas et ne se perd pas.
+#[test]
+fn a_drop_where_it_already_is_changes_nothing() {
+    let mut menus = barre();
+    let avant = menus.menus[0].items.clone();
+
+    assert!(!menus.move_to(Selection::Item(0, 1), Drop::Item(0, 1)));
+    assert!(!menus.move_to(Selection::Item(0, 1), Drop::Item(0, 2)));
+    assert_eq!(menus.menus[0].items, avant, "l'entrée est toujours là, à sa place");
+}
+
+/// Trois refus qui sont des règles du modèle, pas des précautions.
+#[test]
+fn the_three_refusals_of_a_drop() {
+    let mut menus = barre();
+
+    // Un menu n'est pas une entrée.
+    assert!(!menus.move_to(Selection::Menu(0), Drop::Item(1, 0)));
+
+    // Un sous-menu ne va pas dans un sous-menu : il n'y a qu'un niveau.
+    menus.menus[0].items.push(ItemDef::Submenu(MenuDef::named("Récents")));
+    let sous_menu = menus.menus[0].items.len() - 1;
+    assert!(!menus.move_to(Selection::Item(0, sous_menu), Drop::SubItem(0, sous_menu, 0)));
+
+    // Et rien ne va dans un menu que maxx n'a pas su lire.
+    menus.menus.push(MenuDef {
+        name: "Dynamique".into(),
+        items: Vec::new(),
+        opaque: Some("items: construire(),".into()),
+    });
+    let illisible = menus.menus.len() - 1;
+    assert!(!menus.move_to(Selection::Item(0, 0), Drop::Item(illisible, 0)));
+
+    assert_eq!(menus.menus[0].items.len(), 4, "rien n'a été perdu");
+    assert!(menus.menus[illisible].items.is_empty());
 }

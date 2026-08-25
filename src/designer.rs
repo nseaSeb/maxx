@@ -18,7 +18,7 @@ use gpui_component::switch::Switch;
 use gpui_component::{Sizable as _, h_flex, v_flex};
 
 use crate::menu_model::ItemDef;
-use crate::menufile::Selection;
+use crate::menufile::{Drop as MenuDrop, Selection};
 use crate::model::{Call, Node, Path};
 use crate::registry::{self, Kind, Prop, Spec};
 use crate::theme;
@@ -166,6 +166,7 @@ impl Workspace {
 
         let mut rows: Vec<AnyElement> = Vec::new();
         for (menu_index, menu) in menus.menus.iter().enumerate() {
+            rows.push(menu_zone(MenuDrop::Menu(menu_index), cx));
             let target = Selection::Menu(menu_index);
             rows.push(
                 menu_row(
@@ -178,6 +179,7 @@ impl Workspace {
                 .into_any_element(),
             );
             for (item_index, item) in menu.items.iter().enumerate() {
+                rows.push(menu_zone(MenuDrop::Item(menu_index, item_index), cx));
                 let target = Selection::Item(menu_index, item_index);
                 rows.push(
                     menu_row(
@@ -196,6 +198,7 @@ impl Workspace {
                     continue;
                 };
                 for (sub_index, sub_item) in inner.items.iter().enumerate() {
+                    rows.push(menu_zone(MenuDrop::SubItem(menu_index, item_index, sub_index), cx));
                     let target = Selection::SubItem(menu_index, item_index, sub_index);
                     rows.push(
                         menu_row(
@@ -208,8 +211,16 @@ impl Workspace {
                         .into_any_element(),
                     );
                 }
+                rows.push(menu_zone(
+                    MenuDrop::SubItem(menu_index, item_index, inner.items.len()),
+                    cx,
+                ));
             }
+            // La fin de chaque menu est une cible : sans elle, rien ne peut
+            // être déposé après la dernière entrée.
+            rows.push(menu_zone(MenuDrop::Item(menu_index, menu.items.len()), cx));
         }
+        rows.push(menu_zone(MenuDrop::Menu(menus.menus.len()), cx));
 
         div()
             .flex()
@@ -896,6 +907,23 @@ fn binding_toggle(
 }
 
 /// One line of the menu tree.
+/// A gap between two rows of the menu tree, and what it accepts.
+///
+/// Eight pixels, like the canvas's: enough to aim at, and it disappears into
+/// the row spacing when nothing is being dragged.
+fn menu_zone(to: MenuDrop, cx: &mut Context<Workspace>) -> AnyElement {
+    div()
+        .id(SharedString::from(format!("menu-zone-{to:?}")))
+        .flex_none()
+        .h(px(6.))
+        .w_full()
+        .drag_over::<Selection>(|style, _, _, _| style.bg(rgb(theme::ACCENT)))
+        .on_drop(cx.listener(move |this, from: &Selection, _, cx| {
+            this.drop_menu_row(*from, to, cx);
+        }))
+        .into_any_element()
+}
+
 fn menu_row(
     label: SharedString,
     depth: usize,
@@ -905,6 +933,10 @@ fn menu_row(
 ) -> impl IntoElement {
     div()
         .id(SharedString::from(format!("menu-{target:?}")))
+        .on_drag(target, {
+            let label = label.clone();
+            move |_, _: Point<Pixels>, _, cx| cx.new(|_| DragGhost { label: label.clone() })
+        })
         .flex()
         .items_center()
         .h(px(22.))
