@@ -1,285 +1,282 @@
 # maxx
 
-Un atelier visuel qui construit des vues [GPUI](https://gpui.rs) et les écrit
-sous forme de vrai code Rust.
+A visual workshop that builds [GPUI](https://gpui.rs) views and writes them out
+as real Rust source.
 
-On crée ou on ouvre un projet, on pose des composants, on règle leurs
-propriétés, on câble une action — et ce qui sort est un projet
-`gpui` + `gpui-component` ordinaire, qui compile et tourne sans maxx, et qui
-s'ouvre dans Zed comme n'importe quel projet Rust.
+You create or open a project, drop components in, set their properties, wire up
+an action — and what comes out is an ordinary `gpui` + `gpui-component` project
+that compiles and runs without maxx, and opens in Zed like any other Rust
+project.
 
-## Le principe
+## The principle
 
-**Le fichier `.rs` est la vérité.** maxx n'a pas de format d'écran ; il écrit
-dans `src/ui/<vue>.rs` et le relit avec `syn`.
+**The `.rs` file is the truth.** maxx has no screen format of its own; it writes
+into `src/ui/<view>.rs` and reads it back with `syn`.
 
-Une vue est modélisée comme *une expression de base plus une liste ordonnée
-d'appels de méthodes* — exactement la forme du code GPUI :
+A view is modelled as *one base expression plus an ordered list of method
+calls* — exactly the shape GPUI code already has:
 
 ```rust
 // maxx:begin
 v_flex()
     .gap_2()
     .p_4()
-    .child(Label::new("Nom"))
-    .child(Input::new(&self.champ))
-    .child(Button::new("valider").label("Valider").on_click(cx.listener(Self::on_valider)))
+    .child(Label::new("Name"))
+    .child(Input::new(&self.field))
+    .child(Button::new("submit").label("Submit").on_click(cx.listener(Self::on_submit)))
 // maxx:end
 ```
 
-C'est ce qui rend l'aller-retour sûr :
+That is what makes the round trip safe:
 
-- une méthode que maxx ne connaît pas est portée comme donnée et réécrite
-  telle quelle ;
-- une expression qui n'est pas une chaîne de builders — un `if`, un `match`,
-  un composant maison — devient un nœud opaque, affiché mais jamais réécrit ;
-- `syn` ne reçoit jamais le fichier entier, car il perd les commentaires : la
-  zone gérée est repérée par balayage textuel entre `// maxx:begin` et
-  `// maxx:end`, et l'enregistrement n'y touche que cette plage d'octets. Le
-  reste du fichier — imports, `impl`, méthodes, commentaires, mise en forme —
-  est intact par construction.
+- a method maxx does not know is carried as data and written back verbatim;
+- an expression that is not a builder chain — an `if`, a `match`, a component of
+  your own — becomes an opaque node, shown but never rewritten;
+- `syn` never sees the whole file, because it throws comments away: the managed
+  region is found by scanning the text between `// maxx:begin` and
+  `// maxx:end`, and saving touches only that byte range. The rest of the file —
+  imports, `impl`, methods, comments, formatting — is untouched by construction,
+  not by care.
 
-Corollaire : ce que vous écrivez à la main dans Zed est relu par maxx, et ce
-que maxx écrit est du Rust que vous auriez pu écrire.
+The corollary: what you write by hand in Zed is read back by maxx, and what maxx
+writes is Rust you could have written yourself.
 
-## Utilisation
+## Usage
 
 ```sh
-cargo run              # écran d'accueil
-cargo run -- <chemin>  # ouvre un projet directement
+cargo run              # welcome screen
+cargo run -- <path>    # open a project directly
 ```
 
-`Fichier > Nouveau projet…` crée un projet complet, `Fichier > Nouvelle vue…`
-ajoute une vue et l'inscrit dans `src/ui/mod.rs`.
+`File > New project…` creates a complete project, `File > New view…` adds a view
+and registers it in `src/ui/mod.rs`.
 
-Dans le canvas : clic pour sélectionner, glisser pour déplacer, double-clic sur
-un bouton pour lui donner une action. Les colonnes se redimensionnent à la poignée, et leur largeur est retenue.
-`⌘S` écrit le fichier, `⌘Z` / `⌘⇧Z`
-annulent, `⌘⇧⌫` supprime le nœud sélectionné, `⌘B` masque le panneau du projet.
+On the canvas: click to select, drag to move, double-click a button to give it
+an action. Columns resize by their handle, and their width is remembered. `⌘S`
+writes the file, `⌘Z` / `⌘⇧Z` undo and redo, `⌘⇧⌫` deletes the selected node,
+`⌘B` hides the project panel.
 
-## La démo
+## The demo
 
 ```sh
 cd demo && cargo run
 ```
 
-Un projet ordinaire, versionné dans [`demo/`](demo/), écrit dans la forme que
-maxx produit et relit : les composants du catalogue dans une vue, une seconde
-fenêtre ouverte depuis la barre de menus, une barre de menus éditable dans maxx.
-Elle sert aussi de référence aux tests — relire chaque vue, réécrire sans rien
-déplacer, relire la barre de menus.
+An ordinary project, committed in [`demo/`](demo/), written in the shape maxx
+produces and reads back: the catalogue's components in one view, a second window
+opened from the menu bar, a menu bar editable in maxx. It doubles as the tests'
+reference — read every view back, rewrite without moving a line, read the menu
+bar back.
 
-## Prérequis
+## Requirements
 
-Rust 1.88 ou plus récent — maxx utilise les chaînes `&& let`, que l'édition 2024
-seule ne suffit pas à autoriser.
+Rust 1.88 or newer — maxx uses `&& let` chains, which the 2024 edition alone
+does not enable.
 
-**macOS** : Xcode. La dépendance `gpui` active la feature `runtime_shaders`, qui
-compile les shaders Metal au lancement plutôt qu'à la compilation : Xcode 26
-livre le toolchain Metal en composant séparé, et sans cette feature le build
-échoue sur un outil `metal` introuvable. Les projets générés portent la même
-feature, pour la même raison.
+**macOS**: Xcode. The `gpui` dependency turns on the `runtime_shaders` feature,
+which compiles the Metal shaders at startup rather than at build time: Xcode 26
+ships the Metal toolchain as a separate downloadable component, and without that
+feature the build fails on a missing `metal` tool. Generated projects carry the
+same feature, for the same reason.
 
-**Linux** : les paquets de développement que gpui attend — Vulkan, Wayland, X11,
-fontconfig, ALSA. La liste exacte est dans [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+**Linux**: the development packages gpui expects — Vulkan, Wayland, X11,
+fontconfig, ALSA. The exact list is in
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
-**Windows** : la chaîne MSVC.
+**Windows**: the MSVC toolchain.
 
-La CI vérifie macOS à chaque poussée, et les trois systèmes sur les pull
-requests, sur demande et une fois par semaine. Un tag `v*` déclenche le portail
-de publication : matrice entière, construction en release, et les binaires des
-trois systèmes attachés à la version. Ce qu'elle ne prouve pas :
-qu'on peut s'en servir. Aucun test n'ouvre de fenêtre — ils portent sur le
-modèle, le parseur, les gabarits et les réglages. maxx est développé sur macOS,
-et c'est le seul système où son interface a été essayée à la main.
+CI checks macOS on every push, and all three systems on pull requests, on
+demand and once a week. A `v*` tag opens the release gate: the whole matrix, a
+release build, and binaries for the three systems attached to the release.
 
-## État de la vue
+What CI does not prove: that maxx is usable. No test opens a window — they cover
+the model, the parser, the templates and the settings. maxx is developed on
+macOS, and that is the only system where its interface has been tried by hand.
 
-Une propriété texte est un littéral par défaut. Le bouton `abc` de l'inspecteur
-la fait lire un champ de la vue à la place :
+## View state
+
+A text property is a literal by default. The inspector's `abc` button makes it
+read a field of the view instead:
 
 ```rust
-Label::new("Titre")                 →   Label::new(self.titre.clone())
+Label::new("Title")                 →   Label::new(self.title.clone())
 ```
 
-La liste déroulante marche pareil : elle est liée à un champ de la vue, que
-maxx déclare et initialise avec deux entrées d'exemple. Ce que la liste contient
-est du code ordinaire, à vous.
+The dropdown works the same way: it is bound to a field of the view, which maxx
+declares and initialises with two example entries. What the list contains is
+ordinary code, and it is yours.
 
-Les champs se déclarent dans la section « État », qui les insère dans la struct
-et dans `new`. Un `usize` ou un `f32` est rendu par `.to_string()`, un
-`SharedString` par `.clone()`.
+Fields are declared in the "State" section, which inserts them into the struct
+and into `new`. A `usize` or an `f32` is rendered with `.to_string()`, a
+`SharedString` with `.clone()`.
 
-Une propriété liée n'est plus éditable en texte libre : l'écraser par un
-littéral changerait silencieusement ce que le code veut dire.
+A bound property is no longer editable as free text: overwriting it with a
+literal would quietly change what the code means.
 
-Ce qui reste à écrire à la main, et c'est voulu : le corps des méthodes. Le
-bouton `→ Zed` à côté de la propriété Action ouvre l'éditeur sur la ligne de la
-méthode. Et il ne faut pas oublier `cx.notify()` — sans lui le champ change et
-l'écran ne bouge pas.
+What is left to write by hand, deliberately: the bodies of the methods. The `→`
+button beside the Action property opens your editor on the method's line. And do
+not forget `cx.notify()` — without it the field changes and the screen does not
+move.
 
-## Ce qu'on ajoute à un projet
+## What you add to a project
 
-`Fichier > Ajouter au projet` copie du code dans le projet et le déclare. Du
-code, pas une dépendance à maxx : ce qui est copié vous appartient.
+`File > Add to project` copies code into the project and declares it. Code, not
+a dependency on maxx: what is copied is yours.
 
-- **La barre de menus** — `src/menus.rs`, éditable ensuite dans maxx.
-- **Le module système** — `src/systeme.rs`.
-- **Les réglages** — `src/reglages.rs`, qui tire le module système avec lui.
+- **The menu bar** — `src/menus.rs`, editable afterwards in maxx.
+- **The system module** — `src/systeme.rs`.
+- **The settings** — `src/reglages.rs`, which brings the system module with it.
 
-Ce qui est copié est noté dans `maxx.toml`, à versionner avec le projet : quel
-module, dans quelle version, et l'empreinte qu'il avait en sortant. Quand une
-version plus récente existe, maxx le dit à l'ouverture et
-`Fichier > Ajouter au projet > Mettre à jour les modules` la pose. Un fichier
-que vous avez modifié n'est jamais remplacé — il est signalé, c'est tout.
+What was copied is recorded in `maxx.toml`, to be committed with the project:
+which module, in which version, and the fingerprint it had on the way out. When
+a newer version exists, maxx says so when the project opens, and
+`File > Add to project > Update modules` lays it down. A file you have edited is
+never replaced — it is reported, and that is all.
 
-### Les réglages
+### The settings
 
-La même discipline que maxx applique aux siens : du JSON à commentaires, un
-fichier de défauts documenté écrit au premier lancement, et **seule la clé qui
-change est réécrite** — vos commentaires et votre mise en forme survivent. Un
-fichier absent, partiel ou abîmé ne fait jamais planter le démarrage.
+The same discipline maxx applies to its own: JSON with comments, a documented
+defaults file written on first launch, and **only the key that changes is
+rewritten** — your comments and your layout survive. A missing, partial or
+damaged file never stops the application from starting.
 
-Ajoutez vos champs à `Reglages`, une ligne dans `defauts_documentes`, et c'est
-tout. Deux crates sont déclarées au passage, `serde` et `serde_json_lenient` ;
-toutes deux sont déjà compilées dans l'arbre par gpui, donc le build ne
-s'allonge pas.
+Add your fields to `Reglages`, one line in `defauts_documentes`, and that is it.
+Two crates are declared along the way, `serde` and `serde_json_lenient`; both
+are already compiled in the tree by gpui, so the build does not grow.
 
-## Le module système
+## The system module
 
-`Fichier > Ajouter au projet > Le module système` copie `src/systeme.rs` dans le
-projet et le déclare dans `main.rs`. Du `std` pur : ni maxx, ni gpui, copiable
-ailleurs tel quel.
+`File > Add to project > The system module` copies `src/systeme.rs` into the
+project and declares it in `main.rs`. Plain `std`: no maxx, no gpui, copyable
+elsewhere as is.
 
-Il ne contient que ce qui diffère vraiment d'un système à l'autre **et** que gpui
-ne fournit pas déjà : où vont les fichiers d'une application (réglages, données,
-cache), une écriture atomique, et une mise à la corbeille — `~/.Trash` sur macOS,
-la spécification freedesktop avec son `.trashinfo` sur Linux, une corbeille à
-l'application sur Windows.
+It holds only what genuinely differs from one system to the next **and** is not
+already in gpui: where an application's files go (settings, data, cache), an
+atomic write, and moving a file to the trash — `~/.Trash` on macOS, the
+freedesktop specification with its `.trashinfo` on Linux, an application-owned
+trash on Windows.
 
-Le presse-papier, l'ouverture d'une URL, la révélation dans le gestionnaire de
-fichiers, les sélecteurs : gpui les a déjà (`cx.write_to_clipboard`,
-`cx.open_url`, `cx.reveal_path`, `cx.open_with_system`, `cx.prompt_for_paths`).
-Les enrober n'apporterait que du bruit, donc le module n'y touche pas.
+The clipboard, opening a URL, revealing a file in the file manager, the file
+pickers: gpui has them already (`cx.write_to_clipboard`, `cx.open_url`,
+`cx.reveal_path`, `cx.open_with_system`, `cx.prompt_for_paths`). Wrapping them
+would add noise, so the module leaves them alone.
 
-## Barre de menus
+## Menu bar
 
-Une application GPUI n'a aucune barre de menus tant qu'elle n'appelle pas
-`set_menus` — pas même un « Quitter ». Le gabarit en pose donc une, dans
-`src/menus.rs`, avec les gestes que macOS attend : À propos, Masquer, Quitter,
-un menu Édition câblé sur les actions système, et Réduire.
+A GPUI application has no menu bar at all until it calls `set_menus` — not even
+a Quit. The template therefore ships one, in `src/menus.rs`, with the gestures
+macOS expects: About, Hide, Quit, an Edit menu wired to the system actions, and
+Minimize.
 
-Le champ « Raccourci » écrit dans `key_bindings` et refuse une frappe que gpui
-ne saurait pas lire — une frappe illisible fait refuser l'application au
-démarrage.
+The "Shortcut" field writes into `key_bindings` and refuses a keystroke gpui
+could not read — an unreadable keystroke makes the application refuse to start.
 
-Les entrées se réordonnent avec `⌘⌃↑` et `⌘⌃↓`, et un menu peut contenir un
-sous-menu — un seul niveau, ce qui est déjà un de plus que ce que la plupart
-des applications utilisent bien.
+Entries are reordered with `⌘⌃↑` and `⌘⌃↓`, and a menu can hold a submenu — one
+level, which is already one more than most applications use well.
 
-Ce fichier a sa propre zone marquée : ouvrez-le depuis l'explorateur et maxx
-affiche un éditeur de menus. Ajouter une entrée avec une action inconnue
-déclare cette action dans `actions!` et lui écrit un gestionnaire vide, comme le
-double-clic sur un bouton le fait pour une vue. Une entrée que maxx ne
-reconnaît pas — un sous-menu, un appel maison — est conservée telle quelle.
+That file has a managed region of its own: open it from the explorer and maxx
+shows a menu editor. Adding an entry with an unknown action declares that action
+in `actions!` and writes it an empty handler, the way double-clicking a button
+does for a view. An entry maxx does not recognise — a hand-written call, a
+nested submenu — is kept exactly as it is.
 
-## Fichiers modifiés en dehors de maxx
+## Files changed outside maxx
 
-maxx tient une copie du fichier en mémoire, donc écrire sans regarder le disque
-écraserait ce qui a été tapé dans Zed entre-temps. Au retour du focus, et de
-nouveau avant chaque enregistrement, maxx compare :
+maxx keeps a copy of the file in memory, so writing without looking at the disk
+would overwrite whatever was typed in Zed meanwhile. When the window regains
+focus, and again before every save, maxx compares:
 
-* le disque a changé et l'arbre n'a pas été touché ici — rechargement
-  automatique, comme un éditeur le fait pour un tampon non modifié ;
-* les deux côtés ont changé — refus d'écrire, la barre d'état le signale, et
-  `Fichier > Recharger la vue` (⌘⇧R) ou `Fichier > Écraser le fichier`
-  tranchent.
+* the disk changed and the tree was not touched here — automatic reload, the way
+  an editor does for an unmodified buffer;
+* both sides changed — the write is refused, the status bar says so, and
+  `File > Reload view` (⌘⇧R) or `File > Overwrite file` settles it.
 
-## Ouvrir une vue que maxx n'a pas écrite
+## Opening a view maxx did not write
 
-`Fichier > Adopter cette vue` pose les marqueurs autour de l'expression que
-retourne un `fn render` écrit à la main. Rien d'autre n'est touché, et les
-instructions qui précèdent l'expression finale sont laissées telles quelles.
-Si le corps ne se termine pas par une expression, l'adoption échoue et le dit :
-maxx ne saurait pas où couper.
+`File > Adopt this view` puts the markers around the expression a hand-written
+`fn render` returns. Nothing else is touched, and the statements before the
+final expression are left as they are. If the body does not end in an
+expression, adoption fails and says so: maxx would not know where to cut.
 
-## Compilation des projets générés
+## Building generated projects
 
-`gpui` et `gpui-component` représentent environ 750 crates. Un projet qui a son
-propre `target/` les recompile intégralement, ce qui coûte plusieurs minutes à
-chaque nouveau projet.
+`gpui` and `gpui-component` amount to some 750 crates. A project with its own
+`target/` recompiles all of them, which costs several minutes for every new
+project.
 
-Chaque projet généré reçoit donc un `.cargo/config.toml` qui pointe vers un
-cache commun, `~/Library/Caches/maxx/target` : le premier projet paie le prix,
-les suivants sont quasi instantanés. Comme le fichier porte un chemin absolu, il
-est propre à la machine et se trouve dans le `.gitignore` du projet — le perdre
-ne coûte qu'une recompilation. Un `cargo run` tapé dans un terminal lit le même
-fichier, donc terminal et maxx partagent le cache.
+Every generated project therefore gets a `.cargo/config.toml` pointing at a
+shared cache, `~/Library/Caches/maxx/target`: the first project pays the price,
+the next ones are nearly instant. Since the file holds an absolute path it is
+machine-local, and it sits in the project's `.gitignore` — losing it costs one
+recompilation. A `cargo run` typed in a terminal reads the same file, so the
+terminal and maxx share the cache.
 
-À la création d'un projet, `cargo build` démarre en arrière-plan pour payer ce
-prix pendant que vous dessinez. `Exécution > Préparer les dépendances` le
-relance à la demande.
+When a project is created, `cargo build` starts in the background to pay that
+cost while you are drawing. `Run > Prewarm dependencies` runs it again on
+demand.
 
-## Organisation
+## Layout
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `src/model.rs` | l'arbre : base, appels, arguments, nœuds opaques |
-| `src/codegen.rs` | modèle → texte Rust |
-| `src/parser.rs` | texte Rust → modèle, marqueurs et découpe textuelle |
-| `src/registry.rs` | le catalogue de composants — le seul endroit à étendre |
-| `src/view.rs` | une vue ouverte : chargement, enregistrement, insertions |
-| `src/scaffold.rs` | gabarits de projet et de vue |
-| `src/designer.rs` | canvas, structure, inspecteur, palette |
-| `src/workspace.rs` | la fenêtre, l'état, les commandes |
-| `src/about.rs` | la fenêtre « À propos » |
+| `src/model.rs` | the tree: base, calls, arguments, opaque nodes |
+| `src/codegen.rs` | model → Rust text |
+| `src/parser.rs` | Rust text → model, markers and textual splicing |
+| `src/registry.rs` | the component catalogue — the only place to extend |
+| `src/view.rs` | one open view: loading, saving, insertions |
+| `src/scaffold.rs` | project and view templates |
+| `src/designer.rs` | canvas, structure, inspector, palette |
+| `src/workspace.rs` | the window, the state, the commands |
+| `src/about.rs` | the About window |
 
-Comment tout cela tient ensemble, et pourquoi : [`ARCHITECTURE.md`](ARCHITECTURE.md).
-Ce qui est connu et reporté est dans [`BACKLOG.md`](BACKLOG.md).
+How it all fits together, and why: [`ARCHITECTURE.md`](ARCHITECTURE.md).
+What is known and deferred is in [`BACKLOG.md`](BACKLOG.md).
 
-## Réglages
+Those two, and the interface strings, are still in French; the code and its
+comments are in English.
 
-maxx détecte les éditeurs et les terminaux installés et laisse choisir lequel
-reçoit vos fichiers — `⌘⌥Z` et le bouton `→` de l'inspecteur suivent ce choix,
-jusqu'au numéro de ligne, que chaque éditeur épelle à sa façon. Les éditeurs de
-terminal (Helix, Neovim, Vim) sont lancés dans le terminal choisi.
+## Settings
 
-Réglages ▸ Outils ▸ **Mettre en forme à l'enregistrement** passe `rustfmt` sur
-le fichier après chaque écriture, en respectant le `rustfmt.toml` du projet.
-Allumé, et ce n'est pas un excès de zèle : un éditeur Rust formate à
-l'enregistrement — c'est le défaut de Zed comme de rust-analyzer — et ce que
-maxx écrit n'est pas ce que rustfmt écrirait. Sans ce réglage, l'éditeur et
-maxx se reformatent mutuellement la zone gérée à chaque tour, avec un diff
-parasite à la clé. maxx applique donc lui-même ce que l'éditeur appliquerait de
-toute façon. Éteignez-le si votre projet n'utilise pas rustfmt : il met en forme
-le fichier entier.
+maxx detects the editors and terminals installed and lets you choose which one
+receives your files — `⌘⌥Z` and the inspector's `→` button follow that choice,
+down to the line number, which every editor spells differently. Terminal editors
+(Helix, Neovim, Vim) are started inside the chosen terminal.
 
-`⌘,` ouvre l'écran de réglages, comme un onglet et non comme une boîte
-modale : il se referme avec `⌘W` et laisse revenir à la vue en cours.
+Settings ▸ Tools ▸ **Format on save** runs `rustfmt` over the file after every
+write, honouring the project's `rustfmt.toml`. On by default, and not out of
+zeal: a Rust editor formats on save — that is the default in Zed as in
+rust-analyzer — and what maxx writes is not what rustfmt would write. Without
+this setting, the editor and maxx reformat the managed region back and forth,
+one spurious diff per turn. maxx therefore applies itself what the editor would
+apply anyway. Turn it off if your project does not use rustfmt: it formats the
+whole file.
 
-Deux fichiers dans `~/Library/Application Support/maxx/` — `$XDG_CONFIG_HOME`
-ou `~/.config` ailleurs, `%APPDATA%` sur Windows.
+`⌘,` opens the settings screen, as a tab rather than a modal: `⌘W` closes it and
+gives the current view back.
 
-`settings.json` est à vous. Du JSON à commentaires, comme celui de Zed, écrit
-avec ses défauts et une ligne d'explication par clé la première fois. **maxx n'y
-réécrit que la clé qu'il change** : vos commentaires et votre mise en forme
-restent. Un schéma est déposé à côté, pour que votre éditeur complète.
+Two files in `~/Library/Application Support/maxx/` — `$XDG_CONFIG_HOME` or
+`~/.config` elsewhere, `%APPDATA%` on Windows.
 
-`state.json` est à maxx : projets récents, position de la fenêtre. Personne ne
-l'édite, il est réécrit en entier.
+`settings.json` is yours. JSON with comments, like Zed's, written with its
+defaults and a line of explanation per key the first time. **maxx rewrites only
+the key it changes**: your comments and your layout stay. A schema is dropped
+beside it, so your editor completes.
 
-Un fichier absent, partiel ou abîmé n'empêche jamais maxx de démarrer — chaque
-valeur a un défaut, et un fichier illisible est signalé puis laissé tel quel,
-pour ne pas écraser ce que vous étiez en train d'y écrire.
+`state.json` is maxx's: recent projects, window position. Nobody edits it, so it
+is rewritten whole.
+
+A missing, partial or damaged file never stops maxx from starting — every value
+has a default, and an unreadable file is reported and then left alone, so that
+whatever you were in the middle of writing is not overwritten.
 
 ## Licence
 
-maxx est sous licence MIT — voir [`LICENSE`](LICENSE).
+maxx is MIT licensed — see [`LICENSE`](LICENSE).
 
-GPUI et gpui-component sont sous Apache-2.0, ce qui n'impose rien de plus que
-de joindre leur licence et de conserver leurs mentions de copyright. Un crate
-transitif, `option-ext`, est sous MPL-2.0. Le détail et ce que la distribution
-d'un binaire demande sont dans [`THIRD-PARTY.md`](THIRD-PARTY.md).
+GPUI and gpui-component are Apache-2.0, which asks for nothing more than
+shipping their licence and keeping their copyright notices. One transitive
+crate, `option-ext`, is MPL-2.0. The detail, and what distributing a binary
+requires, is in [`THIRD-PARTY.md`](THIRD-PARTY.md).
 
-Les projets générés n'héritent d'aucune licence : maxx écrit du Rust ordinaire,
-qui vous appartient.
+Generated projects inherit no licence: maxx writes ordinary Rust, and it is
+yours.
