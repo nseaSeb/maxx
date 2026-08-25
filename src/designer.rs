@@ -84,7 +84,10 @@ impl Workspace {
                 div().flex().flex_row().flex_1().overflow_hidden().child(
                     h_resizable("inspecteur")
                         .with_state(&self.inspector_split)
-                        .child(resizable_panel().child(self.render_canvas(cx)))
+                        .child(
+                            resizable_panel()
+                                .child(crate::workspace::fillable(self.render_canvas(cx))),
+                        )
                         .child(
                             resizable_panel()
                                 .size(px(self.inspector_width(cx)))
@@ -92,7 +95,7 @@ impl Workspace {
                                 // replient sur eux-mêmes ; au-delà, il ne
                                 // reste plus de canvas à dessiner.
                                 .size_range(px(220.)..px(560.))
-                                .child(self.render_side_panels(cx)),
+                                .child(crate::workspace::fillable(self.render_side_panels(cx))),
                         ),
                 ),
             )

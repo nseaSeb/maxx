@@ -2272,9 +2272,9 @@ impl Render for Workspace {
                                         // illisible ; au-delà, elle mange le
                                         // canvas.
                                         .size_range(px(160.)..px(520.))
-                                        .child(self.render_project_panel(cx)),
+                                        .child(fillable(self.render_project_panel(cx))),
                                 )
-                                .child(resizable_panel().child(self.render_main(cx))),
+                                .child(resizable_panel().child(fillable(self.render_main(cx)))),
                         )
                     }),
             )
@@ -2463,6 +2463,16 @@ fn panel_icon(
         .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tooltip).build(window, cx))
         .child(glyph)
         .on_click(cx.listener(move |this, _, _window, cx| action(this, cx)))
+}
+
+/// Wraps the content of a resizable panel so it can actually shrink.
+///
+/// Without this, dragging the handle only *pushes* what is beside it: a flex
+/// item defaults to `min-width: auto`, so it refuses to go below the width of
+/// its own content and overflows instead of compressing. A width of zero as a
+/// floor, and the content follows the handle.
+pub fn fillable(content: impl IntoElement) -> impl IntoElement {
+    div().flex().size_full().min_w(px(0.)).overflow_hidden().child(content)
 }
 
 /// Asks every workspace to repaint.
