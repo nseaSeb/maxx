@@ -12,6 +12,7 @@ pub mod model;
 pub mod parser;
 pub mod preferences;
 pub mod project;
+pub mod projectfile;
 pub mod run;
 pub mod registry;
 pub mod scaffold;

@@ -257,8 +257,21 @@ compilation, ce qui est l'inverse du but.
 **Une copie est une dette**, et il faut la nommer : le module système et les
 réglages reprennent du code que maxx a écrit pour lui-même. Un défaut trouvé
 d'un côté doit être porté de l'autre. C'est déjà arrivé — la fiche
-`.trashinfo`, non conforme dans les deux à la fois. Le prix est assumé, un
-projet généré ne devant rien à maxx, mais il se paie à chaque correction.
+`.trashinfo`, non conforme dans les deux à la fois.
+
+`maxx.toml`, versionné à la racine du projet, rend cette dette rattrapable. Il
+note quel module a été copié, dans quelle version, et l'empreinte qu'il avait
+en sortant. maxx sait alors quels projets portent une version qu'il a depuis
+corrigée, et l'empreinte lui dit si le développeur y a touché : **un fichier
+modifié n'est jamais remplacé**, il est signalé. C'est une troisième voie entre
+l'extraction d'un crate — qui casserait la promesse « un projet généré ne doit
+rien à maxx » — et la génération du gabarit depuis le code de maxx.
+
+Le garde-fou qui fait tenir l'ensemble est dans `tests/modules.rs` : il retient
+l'empreinte de chaque gabarit à sa version courante. Modifier un gabarit fait
+échouer ce test, ce qui oblige à décider si la correction doit atteindre les
+projets déjà écrits. Sans lui, une version ne monterait jamais et le mécanisme
+serait décoratif.
 
 ## La démo comme référence
 

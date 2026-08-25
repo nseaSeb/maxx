@@ -119,6 +119,12 @@ code, pas une dépendance à maxx : ce qui est copié vous appartient.
 - **Le module système** — `src/systeme.rs`.
 - **Les réglages** — `src/reglages.rs`, qui tire le module système avec lui.
 
+Ce qui est copié est noté dans `maxx.toml`, à versionner avec le projet : quel
+module, dans quelle version, et l'empreinte qu'il avait en sortant. Quand une
+version plus récente existe, maxx le dit à l'ouverture et
+`Fichier > Ajouter au projet > Mettre à jour les modules` la pose. Un fichier
+que vous avez modifié n'est jamais remplacé — il est signalé, c'est tout.
+
 ### Les réglages
 
 La même discipline que maxx applique aux siens : du JSON à commentaires, un

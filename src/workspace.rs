@@ -169,6 +169,13 @@ pub struct Workspace {
 
 impl Workspace {
     fn new(project: Option<Project>) -> Self {
+        // A project handed straight to a fresh window never passes through
+        // `set_project`, so the notice has to be raised here too.
+        let outdated = project
+            .as_ref()
+            .map(|project| crate::scaffold::outdated_modules(&project.root))
+            .unwrap_or_default();
+
         let mut workspace = Self {
             project,
             entries: Vec::new(),
@@ -180,7 +187,12 @@ impl Workspace {
             menu_synced: None,
             views: Vec::new(),
             active: None,
-            message: None,
+            message: (!outdated.is_empty()).then(|| {
+                SharedString::from(format!(
+                    "{} a une version plus récente — Fichier ▸ Ajouter au projet ▸ Mettre à jour",
+                    outdated.join(", ")
+                ))
+            }),
             prop_inputs: Vec::new(),
             revision: 0,
             synced: None,
@@ -272,6 +284,7 @@ impl Workspace {
     /// Loads `path` as this workspace's project, replacing any previous one.
     pub fn set_project(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         remember_project(&path, cx);
+        self.announce_outdated_modules(&path);
         self.menu_file = None;
         self.preferences = false;
         self.menu_synced = None;
@@ -647,6 +660,60 @@ impl Workspace {
             "réglages ajoutés au projet, avec le module système et leurs deux crates",
             cx,
         );
+    }
+
+    /// Replaces the copied modules a newer maxx has fixed.
+    ///
+    /// Only those the project has not touched: an edited file belongs to the
+    /// developer, and maxx says so rather than deciding for them.
+    pub fn update_modules(&mut self, cx: &mut Context<Self>) {
+        let Some(project) = self.project.as_ref() else {
+            self.message = Some(SharedString::from("aucun projet ouvert"));
+            cx.notify();
+            return;
+        };
+        let root = project.root.clone();
+        let outdated = crate::scaffold::outdated_modules(&root);
+
+        if outdated.is_empty() {
+            self.message = Some(SharedString::from(
+                "les modules de ce projet sont à jour",
+            ));
+            cx.notify();
+            return;
+        }
+
+        let mut updated = Vec::new();
+        let mut failed = Vec::new();
+        for module in &outdated {
+            match crate::scaffold::update_module(&root, module) {
+                Ok(()) => updated.push(module.clone()),
+                Err(error) => failed.push(format!("{module} : {error}")),
+            }
+        }
+
+        self.refresh_entries();
+        self.message = Some(SharedString::from(if failed.is_empty() {
+            format!("mis à jour : {}", updated.join(", "))
+        } else {
+            failed.join(" · ")
+        }));
+        cx.notify();
+    }
+
+    /// Says so when the project carries a module maxx has since fixed.
+    ///
+    /// A message and nothing more: replacing a file because someone opened a
+    /// folder would be a poor way to earn trust.
+    fn announce_outdated_modules(&mut self, root: &std::path::Path) {
+        let outdated = crate::scaffold::outdated_modules(root);
+        if outdated.is_empty() {
+            return;
+        }
+        self.message = Some(SharedString::from(format!(
+            "{} a une version plus récente — Fichier ▸ Ajouter au projet ▸ Mettre à jour",
+            outdated.join(", ")
+        )));
     }
 
     /// Shows the preferences, or leaves them when they are already up.

@@ -21,6 +21,8 @@ pub fn create_project(root: &Path, name: &str) -> io::Result<()> {
     std::fs::create_dir_all(root.join(".cargo"))?;
     std::fs::write(root.join("Cargo.toml"), cargo_toml(&crate_name(name)))?;
     std::fs::write(root.join(".cargo/config.toml"), cargo_config())?;
+    // `maxx.toml` n'y est pas : il dit ce que le projet a pris à maxx, et sert
+    // à lui proposer les corrections plus tard. Il se versionne.
     std::fs::write(root.join(".gitignore"), "/target\n/.cargo\n")?;
     std::fs::write(root.join("src/main.rs"), main_rs())?;
     std::fs::write(root.join("src/menus.rs"), menus_rs())?;
@@ -135,6 +137,90 @@ target-dir = "{}"
     )
 }
 
+/// The modules maxx knows how to copy into a project, and their versions.
+///
+/// A version is bumped whenever the template changes. `tests/scaffold.rs`
+/// holds the fingerprint of each one and fails when a template moves without
+/// its version following — the guard against a fix that never reaches the
+/// projects carrying the old copy.
+pub const MODULES: &[(&str, u32)] = &[("systeme", 1), ("reglages", 1)];
+
+/// The version of `module`, if maxx knows it.
+pub fn module_version(module: &str) -> Option<u32> {
+    MODULES
+        .iter()
+        .find(|(name, _)| *name == module)
+        .map(|(_, version)| *version)
+}
+
+/// The current text of a module's template.
+pub fn module_body(module: &str) -> Option<String> {
+    match module {
+        "systeme" => Some(system_rs()),
+        "reglages" => Some(settings_rs()),
+        _ => None,
+    }
+}
+
+/// The modules a project carries in a version older than maxx's, and that it
+/// has not modified since.
+///
+/// A file the developer has touched is never listed: it is theirs now, and
+/// maxx has no business replacing it.
+pub fn outdated_modules(root: &Path) -> Vec<String> {
+    let file = crate::projectfile::load(root);
+    let mut outdated = Vec::new();
+
+    for (module, current) in MODULES {
+        let Some(recorded) = file.modules.get(*module) else {
+            continue;
+        };
+        if recorded.version >= *current {
+            continue;
+        }
+        let path = root.join(format!("src/{module}.rs"));
+        let Ok(body) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        if crate::projectfile::fingerprint(&body) == recorded.empreinte {
+            outdated.push((*module).to_string());
+        }
+    }
+    outdated
+}
+
+/// Replaces a module with maxx's current version.
+///
+/// Refuses when the file no longer matches what maxx wrote: the developer's
+/// edits are not maxx's to discard.
+pub fn update_module(root: &Path, module: &str) -> io::Result<()> {
+    let (Some(version), Some(body)) = (module_version(module), module_body(module)) else {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("module inconnu : {module}"),
+        ));
+    };
+    let file = crate::projectfile::load(root);
+    let Some(recorded) = file.modules.get(module) else {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("maxx.toml ne mentionne pas {module}"),
+        ));
+    };
+
+    let path = root.join(format!("src/{module}.rs"));
+    let current = std::fs::read_to_string(&path)?;
+    if crate::projectfile::fingerprint(&current) != recorded.empreinte {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("src/{module}.rs a été modifié — maxx ne le remplace pas"),
+        ));
+    }
+
+    std::fs::write(&path, &body)?;
+    crate::projectfile::record(root, module, version, &body)
+}
+
 /// Adds the system module to an existing project and declares it.
 ///
 /// A copied module, not a dependency: a generated project owes nothing to
@@ -149,8 +235,10 @@ pub fn add_system_module(root: &Path) -> io::Result<()> {
     }
 
     let path = root.join("src/systeme.rs");
+    let body = system_rs();
     if !path.exists() {
-        std::fs::write(&path, system_rs())?;
+        std::fs::write(&path, &body)?;
+        crate::projectfile::record(root, "systeme", module_version("systeme").unwrap_or(1), &body)?;
     }
 
     let mut out = lines.join("\n");
@@ -530,8 +618,10 @@ pub fn add_settings_module(root: &Path) -> io::Result<()> {
     }
 
     let path = root.join("src/reglages.rs");
+    let body = settings_rs();
     if !path.exists() {
-        std::fs::write(&path, settings_rs())?;
+        std::fs::write(&path, &body)?;
+        crate::projectfile::record(root, "reglages", module_version("reglages").unwrap_or(1), &body)?;
     }
 
     let mut out = lines.join("\n");

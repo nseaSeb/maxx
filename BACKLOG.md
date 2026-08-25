@@ -69,13 +69,24 @@ Ce qui reste, et qui ne se règle pas au clavier :
 
 ## Le code ajouté aux projets
 
-Le module système et les réglages sont des copies de ce que maxx a écrit pour
-lui-même : un défaut corrigé d'un côté doit être porté de l'autre, à la main.
-La fiche `.trashinfo` non conforme l'a déjà été. Deux façons d'en sortir un
-jour, aucune gratuite : extraire un crate que les projets générés
-dépendraient — ce qui casse la promesse « rien ne doit à maxx » —, ou faire
-générer le gabarit depuis le code de maxx, ce qui demande que les deux soient
-écrits pour ça.
+Le module système et les réglages sont des copies : un défaut corrigé dans maxx
+doit être reporté à la main dans le gabarit. Ce qui manquait, c'était le moyen
+de faire ensuite arriver la correction aux projets déjà écrits — c'est fait,
+par `maxx.toml` et les modules versionnés, avec refus de remplacer un fichier
+que le développeur a modifié.
+
+Ce qui reste :
+
+- **Montrer ce qui change** avant de remplacer, et proposer quelque chose à un
+  fichier modifié — un diff, ou l'écriture du nouveau à côté. Aujourd'hui maxx
+  dit seulement « vous l'avez modifié » et s'arrête.
+- **`maxx.toml` ne porte que les modules.** La vue d'entrée est toujours écrite
+  en dur dans `main_rs()`, et la commande de lancement est toujours
+  `cargo run`, sans profil ni features. C'est le même fichier qui les
+  accueillera.
+- **Des modules plus fins**, si l'usage le demande : aujourd'hui le module
+  système arrive entier, sous `allow(dead_code)`, alors qu'un projet n'en veut
+  peut-être que la corbeille.
 
 ## Réglages
 
