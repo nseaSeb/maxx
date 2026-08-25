@@ -255,13 +255,13 @@ conteneurs Linux, un conteneur Windows exigeant un hôte Windows.
 `scripts/verifier-linux.sh` rejoue la branche Linux, et c'est tout ce qu'on
 peut rejouer.
 
-`ci.yml` coûte cher — environ 750 crates par branche, une dizaine de minutes à
-froid, le double sur Windows — donc elle est dosée : une poussée ne vérifie que
-macOS, les trois systèmes tournent sur les pull requests, sur demande
-(`workflow_dispatch`) et une fois par semaine, une poussée qui ne touche que de
-la documentation ne lance rien, et la démo n'est reconstruite que si elle ou
-les gabarits ont bougé. Le filet sert à attraper une dérive, pas à commenter
-chaque virgule.
+Sur un dépôt public, les runners standard sont gratuits et illimités : les
+trois systèmes tournent à chaque poussée. Tant que le dépôt était privé, ce
+n'était pas tenable — les minutes y sont comptées avec des multiplicateurs, ×1
+sur Linux, ×2 sur Windows, ×10 sur macOS, si bien qu'un seul run complet à
+froid coûtait près de 400 minutes facturées sur un quota mensuel de 2 000. Si
+le dépôt redevenait privé, il faudrait remettre le dosage que l'historique
+garde.
 
 ## Ce que maxx ajoute à un projet
 

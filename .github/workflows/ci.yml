@@ -9,15 +9,17 @@
 # fenêtre — ils portent sur le modèle, le parseur, les gabarits et les
 # réglages. Il faut qu'un humain lance maxx une fois par système.
 #
-# Ce qu'elle coûte, et comment c'est tenu. gpui et gpui-component représentent
-# environ 750 crates : à froid, une branche de la matrice dure une dizaine de
-# minutes, et Windows le double. D'où trois décisions :
+# Ce qu'elle coûte. Sur un dépôt public, les runners standard sont gratuits et
+# illimités : les trois systèmes tournent donc à chaque poussée, et le filet
+# sert enfin à chaque fois qu'il pourrait attraper quelque chose.
 #
-#   - une poussée ne lance que macOS, la plateforme de développement, qui donne
-#     le signal utile en quelques minutes ;
-#   - les trois systèmes tournent sur demande, sur les pull requests, et une
-#     fois par semaine — c'est là que sert le filet, pas à chaque virgule ;
-#   - une poussée qui ne touche que de la documentation ne lance rien.
+# Tant que le dépôt était privé, ce n'était pas tenable — les minutes y sont
+# comptées avec des multiplicateurs, ×1 sur Linux, ×2 sur Windows et ×10 sur
+# macOS, si bien qu'un seul run complet à froid coûtait près de 400 minutes
+# facturées sur un quota mensuel de 2 000. D'où le dosage qui a précédé, et qui
+# n'a plus lieu d'être. Si le dépôt redevenait privé, il faudrait le remettre.
+#
+# Reste vrai : une poussée qui ne touche que de la documentation ne lance rien.
 
 name: CI
 
@@ -29,8 +31,8 @@ on:
     paths-ignore: ["**/*.md", "LICENSE", ".gitignore"]
   workflow_dispatch:
   schedule:
-    # Lundi matin : le retard de portabilité se voit en début de semaine, pas
-    # au moment de publier.
+    # Gardé même si chaque poussée vérifie tout : il attrape ce qui casse sans
+    # qu'on ait rien changé — une mise à jour de runner, un outil qui bouge.
     - cron: "0 6 * * 1"
 
 # Une poussée qui en remplace une autre annule celle d'avant : sur une branche
@@ -50,10 +52,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Une poussée ordinaire ne vérifie que macOS ; les trois systèmes sont
-        # pour les pull requests, la demande explicite et le rendez-vous
-        # hebdomadaire.
-        systeme: ${{ fromJSON(github.event_name == 'push' && '["macos-latest"]' || '["macos-latest", "ubuntu-latest", "windows-latest"]') }}
+        systeme: [macos-latest, ubuntu-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v4
