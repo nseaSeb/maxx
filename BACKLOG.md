@@ -90,20 +90,21 @@ fois sur chaque système.
 
 Trois choses distinctes, dans cet ordre de dépendance.
 
-**Les réglages de maxx.** Sont figés dans le code : l'éditeur (`run.rs:91`), le
-terminal (`run.rs:71`), le cache partagé (`run.rs:56`), la palette
-(`theme.rs`, des `const`), la largeur des panneaux (240 px et 280 px), et
-l'état des panneaux qui repart à zéro à chaque lancement (`workspace.rs:177`).
-Le trou visible est `Fichier > Ouvrir un élément récent`, câblé sur `NoAction`
-(`menus.rs:36`) : sans réglages persistés il ne peut rien faire. La géométrie
-de la fenêtre n'est pas restaurée non plus.
+**Les réglages de maxx.** Le socle est écrit (`src/settings.rs`) : un TOML dans
+le répertoire de configuration du système, chargé au démarrage, avec un défaut
+par valeur pour qu'un fichier absent, partiel ou abîmé ne soit jamais pire que
+pas de fichier du tout. Portent déjà : les projets récents — donc
+`Fichier > Ouvrir un élément récent` et la liste de l'écran d'accueil —, l'état
+des trois panneaux, et la géométrie de la fenêtre.
 
-`gpui_component::setting` livre déjà la présentation — `Settings`,
-`SettingPage`, `SettingGroup`, `SettingItem` — donc l'écran de préférences est
-presque gratuit, seule la persistance est à écrire. `serde_json` et `toml` sont
-déjà compilés dans l'arbre via gpui : les prendre en dépendance directe ne
-coûte rien en temps de build. L'emplacement du fichier suit la section
-Portabilité ci-dessus.
+Restent figés dans le code : l'éditeur (`run.rs:91`), le terminal (`run.rs:71`),
+le cache partagé (`run.rs:56`), la palette (`theme.rs`, des `const`) et la
+largeur des panneaux, qui attend de toute façon les panneaux redimensionnables.
+
+Manque surtout **l'écran de préférences** : les réglages ne se changent
+aujourd'hui qu'en éditant le fichier à la main, ou en actionnant ce que les
+menus exposent. `gpui_component::setting` livre la présentation — `Settings`,
+`SettingPage`, `SettingGroup`, `SettingItem` — il n'y a que le câblage à faire.
 
 **Ce que maxx retient d'un projet** : projets récents, dernière vue ouverte,
 dossiers dépliés, largeur des panneaux pour ce projet. N'appartient pas au

@@ -1,15 +1,53 @@
 //! The native menu bar, laid out the way Zed lays out its own.
 
-use gpui::{Menu, MenuItem, NoAction, OsAction, SystemMenuType};
+use gpui::{App, Menu, MenuItem, OsAction, SystemMenuType};
 
 use crate::actions::*;
+
+/// The recent projects, most recent first.
+///
+/// An entry carries the index rather than the path: a gpui action is a value
+/// the menu bar keeps, and the settings are the one place the paths live.
+fn recent_projects_menu(cx: &App) -> MenuItem {
+    let recent = &crate::settings::get(cx).recent_projects;
+    if recent.is_empty() {
+        // A submenu with nothing in it looks broken; a disabled-looking entry
+        // that does nothing says what is going on.
+        return MenuItem::action("Aucun projet récent", NoRecentProject);
+    }
+
+    let items = recent
+        .iter()
+        .enumerate()
+        .map(|(index, path)| {
+            let label = path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.to_string_lossy().into_owned());
+            MenuItem::action(label, OpenRecent { index })
+        })
+        .chain([
+            MenuItem::separator(),
+            MenuItem::action("Vider la liste", ClearRecentProjects),
+        ])
+        .collect();
+
+    MenuItem::submenu(Menu {
+        name: "Ouvrir un élément récent".into(),
+        items,
+    })
+}
 
 /// Builds the whole menu bar.
 ///
 /// macOS ignores the name of the first menu and shows the bundle name instead
 /// (the binary name when run outside a bundle), so `"maxx"` here is only a
 /// label for the other platforms.
-pub fn app_menus() -> Vec<Menu> {
+///
+/// Takes the application because the recent projects live in the settings, and
+/// a gpui menu bar is a value handed over once: the whole bar is rebuilt and
+/// handed over again whenever that list changes.
+pub fn app_menus(cx: &App) -> Vec<Menu> {
     vec![
         Menu {
             name: "maxx".into(),
@@ -33,7 +71,7 @@ pub fn app_menus() -> Vec<Menu> {
                 MenuItem::action("Nouvelle fenêtre", NewWindow),
                 MenuItem::separator(),
                 MenuItem::action("Ouvrir un dossier…", OpenFolder),
-                MenuItem::action("Ouvrir un élément récent", NoAction),
+                recent_projects_menu(cx),
                 MenuItem::separator(),
                 MenuItem::action("Enregistrer", Save),
                 MenuItem::action("Recharger la vue", ReloadView),

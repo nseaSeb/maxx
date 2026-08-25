@@ -14,6 +14,7 @@ pub mod project;
 pub mod run;
 pub mod registry;
 pub mod scaffold;
+pub mod settings;
 pub mod view;
 pub mod theme;
 pub mod workspace;
@@ -28,9 +29,18 @@ pub fn run() {
         gpui_component::init(cx);
         cx.activate(true);
 
+        settings::init(cx);
+        // The window geometry is only staged in memory as it moves; this is
+        // where it is written. `detach` because the subscription has to outlive
+        // this closure, and the application ends right after it fires.
+        cx.on_app_quit(|cx: &mut App| {
+            settings::flush(cx);
+            async {}
+        })
+        .detach();
         actions::register_handlers(cx);
         cx.bind_keys(actions::key_bindings());
-        cx.set_menus(menus::app_menus());
+        cx.set_menus(menus::app_menus(cx));
 
         // `maxx <chemin>` ouvre directement un projet, comme `zed <chemin>`.
         let path = std::env::args()

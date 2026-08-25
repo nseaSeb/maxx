@@ -169,14 +169,14 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    fn new(project: Option<Project>) -> Self {
+    fn new(project: Option<Project>, settings: &crate::settings::Settings) -> Self {
         let mut workspace = Self {
             project,
             entries: Vec::new(),
             expanded: HashSet::new(),
             selected: None,
-            show_panel: true,
-            show_status_bar: true,
+            show_panel: settings.show_project_panel,
+            show_status_bar: settings.show_status_bar,
             menu_file: None,
             menu_inputs: Vec::new(),
             menu_synced: None,
@@ -273,6 +273,7 @@ impl Workspace {
 
     /// Loads `path` as this workspace's project, replacing any previous one.
     pub fn set_project(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        remember_project(&path, cx);
         self.menu_file = None;
         self.menu_synced = None;
         let project = Project::open(path);
@@ -309,12 +310,16 @@ impl Workspace {
     /// Toggles the project panel (View > Project Panel, `cmd-b`).
     pub fn toggle_project_panel(&mut self, cx: &mut Context<Self>) {
         self.show_panel = !self.show_panel;
+        let shown = self.show_panel;
+        crate::settings::update(cx, |settings| settings.show_project_panel = shown);
         cx.notify();
     }
 
     /// Toggles the status bar (View > Status Bar).
     pub fn toggle_status_bar(&mut self, cx: &mut Context<Self>) {
         self.show_status_bar = !self.show_status_bar;
+        let shown = self.show_status_bar;
+        crate::settings::update(cx, |settings| settings.show_status_bar = shown);
         cx.notify();
     }
 
@@ -1131,6 +1136,8 @@ impl Workspace {
     /// Shows or hides the output panel.
     pub fn toggle_output(&mut self, cx: &mut Context<Self>) {
         self.show_output = !self.show_output;
+        let shown = self.show_output;
+        crate::settings::update(cx, |settings| settings.show_output = shown);
         cx.notify();
     }
 
@@ -1795,7 +1802,69 @@ impl Workspace {
                     .text_color(rgb(theme::TEXT_MUTED))
                     .child("⌘O"),
             )
+            .children(self.render_recent_projects(cx))
             .into_any_element()
+    }
+
+    /// The recent projects, on the welcome screen.
+    ///
+    /// The same list as the one in the File menu, put where someone who has
+    /// just launched maxx is already looking.
+    fn render_recent_projects(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let recent = crate::settings::get(cx).recent_projects.clone();
+        if recent.is_empty() {
+            return None;
+        }
+
+        let rows = recent.into_iter().enumerate().map(|(index, path)| {
+            let name = path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.to_string_lossy().into_owned());
+            let parent = path
+                .parent()
+                .map(|parent| parent.to_string_lossy().into_owned())
+                .unwrap_or_default();
+
+            div()
+                .id(SharedString::from(format!("recent-{index}")))
+                .flex()
+                .items_baseline()
+                .gap_2()
+                .px_3()
+                .py_1()
+                .rounded_sm()
+                .cursor_pointer()
+                .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                .child(div().child(name))
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(theme::TEXT_MUTED))
+                        .child(parent),
+                )
+                .on_click(cx.listener(move |_, _, window, cx| {
+                    window.dispatch_action(Box::new(crate::actions::OpenRecent { index }), cx);
+                }))
+        });
+
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .mt_4()
+                .gap_1()
+                .items_start()
+                .child(
+                    div()
+                        .px_3()
+                        .text_xs()
+                        .text_color(rgb(theme::TEXT_MUTED))
+                        .child("Projets récents"),
+                )
+                .children(rows)
+                .into_any_element(),
+        )
     }
 
     /// The output of the last run.
@@ -1976,6 +2045,18 @@ impl Render for Workspace {
         }
         self.was_active = active;
 
+        // Kept in memory only: writing the file on every frame of a drag would
+        // be absurd. `settings::flush` at quit puts it away.
+        let bounds = window.bounds();
+        crate::settings::stage(cx, |settings| {
+            settings.window = Some(crate::settings::WindowGeometry {
+                x: bounds.origin.x.into(),
+                y: bounds.origin.y.into(),
+                width: bounds.size.width.into(),
+                height: bounds.size.height.into(),
+            });
+        });
+
         self.sync_prop_inputs(window, cx);
         self.sync_menu_inputs(window, cx);
         let show_panel = self.show_panel && self.project.is_some();
@@ -2027,18 +2108,32 @@ pub fn open_folder(path: PathBuf, cx: &mut App) {
 
 /// Opens a new window, either on `path` or on the welcome screen.
 pub fn open_workspace_window(path: Option<PathBuf>, cx: &mut App) {
+    // A project handed to a fresh window never passes through `set_project` —
+    // neither the one opened from the command line, nor the one that gets a
+    // window of its own because the current one is busy.
+    if let Some(path) = path.as_deref() {
+        remember_project(path, cx);
+    }
     let project = path.clone().map(Project::open);
     let title = project
         .as_ref()
         .map(|project| project.name.clone())
         .unwrap_or_else(|| "maxx".into());
 
+    let settings = crate::settings::get(cx).clone();
+    // Une géométrie enregistrée sur un écran qui n'est plus branché rendrait la
+    // fenêtre invisible ; gpui rabat une fenêtre hors champ sur l'écran
+    // principal, donc il n'y a rien de plus à faire ici.
+    let bounds = match settings.window {
+        Some(geometry) => Bounds {
+            origin: point(px(geometry.x), px(geometry.y)),
+            size: size(px(geometry.width), px(geometry.height)),
+        },
+        None => Bounds::centered(None, size(px(1100.), px(720.)), cx),
+    };
+
     let options = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
-            None,
-            size(px(1100.), px(720.)),
-            cx,
-        ))),
+        window_bounds: Some(WindowBounds::Windowed(bounds)),
         titlebar: Some(TitlebarOptions {
             title: Some(title),
             appears_transparent: true,
@@ -2052,7 +2147,7 @@ pub fn open_workspace_window(path: Option<PathBuf>, cx: &mut App) {
     let created: std::rc::Rc<std::cell::RefCell<Option<Entity<Workspace>>>> = Default::default();
     let slot = created.clone();
     let opened = cx.open_window(options, move |window, cx| {
-        let workspace = cx.new(|_| Workspace::new(project));
+        let workspace = cx.new(|_| Workspace::new(project, &settings));
         *slot.borrow_mut() = Some(workspace.clone());
         cx.new(|cx| Root::new(workspace, window, cx))
     });
@@ -2154,4 +2249,17 @@ fn panel_icon(
         .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tooltip).build(window, cx))
         .child(glyph)
         .on_click(cx.listener(move |this, _, _window, cx| action(this, cx)))
+}
+
+/// Puts `path` at the head of the recent projects and refreshes the menu bar.
+fn remember_project(path: &std::path::Path, cx: &mut App) {
+    let before = crate::settings::get(cx).recent_projects.clone();
+    crate::settings::update(cx, |settings| {
+        settings.remember_project(path);
+    });
+    if crate::settings::get(cx).recent_projects != before {
+        // The recent list is a submenu, and a gpui menu bar is a value handed
+        // over once: changing it means handing over a new one.
+        cx.set_menus(crate::menus::app_menus(cx));
+    }
 }

@@ -6,7 +6,7 @@
 //! element currently holds focus. Handlers that need a window resolve it from
 //! [`App::active_window`].
 
-use gpui::{App, AsyncApp, KeyBinding, PathPromptOptions, actions};
+use gpui::{Action, App, AsyncApp, KeyBinding, PathPromptOptions, actions};
 
 use crate::workspace::{self, Workspace};
 
@@ -23,6 +23,8 @@ actions!(
         NewWindow,
         NewProject,
         NewView,
+        NoRecentProject,
+        ClearRecentProjects,
         OpenFolder,
         AdoptView,
         ReloadView,
@@ -65,6 +67,19 @@ actions!(
     ]
 );
 
+/// Opens the recent project at `index` in the list.
+///
+/// Carries its index rather than its path: an action is a value the menu bar
+/// holds on to, and the settings are the one place the paths live. The bar is
+/// rebuilt whenever the list changes, so an index never points at the wrong
+/// project — and the handler checks it anyway.
+#[derive(Clone, PartialEq, Debug, serde::Deserialize, schemars::JsonSchema, Action)]
+#[action(namespace = maxx)]
+pub struct OpenRecent {
+    /// Rank in the recent list, most recent first.
+    pub index: usize,
+}
+
 /// URL opened by Help > GPUI Documentation.
 const DOCS_URL: &str = "https://gpui.rs";
 
@@ -82,6 +97,22 @@ pub fn register_handlers(cx: &mut App) {
     });
     cx.on_action(open_folder);
     cx.on_action(new_project);
+
+    cx.on_action(|action: &OpenRecent, cx: &mut App| {
+        let path = crate::settings::get(cx)
+            .recent_projects
+            .get(action.index)
+            .cloned();
+        // The project may have been moved since the bar was built.
+        if let Some(path) = path.filter(|path| path.is_dir()) {
+            workspace::open_folder(path, cx);
+        }
+    });
+    cx.on_action(|_: &ClearRecentProjects, cx: &mut App| {
+        crate::settings::update(cx, |settings| settings.recent_projects.clear());
+        cx.set_menus(crate::menus::app_menus(cx));
+    });
+    cx.on_action(|_: &NoRecentProject, _cx: &mut App| {});
 
     cx.on_action(|_: &NewView, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.new_view(cx));

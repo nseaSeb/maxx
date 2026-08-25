@@ -151,6 +151,15 @@ relance à la demande.
 
 Ce qui est connu et reporté est dans [`BACKLOG.md`](BACKLOG.md).
 
+## Réglages
+
+maxx écrit ce qu'il retient dans un TOML — `~/Library/Application Support/maxx/`
+sur macOS, `$XDG_CONFIG_HOME` ou `~/.config` ailleurs. Il s'édite à la main :
+projets récents, panneaux affichés, position de la fenêtre. Un fichier absent,
+partiel ou abîmé n'empêche jamais maxx de démarrer — chaque valeur a un défaut,
+et un fichier illisible est signalé puis laissé tel quel, pour ne pas écraser ce
+que vous étiez en train d'y écrire.
+
 ## Licence
 
 maxx est sous licence MIT — voir [`LICENSE`](LICENSE).

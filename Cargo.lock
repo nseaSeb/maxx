@@ -3339,7 +3339,10 @@ dependencies = [
  "gpui-component",
  "proc-macro2",
  "quote",
+ "schemars",
+ "serde",
  "syn 3.0.4",
+ "toml 0.8.23",
 ]
 
 [[package]]
