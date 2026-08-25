@@ -9,6 +9,7 @@ use gpui::{
 use gpui::{ScrollHandle, ScrollStrategy, Task, UniformListScrollHandle};
 use gpui_component::Root;
 use gpui_component::input::{InputEvent, InputState};
+use gpui_component::resizable::{ResizableState, h_resizable, resizable_panel};
 use gpui_component::scroll::Scrollbar;
 use gpui_component::spinner::Spinner;
 use gpui_component::Sizable as _;
@@ -122,6 +123,10 @@ pub struct Workspace {
     pub menu_file: Option<MenuFile>,
     /// Whether the preferences screen has taken over the main area.
     pub preferences: bool,
+    /// Where the split between the project panel and the rest sits.
+    pub(crate) panel_split: Entity<ResizableState>,
+    /// Where the split between the canvas and the inspector sits.
+    pub(crate) inspector_split: Entity<ResizableState>,
     /// Text boxes of the menu panel.
     menu_inputs: Vec<(MenuField, Entity<InputState>)>,
     /// Selection the menu boxes were built for.
@@ -168,7 +173,7 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    fn new(project: Option<Project>) -> Self {
+    fn new(project: Option<Project>, cx: &mut Context<Self>) -> Self {
         // A project handed straight to a fresh window never passes through
         // `set_project`, so the notice has to be raised here too.
         let outdated = project
@@ -183,6 +188,8 @@ impl Workspace {
             selected: None,
             menu_file: None,
             preferences: false,
+            panel_split: cx.new(|_| ResizableState::default()),
+            inspector_split: cx.new(|_| ResizableState::default()),
             menu_inputs: Vec::new(),
             menu_synced: None,
             views: Vec::new(),
@@ -2270,6 +2277,20 @@ impl Render for Workspace {
         self.sync_menu_inputs(window, cx);
         let visible = crate::settings::prefs(cx).clone();
         let show_panel = visible.show_project_panel && self.project.is_some();
+        let panel_width = crate::settings::state(cx).panel_width.unwrap_or(240.);
+
+        // La poignée déplace la découpe dans l'entité de gpui-component ; c'est
+        // ici qu'on la relit pour la retenir. En mémoire seulement, comme la
+        // géométrie de la fenêtre : un fichier par image de glissement serait
+        // absurde, et `settings::flush` l'écrit à l'extinction.
+        if show_panel
+            && let Some(largeur) = self.panel_split.read(cx).sizes().first().copied()
+        {
+            let largeur = f32::from(largeur);
+            if largeur > 0. {
+                crate::settings::stage_state(cx, |state| state.panel_width = Some(largeur));
+            }
+        }
 
         div()
             .flex()
@@ -2280,12 +2301,29 @@ impl Render for Workspace {
             .text_sm()
             .child(self.render_titlebar())
             .child(
+                // Sans le panneau, pas de poignée : un groupe redimensionnable
+                // à un seul volet coûterait un état pour rien.
                 div()
                     .flex()
                     .flex_1()
                     .overflow_hidden()
-                    .when(show_panel, |this| this.child(self.render_project_panel(cx)))
-                    .child(self.render_main(cx)),
+                    .when(!show_panel, |this| this.child(self.render_main(cx)))
+                    .when(show_panel, |this| {
+                        this.child(
+                            h_resizable("panneaux")
+                                .with_state(&self.panel_split)
+                                .child(
+                                    resizable_panel()
+                                        .size(px(panel_width))
+                                        // En dessous, l'arborescence devient
+                                        // illisible ; au-delà, elle mange le
+                                        // canvas.
+                                        .size_range(px(160.)..px(520.))
+                                        .child(self.render_project_panel(cx)),
+                                )
+                                .child(resizable_panel().child(self.render_main(cx))),
+                        )
+                    }),
             )
             .when(visible.show_output, |this| this.child(self.render_output(cx)))
             .when(visible.show_status_bar, |this| {
@@ -2361,7 +2399,7 @@ pub fn open_workspace_window(path: Option<PathBuf>, cx: &mut App) {
     let created: std::rc::Rc<std::cell::RefCell<Option<Entity<Workspace>>>> = Default::default();
     let slot = created.clone();
     let opened = cx.open_window(options, move |window, cx| {
-        let workspace = cx.new(|_| Workspace::new(project));
+        let workspace = cx.new(|cx| Workspace::new(project, cx));
         *slot.borrow_mut() = Some(workspace.clone());
         cx.new(|cx| Root::new(workspace, window, cx))
     });

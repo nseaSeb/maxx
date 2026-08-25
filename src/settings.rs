@@ -77,6 +77,10 @@ pub struct State {
     pub recent_projects: Vec<PathBuf>,
     /// Where the workspace window was left.
     pub window: Option<WindowGeometry>,
+    /// Width of the project panel, in logical pixels.
+    pub panel_width: Option<f32>,
+    /// Width of the inspector, in logical pixels.
+    pub inspector_width: Option<f32>,
 }
 
 impl State {
@@ -517,6 +521,7 @@ fn migrate_from_toml() {
     let _ = save_state(&State {
         recent_projects: old.recent_projects,
         window: old.window,
+        ..State::default()
     });
     let _ = std::fs::rename(&legacy, legacy.with_extension("toml.repris"));
 }

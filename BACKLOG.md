@@ -22,8 +22,14 @@ Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
 
 ## Confort
 
-- **Panneaux redimensionnables** via `gpui_component::dock`. Les onglets et le
-  défilement sont faits ; la largeur des colonnes est encore figée.
+- ~~Panneaux redimensionnables~~ — faits, par `gpui_component::resizable` et
+  non par `dock`, qui apportait un modèle de fenêtres flottantes dont maxx n'a
+  pas l'usage. L'explorateur et l'inspecteur ont leur poignée, avec des bornes
+  (160–520 px, 220–560 px) pour qu'aucun ne puisse manger l'autre entièrement.
+  Les largeurs vivent dans `state.json`, tenues en mémoire pendant le
+  glissement et écrites à l'extinction, comme la géométrie de la fenêtre.
+  Reste : le panneau de sortie est encore haut de 200 px, et l'éditeur de menus
+  garde son inspecteur figé à 280.
 - **`view::ensure_imports` s'ancre sur le dernier `use` en colonne 0** du
   fichier : un `use` placé après l'`impl` attirerait les imports insérés vers le
   bas du fichier. Cas tordu, mais réel.

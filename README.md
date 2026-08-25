@@ -53,7 +53,8 @@ cargo run -- <chemin>  # ouvre un projet directement
 ajoute une vue et l'inscrit dans `src/ui/mod.rs`.
 
 Dans le canvas : clic pour sélectionner, glisser pour déplacer, double-clic sur
-un bouton pour lui donner une action. `⌘S` écrit le fichier, `⌘Z` / `⌘⇧Z`
+un bouton pour lui donner une action. Les colonnes se redimensionnent à la poignée, et leur largeur est retenue.
+`⌘S` écrit le fichier, `⌘Z` / `⌘⇧Z`
 annulent, `⌘⇧⌫` supprime le nœud sélectionné, `⌘B` masque le panneau du projet.
 
 ## La démo

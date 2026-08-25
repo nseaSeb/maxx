@@ -21,9 +21,28 @@ use gpui::{Pixels, Point, Window};
 use crate::registry::{self, Kind, Prop, Spec};
 use crate::theme;
 use crate::menufile::Selection;
+use gpui_component::resizable::{h_resizable, resizable_panel};
+
 use crate::workspace::{MenuField, Workspace};
 
 impl Workspace {
+    /// The width the inspector should take, and the place where the width the
+    /// handle left is picked back up.
+    ///
+    /// Kept in memory only, like the window geometry: writing a file on every
+    /// frame of a drag would be absurd, and `settings::flush` puts it away at
+    /// quit.
+    fn inspector_width(&self, cx: &mut Context<Self>) -> f32 {
+        if let Some(largeur) = self.inspector_split.read(cx).sizes().last().copied() {
+            let largeur = f32::from(largeur);
+            if largeur > 0. {
+                crate::settings::stage_state(cx, |state| state.inspector_width = Some(largeur));
+                return largeur;
+            }
+        }
+        crate::settings::state(cx).inspector_width.unwrap_or(280.)
+    }
+
     /// The designer, or an invitation to open a view.
     pub(crate) fn render_designer(&self, cx: &mut Context<Self>) -> AnyElement {
         if self.preferences {
@@ -67,8 +86,20 @@ impl Workspace {
                     .flex_row()
                     .flex_1()
                     .overflow_hidden()
-                    .child(self.render_canvas(cx))
-                    .child(self.render_side_panels(cx)),
+                    .child(
+                        h_resizable("inspecteur")
+                            .with_state(&self.inspector_split)
+                            .child(resizable_panel().child(self.render_canvas(cx)))
+                            .child(
+                                resizable_panel()
+                                    .size(px(self.inspector_width(cx)))
+                                    // En dessous, les champs de l'inspecteur se
+                                    // replient sur eux-mêmes ; au-delà, il ne
+                                    // reste plus de canvas à dessiner.
+                                    .size_range(px(220.)..px(560.))
+                                    .child(self.render_side_panels(cx)),
+                            ),
+                    ),
             )
             .into_any_element()
     }
@@ -304,8 +335,10 @@ impl Workspace {
     fn render_side_panels(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .relative()
-            .w(px(280.))
-            .flex_none()
+            // Pas de largeur ici : c'est le volet redimensionnable qui la
+            // donne, et une largeur fixe à l'intérieur se battrait avec la
+            // poignée.
+            .size_full()
             .border_l_1()
             .border_color(rgb(theme::BORDER))
             .bg(rgb(theme::PANEL_BG))
