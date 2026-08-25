@@ -356,37 +356,6 @@ fn a_property_can_read_a_state_field() {
 }
 
 #[test]
-fn the_demo_view_reads_as_a_binding() {
-    // The hand-written demo is the reference for what maxx must understand.
-    let path = std::path::PathBuf::from("/Users/sebastienportrait/rust/maxx-demo/src/ui/accueil.rs");
-    if !path.exists() {
-        return;
-    }
-    let view = View::load(&path).expect("la vue de démo doit se relire");
-
-    let fields = view.state_fields();
-    assert!(fields.iter().any(|field| field.name == "message"));
-    assert!(fields.iter().any(|field| field.name == "clics"));
-
-    let label = &view.root.children[0];
-    let spec = maxx::registry::of(label).unwrap();
-    let text = spec.props.iter().find(|p| p.label == "Texte").unwrap();
-    assert_eq!(
-        maxx::registry::read_binding(label, text).as_deref(),
-        Some("message")
-    );
-
-    let button = &view.root.children[1];
-    let spec = maxx::registry::of(button).unwrap();
-    let action = spec.props.iter().find(|p| p.label == "Action").unwrap();
-    assert_eq!(
-        maxx::registry::read(button, action).as_deref(),
-        Some("on_changer")
-    );
-    assert!(view.method_line("on_changer").is_some());
-}
-
-#[test]
 fn a_hand_written_view_can_be_adopted() {
     let root = scratch("maxx_adopt");
     std::fs::create_dir_all(root.join("src/ui")).unwrap();

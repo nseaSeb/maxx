@@ -27,16 +27,17 @@ Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
 
 ## Avant de rendre le dépôt public
 
-- **`tests/scaffold.rs:361` code en dur `/Users/sebastienportrait/rust/maxx-demo`**
-  et le test s'arrête sans échouer quand le dossier manque : chez quelqu'un
-  d'autre, un chemin personnel dans le dépôt et une couverture morte qui ne le
-  dit pas. À passer par une variable d'environnement, ou à déplacer en fixture
-  sous `tests/`.
+- ~~Chemin personnel codé en dur dans un test~~ — fait : la référence est
+  `demo/`, versionnée, et `tests/demo.rs` la vérifie par chemin relatif.
 - **README en retard sur l'interface** : rien sur ＋ / 🗑 et le clic droit dans
   l'explorateur, sur `Affichage > Barre de menus du projet`, sur
   `Édition > Ajouter un menu`, ni sur la fenêtre À propos.
 - **Une capture ou un GIF dans le README.** Pour un outil visuel, c'est
-  l'élément à plus fort rendement de toute cette liste.
+  l'élément à plus fort rendement de toute cette liste. La démo de `demo/` est
+  faite pour ça : c'est elle qu'il faut photographier.
+- **Compiler la démo en CI.** `cargo check` dans `demo/` prouve que ce que maxx
+  écrit compile encore. Elle n'est pas membre de l'espace de travail, donc rien
+  ne la construit aujourd'hui hors d'une commande explicite.
 - **`cargo fmt` une fois** — 82 blocs sur 11 fichiers, surtout des imports —
   puis les deux avertissements clippy : `expect` après `is_some` dans
   `workspace.rs`, `filter().next()` dans `tests/round_trip.rs`. Aucun n'est un

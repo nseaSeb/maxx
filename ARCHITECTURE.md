@@ -210,6 +210,19 @@ configuration.
 C'est délibéré, et c'est ce qui rend le portage abordable : gpui livre déjà les
 trois dorsales. Le détail est dans `BACKLOG.md`, section Portabilité.
 
+## La démo comme référence
+
+`demo/` est un projet complet, versionné, avec sa propre racine d'espace de
+travail — `cargo check` à la racine du dépôt ne le compile donc pas. Il est
+écrit dans la forme exacte que `codegen` produit, ce qui rend une propriété
+vérifiable : `tests/demo.rs` relit chaque vue, la réécrit, et exige le fichier
+identique à l'octet près. Tout écart est une perte.
+
+C'est aussi la seule référence de ce que maxx doit comprendre. Elle a remplacé
+un chemin absolu vers un dossier personnel, dans un test qui s'arrêtait sans
+échouer quand il manquait : chez quelqu'un d'autre, la couverture était nulle et
+silencieuse.
+
 ## Où brancher quoi
 
 - **Un composant de plus** : `registry.rs`, une entrée. Rien d'autre à toucher.

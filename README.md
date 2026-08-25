@@ -56,6 +56,18 @@ Dans le canvas : clic pour sélectionner, glisser pour déplacer, double-clic su
 un bouton pour lui donner une action. `⌘S` écrit le fichier, `⌘Z` / `⌘⇧Z`
 annulent, `⌘⇧⌫` supprime le nœud sélectionné, `⌘B` masque le panneau du projet.
 
+## La démo
+
+```sh
+cd demo && cargo run
+```
+
+Un projet ordinaire, versionné dans [`demo/`](demo/), écrit dans la forme que
+maxx produit et relit : les composants du catalogue dans une vue, une seconde
+fenêtre ouverte depuis la barre de menus, une barre de menus éditable dans maxx.
+Elle sert aussi de référence aux tests — relire chaque vue, réécrire sans rien
+déplacer, relire la barre de menus.
+
 ## Prérequis
 
 macOS avec Xcode. La dépendance `gpui` active la feature `runtime_shaders`,
