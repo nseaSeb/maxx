@@ -121,3 +121,38 @@ fn a_flag_style_editor_never_gets_a_suffix_and_the_reverse() {
 fn nothing_is_found_on_an_empty_path() {
     assert!(!maxx::tools::on_path(""));
 }
+
+#[test]
+fn rustfmt_reformats_a_file_and_says_so() {
+    let path = std::env::temp_dir().join("maxx_format_test.rs");
+    std::fs::write(&path, "fn   principale(){let  x=1;let _=x;}\n").unwrap();
+
+    match maxx::run::format_rust(&path) {
+        Ok(change) => {
+            assert!(change, "rustfmt avait de quoi faire sur ce fichier");
+            let apres = std::fs::read_to_string(&path).unwrap();
+            assert!(apres.contains("fn principale() {"), "{apres}");
+            // Deux fois de suite ne change plus rien : rustfmt est idempotent,
+            // et c'est ce qui rend l'aller-retour de maxx stable.
+            assert!(!maxx::run::format_rust(&path).unwrap());
+        }
+        // rustfmt n'est pas garanti présent partout ; le test dit ce qu'il
+        // vérifie plutôt que d'échouer pour une raison étrangère.
+        Err(erreur) => assert!(erreur.contains("introuvable"), "{erreur}"),
+    }
+}
+
+#[test]
+fn a_file_that_is_not_rust_is_refused_rather_than_mangled() {
+    let path = std::env::temp_dir().join("maxx_format_invalide.rs");
+    std::fs::write(&path, "ceci n'est pas du Rust {{{\n").unwrap();
+
+    if let Err(erreur) = maxx::run::format_rust(&path) {
+        assert!(
+            erreur.contains("refusé") || erreur.contains("introuvable"),
+            "{erreur}"
+        );
+    }
+    // Et surtout : le fichier n'a pas été abîmé.
+    assert!(std::fs::read_to_string(&path).unwrap().contains("ceci n'est pas du Rust"));
+}

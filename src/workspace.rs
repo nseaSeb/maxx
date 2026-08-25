@@ -1616,10 +1616,12 @@ impl Workspace {
 
     fn write_view(&mut self, force: bool, cx: &mut Context<Self>) {
         if let Some(menus) = self.menu_file.as_mut() {
+            let path = menus.path.clone();
             self.message = match menus.save(force) {
                 Ok(()) => Some(SharedString::from(format!("{} enregistré", menus.name()))),
                 Err(error) => Some(SharedString::from(error)),
             };
+            self.format_after_save(&path, cx);
             cx.notify();
             return;
         }
@@ -1647,9 +1649,43 @@ impl Workspace {
             Ok(()) => Some(SharedString::from(format!("{} enregistré", view.name()))),
             Err(error) => Some(SharedString::from(error)),
         };
+        self.format_after_save(&path, cx);
         self.conflicts.remove(&path);
         self.revision += 1;
         cx.notify();
+    }
+
+    /// Passes the freshly written file through `rustfmt`, when asked to.
+    ///
+    /// The re-read afterwards is not optional: maxx holds a copy of the file
+    /// and compares it with the disk to notice edits made elsewhere. Leaving
+    /// that copy behind would make the very next save believe someone had
+    /// changed the file underneath — maxx accusing itself.
+    fn format_after_save(&mut self, path: &std::path::Path, cx: &mut Context<Self>) {
+        if !crate::settings::prefs(cx).format_on_save {
+            return;
+        }
+        // Nothing to format if the save itself failed.
+        if self.message.as_deref().is_some_and(|message| !message.ends_with("enregistré")) {
+            return;
+        }
+
+        match crate::run::format_rust(path) {
+            Ok(false) => {}
+            Ok(true) => {
+                let reloaded = match self.menu_file.as_mut() {
+                    Some(menus) if menus.path == path => menus.reload().err(),
+                    _ => self.view_mut().and_then(|view| view.reload().err()),
+                };
+                if let Some(error) = reloaded {
+                    self.message = Some(SharedString::from(error));
+                } else {
+                    self.menu_synced = None;
+                    self.revision += 1;
+                }
+            }
+            Err(error) => self.message = Some(SharedString::from(error)),
+        }
     }
 
     /// Drops what the designer holds and re-reads the file.

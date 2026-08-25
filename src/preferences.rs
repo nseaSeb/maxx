@@ -136,6 +136,24 @@ fn tools_page() -> SettingPage {
                     ),
                 )
                 .description("Ce qu'ouvre ⌘⌥T, sur le dossier du projet."),
+            )
+            .item(
+                SettingItem::new(
+                    "Mettre en forme à l'enregistrement",
+                    SettingField::switch(
+                        |cx| settings::prefs(cx).format_on_save,
+                        |value, cx| {
+                            settings::update_prefs(cx, |prefs| prefs.format_on_save = value);
+                        },
+                    ),
+                )
+                .description(
+                    "Passe rustfmt sur le fichier après chaque écriture, pour que ce que \
+                     maxx écrit suive les conventions du projet — son rustfmt.toml compris. \
+                     Attention : rustfmt met en forme le fichier entier, pas seulement la \
+                     zone que maxx gère. Sur un projet déjà formaté, cela ne change rien \
+                     ailleurs.",
+                ),
             ),
     )
 }

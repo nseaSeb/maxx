@@ -304,6 +304,26 @@ l'empreinte de chaque gabarit à sa version courante. Modifier un gabarit fait
 projets déjà écrits. Sans lui, une version ne monterait jamais et le mécanisme
 serait décoratif.
 
+## Mettre en forme ce que maxx écrit
+
+Un réglage, éteint par défaut, passe `rustfmt` sur le fichier après chaque
+écriture. `rustfmt` et non `cargo fmt` : le second formate une caisse entière,
+le premier prend un fichier et trouve tout seul le `rustfmt.toml` du projet en
+remontant depuis lui — les conventions du développeur l'emportent sur celles de
+`codegen`.
+
+C'est aussi le seul endroit où maxx lance un processus et l'attend, à rebours
+de la règle posée ailleurs : il doit relire le fichier ensuite. Et cette
+relecture n'est pas facultative — maxx tient une copie du fichier et la compare
+au disque pour repérer ce qui a changé en dehors de lui. Laisser la copie
+derrière ferait croire à l'enregistrement suivant que quelqu'un a touché au
+fichier : maxx s'accusant lui-même.
+
+Pourquoi éteint par défaut : rustfmt met en forme le fichier entier, donc
+au-delà de la zone gérée, ce qui contredit la promesse du reste. Sur un projet
+déjà passé au formateur, cela ne change rien ailleurs — c'est le cas où le
+réglage se justifie, et c'est à l'utilisateur de le dire.
+
 ## La démo comme référence
 
 `demo/` est un projet complet, versionné, avec sa propre racine d'espace de

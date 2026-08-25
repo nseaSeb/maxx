@@ -577,3 +577,45 @@ fn copy_recursively(from: &Path, to: &Path) -> std::io::Result<()> {
     }
     Ok(())
 }
+
+/// Runs `rustfmt` on `path`, and answers whether the file came out changed.
+///
+/// `rustfmt` and not `cargo fmt`: the second formats a whole crate, the first
+/// takes a file — and finds the project's `rustfmt.toml` on its own by walking
+/// up from it, so the developer's conventions are honoured rather than
+/// replaced by maxx's.
+///
+/// `status` and not `spawn`, contrary to everything else maxx launches: the
+/// caller has to re-read the file afterwards, so it must wait. rustfmt on one
+/// file is a matter of milliseconds — a terminal, which never exits, is the
+/// case that made the rule.
+pub fn format_rust(path: &Path) -> Result<bool, String> {
+    let before = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
+
+    let status = Command::new("rustfmt")
+        .arg("--edition")
+        .arg("2024")
+        .arg(path)
+        // Ses diagnostics sont repris dans le message rendu au-dessus ; les
+        // laisser passer ferait ressembler un refus attendu à un incident.
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|error| match error.kind() {
+            std::io::ErrorKind::NotFound => {
+                "rustfmt est introuvable — `rustup component add rustfmt`".to_string()
+            }
+            _ => error.to_string(),
+        })?;
+
+    if !status.success() {
+        // A file rustfmt refuses is a file that does not parse, and maxx has
+        // just written it: saying so is more useful than a silent no-op.
+        return Err(format!(
+            "rustfmt a refusé {} — le fichier ne se lit pas comme du Rust",
+            path.display()
+        ));
+    }
+
+    let after = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
+    Ok(before != after)
+}

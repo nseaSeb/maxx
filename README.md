@@ -236,6 +236,13 @@ reçoit vos fichiers — `⌘⌥Z` et le bouton `→` de l'inspecteur suivent ce
 jusqu'au numéro de ligne, que chaque éditeur épelle à sa façon. Les éditeurs de
 terminal (Helix, Neovim, Vim) sont lancés dans le terminal choisi.
 
+Réglages ▸ Outils ▸ **Mettre en forme à l'enregistrement** passe `rustfmt` sur
+le fichier après chaque écriture, en respectant le `rustfmt.toml` du projet.
+Éteint par défaut, et pour une raison : rustfmt met en forme le fichier
+*entier*, pas seulement la zone que maxx gère. Sur un projet déjà formaté cela
+ne change rien ailleurs ; sur un projet qui n'utilise pas rustfmt, cela
+imposerait un style que personne n'a demandé.
+
 `⌘,` ouvre l'écran de réglages, comme un onglet et non comme une boîte
 modale : il se referme avec `⌘W` et laisse revenir à la vue en cours.
 

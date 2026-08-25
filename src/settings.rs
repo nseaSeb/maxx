@@ -42,6 +42,8 @@ pub struct Preferences {
     pub editor: String,
     /// Which terminal is opened, or `auto`.
     pub terminal: String,
+    /// Whether `rustfmt` is run on a file after maxx writes it.
+    pub format_on_save: bool,
 }
 
 impl Default for Preferences {
@@ -52,6 +54,12 @@ impl Default for Preferences {
             show_output: false,
             editor: crate::tools::AUTOMATIC.into(),
             terminal: crate::tools::AUTOMATIC.into(),
+            // Éteint par défaut, et c'est le point délicat : rustfmt met en
+            // forme le fichier entier, pas seulement la zone que maxx gère.
+            // Sur un projet déjà passé au formateur, cela ne change rien
+            // ailleurs ; sur un projet qui ne l'utilise pas, cela imposerait
+            // un style que personne n'a demandé.
+            format_on_save: false,
         }
     }
 }
@@ -211,14 +219,21 @@ pub fn documented_defaults() -> String {
   // projet. « auto » prend le premier installé — pour l'éditeur, $VISUAL et
   // $EDITOR passent d'abord. Les valeurs possibles sont listées dans le schéma.
   "editor": "{}",
-  "terminal": "{}"
+  "terminal": "{}",
+
+  // Passer rustfmt sur le fichier après chaque enregistrement, pour que ce que
+  // maxx écrit suive les conventions du projet — son rustfmt.toml compris.
+  // Attention : rustfmt met en forme le fichier entier, pas seulement la zone
+  // que maxx gère. Sur un projet déjà formaté, cela ne change rien ailleurs.
+  "format_on_save": {}
 }}
 "#,
         defaults.show_project_panel,
         defaults.show_status_bar,
         defaults.show_output,
         defaults.editor,
-        defaults.terminal
+        defaults.terminal,
+        defaults.format_on_save
     )
 }
 

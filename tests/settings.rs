@@ -18,7 +18,8 @@ fn writing_a_key_leaves_every_other_byte_alone() {
   "show_status_bar": true,
   "show_output": false,
   "editor": "auto",
-  "terminal": "auto"
+  "terminal": "auto",
+  "format_on_save": false
 }
 "#;
 
