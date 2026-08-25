@@ -838,7 +838,11 @@ impl Workspace {
             cx.notify();
             return;
         }
-        if !menus.move_selected(up) {
+        if menus.move_selected(up) {
+            // Sans cela, le « déjà en dernier » d'un coup bloqué survivait à
+            // tous les déplacements suivants.
+            self.message = None;
+        } else {
             // Already at the end of its list: saying so beats a click that
             // looks broken.
             self.message = Some(SharedString::from(if up {
@@ -859,9 +863,15 @@ impl Workspace {
         let Some(menus) = self.menu_file.as_mut() else {
             return;
         };
-        if !matches!(menus.selected, Some(Selection::Menu(_)) | Some(Selection::Item(..))) {
+        // Un sous-menu sélectionné accueillerait l'entrée à l'intérieur de
+        // lui-même, ce que `add_item` fait exprès pour les autres entrées : ici
+        // cela donnerait le sous-menu de sous-menu que le modèle ne sait pas
+        // afficher, et qu'on ne pourrait donc plus ni sélectionner ni retirer.
+        let dans_un_sous_menu = matches!(menus.selected, Some(Selection::SubItem(..)))
+            || matches!(menus.selected_item(), Some(ItemDef::Submenu(_)));
+        if menus.selected.is_none() || dans_un_sous_menu {
             self.message = Some(SharedString::from(
-                "sélectionnez un menu — un sous-menu ne va pas dans un sous-menu",
+                "sélectionnez un menu ou une de ses entrées — un sous-menu ne va pas dans un sous-menu",
             ));
             cx.notify();
             return;

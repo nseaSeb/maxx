@@ -9,6 +9,26 @@ use std::path::{Path, PathBuf};
 use crate::menu_model::{ItemDef, MenuDef};
 use crate::parser;
 
+/// Gathers the actions of a list of entries, submenus included.
+///
+/// Recursive, and it has to be: an action written inside a submenu is spliced
+/// into the file like any other, so failing to see it here would leave it
+/// undeclared in `actions!` and unwired — the generated project would stop
+/// compiling on a name maxx itself had just written.
+fn collect_actions(items: &[ItemDef], names: &mut Vec<String>) {
+    for item in items {
+        match item {
+            ItemDef::Action { action, os_action: None, .. }
+                if !action.contains("::") && !names.contains(action) =>
+            {
+                names.push(action.clone());
+            }
+            ItemDef::Submenu(inner) => collect_actions(&inner.items, names),
+            _ => {}
+        }
+    }
+}
+
 /// The index one step away, or nothing when there is no room.
 ///
 /// A separate function because the same arithmetic serves menus and entries,
@@ -129,14 +149,7 @@ impl MenuFile {
     pub fn actions(&self) -> Vec<String> {
         let mut names = Vec::new();
         for menu in &self.menus {
-            for item in &menu.items {
-                if let ItemDef::Action { action, os_action: None, .. } = item
-                    && !action.contains("::")
-                    && !names.contains(action)
-                {
-                    names.push(action.clone());
-                }
-            }
+            collect_actions(&menu.items, &mut names);
         }
         names
     }
@@ -315,6 +328,12 @@ impl MenuFile {
                 let Some((list, item)) = self.list_mut() else {
                     return false;
                 };
+                // Une sélection périmée ne doit pas interrompre le processus :
+                // `remove_selected` s'en garde déjà, et `swap` hors bornes est
+                // une panique là où ne rien faire suffit.
+                if item >= list.len() {
+                    return false;
+                }
                 let Some(target) = step(item, up, list.len()) else {
                     return false;
                 };

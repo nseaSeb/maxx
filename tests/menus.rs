@@ -207,3 +207,58 @@ fn adding_to_a_selected_submenu_goes_inside_it() {
     assert_eq!(interne.items.len(), 0);
     assert_eq!(menus.menus[0].items.len(), 3);
 }
+
+#[test]
+fn an_action_written_inside_a_submenu_is_declared_too() {
+    // Le défaut que ce test verrouille : une action ajoutée dans un sous-menu
+    // était écrite dans le fichier mais jamais déclarée dans `actions!` ni
+    // câblée — le projet généré ne compilait plus sur un nom que maxx venait
+    // lui-même d'écrire.
+    let mut menus = barre();
+    let mut interne = MenuDef::named("Récents");
+    interne.items.push(ItemDef::Action {
+        label: "Rouvrir".into(),
+        action: "RouvrirRecent".into(),
+        os_action: None,
+    });
+    menus.menus[0].items[1] = ItemDef::Submenu(interne);
+
+    let actions = menus.actions();
+    assert!(actions.contains(&"RouvrirRecent".to_string()), "{actions:?}");
+    // Et celles du premier niveau n'ont pas disparu au passage.
+    assert!(actions.contains(&"Nouveau".to_string()), "{actions:?}");
+    assert!(actions.contains(&"Quitter".to_string()), "{actions:?}");
+}
+
+#[test]
+fn a_qualified_or_system_action_is_still_left_alone_inside_a_submenu() {
+    let mut menus = barre();
+    let mut interne = MenuDef::named("Récents");
+    // Une action d'un autre module : pas à nous de la déclarer.
+    interne.items.push(ItemDef::Action {
+        label: "Ailleurs".into(),
+        action: "autre::Action".into(),
+        os_action: None,
+    });
+    // Une action système : la déclarer masquerait ce qu'elle délègue.
+    interne.items.push(ItemDef::Action {
+        label: "Copier".into(),
+        action: "Copy".into(),
+        os_action: Some("Copy".into()),
+    });
+    menus.menus[0].items[1] = ItemDef::Submenu(interne);
+
+    let actions = menus.actions();
+    assert!(!actions.iter().any(|action| action.contains("::")), "{actions:?}");
+    assert!(!actions.contains(&"Copy".to_string()), "{actions:?}");
+}
+
+#[test]
+fn a_stale_selection_does_not_interrupt_the_process() {
+    let mut menus = barre();
+    // Un indice qui n'existe plus : ne rien faire, pas paniquer.
+    menus.selected = Some(Selection::Item(0, 9));
+    assert!(!menus.move_selected(true));
+    assert!(!menus.move_selected(false));
+    assert_eq!(menus.menus[0].items.len(), 3);
+}
