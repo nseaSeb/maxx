@@ -1,38 +1,37 @@
-# Démonstration de maxx
+# A maxx demonstration
 
-Un projet `gpui` + `gpui-component` ordinaire, écrit dans la forme que maxx
-produit et relit. Il ne dépend pas de maxx : `cargo run` suffit.
+An ordinary `gpui` + `gpui-component` project, written in the shape maxx
+produces and reads back. It does not depend on maxx: `cargo run` is enough.
 
 ```sh
 cd demo
 cargo run
 ```
 
-## Ce qu'il montre
+## What it shows
 
-**Les composants du catalogue**, tous dans `src/ui/accueil.rs` : cadre, libellé,
-champ texte lié à un champ de la vue, case à cocher, interrupteur, séparateur,
-bouton avec infobulle et gestionnaire.
+**The catalogue's components**, all in `src/ui/home.rs`: group box, label, text
+field bound to a field of the view, checkbox, switch, divider, button with a
+tooltip and a handler.
 
-**Une fenêtre ouverte depuis la barre de menus** — `Fenêtre > Ouvrir
-l'inspecteur`, ou `⌘I`, ou le bouton de l'accueil. C'est le geste qui réunit
-deux pièges que rien ne signale au moment où on les commet :
+**A window opened from the menu bar** — `Window > Open the inspector`, or `⌘I`,
+or the button on the home view. That is the gesture bringing together two traps
+nothing warns you about at the moment you fall into them:
 
-- un gestionnaire d'action tourne à l'intérieur de la mise à jour de la fenêtre
-  qui l'a émis, et gpui refuse d'en entrer une seconde. Ouvrir une fenêtre
-  directement depuis `cx.on_action` ne fait **rien du tout** — sans erreur, sans
-  panique. D'où le `cx.defer` dans `src/menus.rs` ;
-- une fenêtre qui dessine le moindre composant de `gpui-component` doit être
-  enracinée dans `Root`. Plusieurs composants remontent jusqu'à lui et
-  interrompent le processus s'il manque. La fenêtre « À propos », qui n'utilise
-  que du gpui nu, est la seule à s'en passer.
+- an action handler runs inside the update of the window that dispatched it, and
+  gpui refuses to enter a second one. Opening a window straight from
+  `cx.on_action` does **nothing at all** — no error, no panic. Hence the
+  `cx.defer` in `src/menus.rs`;
+- a window drawing the smallest `gpui-component` widget has to be rooted in
+  `Root`. Several components walk up to it and abort the process when it is
+  missing. The About window, which uses nothing but bare gpui, is the only one
+  that does without it.
 
-**Une barre de menus éditable.** Ouvrez `demo/` dans maxx, cliquez
-`src/menus.rs` : l'éditeur de menus s'affiche.
+**An editable menu bar.** Open `demo/` in maxx and click `src/menus.rs`: the
+menu editor appears.
 
-## Pourquoi elle est dans le dépôt
+## Why it is in the repository
 
-Elle sert de référence aux tests : `tests/demo.rs` vérifie que maxx relit chaque
-vue, que la réécriture est neutre à l'octet près, et que la barre de menus se
-relit avec son entrée d'ouverture de fenêtre. Une démo qui se casse fait échouer
-la suite.
+It is the tests' reference: `tests/demo.rs` checks that maxx reads every view
+back, that rewriting is neutral to the byte, and that the menu bar reads back
+with its window-opening entry. A demo that breaks fails the suite.

@@ -154,7 +154,7 @@ Va dans l'état de maxx, indexé par chemin.
 **Les réglages du projet lui-même**, dans les deux sens :
 
 - ce que maxx devine et devrait savoir : la vue d'entrée est écrite en dur
-  (`main_rs()` importe `accueil`), la commande de lancement est toujours
+  (`main_rs()` importe `home`), la commande de lancement est toujours
   `cargo run`, sans profil ni features. Un `maxx.toml` à la racine, versionné.
 - ce dont l'application générée a besoin pour elle-même : un `src/settings.rs`
   avec sa zone marquée, que maxx édite comme il édite `src/menus.rs`. Du Rust

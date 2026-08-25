@@ -1,0 +1,143 @@
+//! The modules maxx copies into a project, and bringing them up to date.
+
+use super::*;
+
+impl Workspace {
+    /// Copies the system module into the project and points the explorer at it.
+    ///
+    /// Pointed at, not opened: `system.rs` carries no managed region, so the
+    /// designer has nothing to show for it — it is read and edited in the
+    /// editor, like any other hand-written module.
+    ///
+    /// What every desktop application ends up writing on its second day —
+    /// where its files go, and what "delete" means — and what nobody wants to
+    /// write a third time. Copied source, not a dependency: a generated
+    /// project owes nothing to maxx.
+    pub fn add_system_module(&mut self, cx: &mut Context<Self>) {
+        self.add_module(
+            "system",
+            crate::scaffold::add_system_module,
+            "system module added to the project and declared in main.rs",
+            cx,
+        );
+    }
+
+    /// Copies a module into the project, declares it, and points at it.
+    ///
+    /// Shared by the modules maxx knows how to add, so they all leave the
+    /// window in the same state — no menu editor left in front of a file that
+    /// was just written, and no unsaved menu edits dropped on the way.
+    fn add_module(
+        &mut self,
+        module: &str,
+        add: fn(&std::path::Path) -> std::io::Result<()>,
+        added: &'static str,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(project) = self.project.as_ref() else {
+            self.message = Some(SharedString::from("aucun projet ouvert"));
+            cx.notify();
+            return;
+        };
+        let root = project.root.clone();
+        let path = root.join(format!("src/{module}.rs"));
+        let declaration = format!("mod {module};");
+        let had_file = path.exists();
+        let had_declaration = std::fs::read_to_string(root.join("src/main.rs"))
+            .is_ok_and(|source| source.lines().any(|line| line.trim() == declaration));
+
+        // Unsaved menu edits come first: this leaves the menu editor, and
+        // dropping them silently would be the worst way to add a file.
+        if self.discard_menu_edits(cx) {
+            return;
+        }
+
+        if let Err(error) = add(&root) {
+            self.message = Some(SharedString::from(error.to_string()));
+            cx.notify();
+            return;
+        }
+
+        self.menu_file = None;
+        self.menu_synced = None;
+        self.preferences = false;
+        self.refresh_entries();
+        self.selected = Some(path);
+        self.message = Some(SharedString::from(match (had_file, had_declaration) {
+            (true, true) => format!("src/{module}.rs est déjà là"),
+            // The file was there but nothing declared it — which is exactly
+            // the state a half-finished delete leaves behind.
+            (true, false) => {
+                format!("src/{module}.rs était là, il est maintenant déclaré dans main.rs")
+            }
+            _ => added.to_string(),
+        }));
+        cx.notify();
+    }
+
+    /// Copies the settings module into the project.
+    ///
+    /// It brings the system module with it, and declares two crates in the
+    /// project's `Cargo.toml` — both already compiled in the tree through
+    /// gpui, so nothing gets slower.
+    pub fn add_settings_module(&mut self, cx: &mut Context<Self>) {
+        self.add_module(
+            "settings",
+            crate::scaffold::add_settings_module,
+            "settings added to the project, with the system module and their two crates",
+            cx,
+        );
+    }
+
+    /// Replaces the copied modules a newer maxx has fixed.
+    ///
+    /// Only those the project has not touched: an edited file belongs to the
+    /// developer, and maxx says so rather than deciding for them.
+    pub fn update_modules(&mut self, cx: &mut Context<Self>) {
+        let Some(project) = self.project.as_ref() else {
+            self.message = Some(SharedString::from("aucun projet ouvert"));
+            cx.notify();
+            return;
+        };
+        let root = project.root.clone();
+        let outdated = crate::scaffold::outdated_modules(&root);
+
+        if outdated.is_empty() {
+            self.message = Some(SharedString::from("les modules de ce projet sont à jour"));
+            cx.notify();
+            return;
+        }
+
+        let mut updated = Vec::new();
+        let mut failed = Vec::new();
+        for module in &outdated {
+            match crate::scaffold::update_module(&root, module) {
+                Ok(()) => updated.push(module.clone()),
+                Err(error) => failed.push(format!("{module} : {error}")),
+            }
+        }
+
+        self.refresh_entries();
+        self.message = Some(SharedString::from(if failed.is_empty() {
+            format!("mis à jour : {}", updated.join(", "))
+        } else {
+            failed.join(" · ")
+        }));
+        cx.notify();
+    }
+
+    /// Says so when the project carries a module maxx has since fixed.
+    ///
+    /// A message and nothing more: replacing a file because someone opened a
+    /// folder would be a poor way to earn trust.
+    pub(super) fn announce_outdated_modules(&mut self, root: &std::path::Path) {
+        let outdated = crate::scaffold::outdated_modules(root);
+        if outdated.is_empty() {
+            return;
+        }
+        self.message = Some(SharedString::from(format!(
+            "{} a une version plus récente — Fichier ▸ Ajouter au projet ▸ Mettre à jour",
+            outdated.join(", ")
+        )));
+    }
+}

@@ -1,0 +1,542 @@
+//! The inspector: selection, properties, state fields, insertion and undo.
+
+use super::*;
+
+impl Workspace {
+    /// Selects a node of the tree being designed.
+    pub fn select(&mut self, path: NodePath, cx: &mut Context<Self>) {
+        if let Some(view) = self.view_mut() {
+            view.selected = path;
+            cx.notify();
+        }
+    }
+
+    /// The fields of the view able to back the selected component.
+    ///
+    /// Filtered on the type the component needs: offering the field of a text
+    /// input to a dropdown would be offering something that will not compile.
+    pub(crate) fn state_fields(&self) -> Vec<String> {
+        let Some(view) = self.view() else {
+            return Vec::new();
+        };
+        let Some(state) =
+            view.root.at(&view.selected).and_then(registry::of).and_then(|spec| spec.state)
+        else {
+            return Vec::new();
+        };
+        view.state_fields_of_type(state.ty)
+    }
+
+    /// The inspector field bound to `prop`, if it has been built.
+    pub(crate) fn prop_input(
+        &self,
+        prop: &'static crate::registry::Prop,
+    ) -> Option<&Entity<InputState>> {
+        self.prop_inputs
+            .iter()
+            .find(|(candidate, _)| std::ptr::eq(*candidate, prop))
+            .map(|(_, state)| state)
+    }
+
+    /// Rebuilds the inspector's text fields when the selection or the tree has
+    /// changed. Called once per frame from `render`, which is the only place
+    /// holding both `&mut self` and a `Window`.
+    pub(super) fn sync_prop_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let key = self.view().map(|view| (self.revision, view.selected.clone()));
+        if key == self.synced {
+            return;
+        }
+        if self.state_name_input.is_none() {
+            self.state_name_input =
+                Some(cx.new(|cx| InputState::new(window, cx).placeholder("nom du champ")));
+        }
+
+        self.synced = key;
+        self.prop_inputs.clear();
+
+        // The selected node is cloned rather than borrowed: `self.view()`
+        // borrows the whole workspace, and the loop below needs
+        // `self.prop_inputs` mutably.
+        let Some(node) = self.view().map(|view| view.selected().clone()) else {
+            return;
+        };
+        let Some(spec) = crate::registry::of(&node) else {
+            return;
+        };
+
+        for prop in crate::registry::props(spec) {
+            if !matches!(
+                prop.kind,
+                Kind::Text | Kind::Field | Kind::Handler | Kind::Number | Kind::Color
+            ) || !crate::registry::editable(&node, prop)
+            {
+                continue;
+            }
+            let value = crate::registry::read(&node, prop).unwrap_or_default();
+            let state = cx.new(|cx| InputState::new(window, cx).default_value(value));
+            cx.subscribe(&state, move |this, state, event: &InputEvent, cx| match event {
+                InputEvent::Change => {
+                    let value = state.read(cx).value().to_string();
+                    this.edit_prop_text(prop, &value, cx);
+                }
+                // A checkpoint per keystroke would flood the undo stack and,
+                // through the revision counter, rebuild the field under the
+                // caret. One per visit to the field is the right grain.
+                InputEvent::Focus => {
+                    this.edit_snapshot =
+                        this.view().map(|view| (view.path.clone(), view.root.clone()));
+                }
+                InputEvent::Blur => this.close_text_edit(cx),
+                InputEvent::PressEnter { .. } => this.close_text_edit(cx),
+            })
+            .detach();
+            self.prop_inputs.push((prop, state));
+        }
+    }
+
+    /// Binds a text property to a state field, or unbinds it.
+    pub fn toggle_binding(&mut self, prop: &'static crate::registry::Prop, cx: &mut Context<Self>) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        let selected = view.selected.clone();
+        let bound = view.root.at(&selected).and_then(|node| registry::read_binding(node, prop));
+        let fields = view.state_fields();
+
+        let expression = match bound {
+            Some(_) => None,
+            None => match fields.first() {
+                Some(field) => Some(field.read_expression()),
+                None => {
+                    self.message = Some(SharedString::from(
+                        "aucun champ d'état — ajoutez-en un dans « État »",
+                    ));
+                    cx.notify();
+                    return;
+                }
+            },
+        };
+
+        self.checkpoint();
+        let view = self.view_mut().expect("just borrowed");
+        if let Some(node) = view.root.at_mut(&selected) {
+            registry::write_binding(node, prop, expression.as_deref());
+        }
+        cx.notify();
+    }
+
+    /// Moves a bound property to the next state field.
+    pub fn cycle_binding(&mut self, prop: &'static crate::registry::Prop, cx: &mut Context<Self>) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        let selected = view.selected.clone();
+        let fields = view.state_fields();
+        if fields.is_empty() {
+            return;
+        }
+        let current = view.root.at(&selected).and_then(|node| registry::read_binding(node, prop));
+        let index = current
+            .and_then(|name| fields.iter().position(|field| field.name == name))
+            .map(|index| (index + 1) % fields.len())
+            .unwrap_or(0);
+        let expression = fields[index].read_expression();
+
+        self.checkpoint();
+        let view = self.view_mut().expect("just borrowed");
+        if let Some(node) = view.root.at_mut(&selected) {
+            registry::write_binding(node, prop, Some(&expression));
+        }
+        cx.notify();
+    }
+
+    /// Adds a field to the view's struct.
+    pub fn add_state_field(&mut self, cx: &mut Context<Self>) {
+        let Some(state) = self.state_name_input.as_ref() else {
+            return;
+        };
+        let name = state.read(cx).value().trim().to_string();
+        if name.is_empty() {
+            self.message = Some(SharedString::from("donnez un nom au champ"));
+            cx.notify();
+            return;
+        }
+        let (_, ty, initial) = crate::view::STATE_TYPES[self.state_type];
+
+        self.message = match self.view_mut() {
+            Some(view) => match view.add_state_field(&name, ty, initial) {
+                Ok(()) => Some(SharedString::from(format!("champ « {name} » ajouté"))),
+                Err(error) => Some(SharedString::from(error)),
+            },
+            None => None,
+        };
+        self.revision += 1;
+        cx.notify();
+    }
+
+    /// Steps through the kinds of field the state panel offers.
+    pub fn cycle_state_type(&mut self, cx: &mut Context<Self>) {
+        self.state_type = (self.state_type + 1) % crate::view::STATE_TYPES.len();
+        cx.notify();
+    }
+
+    /// The field-name box of the state panel.
+    pub(crate) fn state_name_input(&self) -> Option<&Entity<InputState>> {
+        self.state_name_input.as_ref()
+    }
+
+    /// Which kind of field the state panel will add.
+    pub(crate) fn state_type(&self) -> usize {
+        self.state_type
+    }
+
+    /// Opens what is being edited in Zed: the file if one is open, the project
+    /// otherwise.
+    ///
+    /// Opening the folder when a view is on screen means finding the file again
+    /// by hand, which is the whole gesture one wanted to avoid.
+    pub fn open_in_editor(&mut self, cx: &mut Context<Self>) {
+        // The explorer selection comes first: it is what the context menu is
+        // about, and a left click sets it to the open view anyway.
+        let path = self
+            .selected
+            .clone()
+            .or_else(|| self.menu_file.as_ref().map(|menus| menus.path.clone()))
+            .or_else(|| self.view().map(|view| view.path.clone()))
+            .or_else(|| self.project().map(|project| project.root.clone()));
+
+        match path {
+            Some(path) => crate::tools::open_in_editor(cx, &path, None),
+            None => {
+                self.message = Some(SharedString::from("aucun projet ouvert"));
+                cx.notify();
+            }
+        }
+    }
+
+    /// Opens the handler of a property in Zed, on its own line.
+    pub fn open_handler(&mut self, prop: &'static crate::registry::Prop, cx: &mut Context<Self>) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        let node = view.selected();
+        let Some(name) = registry::read(node, prop).filter(|name| !name.is_empty()) else {
+            self.message = Some(SharedString::from("aucune action sur ce nœud"));
+            cx.notify();
+            return;
+        };
+        match view.method_line(&name) {
+            Some(line) => crate::tools::open_in_editor(cx, &view.path, Some(line)),
+            None => {
+                self.message = Some(SharedString::from(format!(
+                    "« {name} » n'est pas encore écrite — ⌘S l'ajoute au fichier"
+                )));
+                cx.notify();
+            }
+        }
+    }
+
+    /// Removes a call from the selected node.
+    pub fn remove_call_at_selection(&mut self, name: &str, cx: &mut Context<Self>) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        let selected = view.selected.clone();
+        if view.root.at(&selected).is_none() {
+            return;
+        }
+        self.checkpoint();
+        let view = self.view_mut().expect("just borrowed");
+        if let Some(node) = view.root.at_mut(&selected) {
+            node.remove_call(name);
+        }
+        cx.notify();
+    }
+
+    /// Closes an inspector text edit, turning it into a single undo step.
+    fn close_text_edit(&mut self, cx: &mut Context<Self>) {
+        let Some((path, before)) = self.edit_snapshot.take() else {
+            return;
+        };
+        let Some(view) = self.view_mut() else {
+            return;
+        };
+        // The tab may have changed, or the view may have been reloaded, since
+        // the field took the focus; that snapshot belongs to neither.
+        if view.path != path || view.root == before {
+            return;
+        }
+        view.past.push(before);
+        view.future.clear();
+        self.revision += 1;
+        cx.notify();
+    }
+
+    /// Moves a text input to the next field of the view able to back it.
+    pub fn cycle_input_field(
+        &mut self,
+        prop: &'static crate::registry::Prop,
+        cx: &mut Context<Self>,
+    ) {
+        let fields = self.state_fields();
+        let Some(view) = self.view() else {
+            return;
+        };
+        if fields.is_empty() {
+            return;
+        }
+        let selected = view.selected.clone();
+        let current = view.root.at(&selected).and_then(|node| registry::read(node, prop));
+        let index = current
+            .and_then(|name| fields.iter().position(|field| *field == name))
+            .map(|index| (index + 1) % fields.len())
+            .unwrap_or(0);
+        let next = fields[index].clone();
+
+        self.checkpoint();
+        let view = self.view_mut().expect("just borrowed");
+        if let Some(node) = view.root.at_mut(&selected) {
+            registry::write(node, prop, &next);
+        }
+        cx.notify();
+    }
+
+    /// Writes a text property without disturbing the field being typed in: no
+    /// undo checkpoint per keystroke, and no revision bump, so `sync` leaves the
+    /// caret alone.
+    fn edit_prop_text(
+        &mut self,
+        prop: &'static crate::registry::Prop,
+        value: &str,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(view) = self.view_mut() else {
+            return;
+        };
+        let selected = view.selected.clone();
+        if let Some(node) = view.root.at_mut(&selected) {
+            let current = crate::registry::read(node, prop);
+            if current.as_deref() == Some(value) {
+                return;
+            }
+            crate::registry::write(node, prop, value);
+        }
+        self.message = crate::registry::validate(prop, value).map(SharedString::from);
+        cx.notify();
+    }
+
+    /// Records the current tree so the change about to be made can be undone.
+    fn checkpoint(&mut self) {
+        self.revision += 1;
+        if let Some(view) = self.view_mut() {
+            let snapshot = view.root.clone();
+            view.past.push(snapshot);
+            view.future.clear();
+        }
+    }
+
+    /// Writes a property of the selected node.
+    pub fn edit_prop(
+        &mut self,
+        prop: &'static crate::registry::Prop,
+        value: &str,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(view) = self.view_mut() else {
+            return;
+        };
+        let selected = view.selected.clone();
+        if view.root.at(&selected).is_some() {
+            self.checkpoint();
+            let view = self.view_mut().expect("just borrowed");
+            if let Some(node) = view.root.at_mut(&selected) {
+                registry::write(node, prop, value);
+            }
+        }
+        cx.notify();
+    }
+
+    /// Inserts a component into the selected container, or beside the selected
+    /// node when it cannot hold children.
+    pub fn insert_component(&mut self, id: &str, cx: &mut Context<Self>) {
+        let Some(mut node) = registry::instantiate(id) else {
+            return;
+        };
+        let Some(view) = self.view() else {
+            return;
+        };
+
+        // Two inputs sharing `&self.champ` compile but mirror each other at
+        // runtime, so each one gets its own field.
+        if id == "input" {
+            let field = registry::unique_input_field(&view.root);
+            if let crate::model::Base::Known { args, .. } = &mut node.base {
+                *args = vec![crate::model::Arg::Verbatim(format!("&self.{field}"))];
+            }
+        }
+
+        let selected = view.selected.clone();
+        let accepts_children =
+            view.root.at(&selected).and_then(registry::of).is_some_and(|spec| spec.container);
+        let child_count = view.root.at(&selected).map(|node| node.children.len()).unwrap_or(0);
+
+        let destination = if accepts_children {
+            let mut path = selected.clone();
+            path.push(child_count);
+            path
+        } else if selected.is_empty() {
+            // The root is not a container: there is nowhere to put it.
+            self.message = Some(SharedString::from(
+                "la racine n'accepte pas d'enfant — sélectionnez une colonne ou une ligne",
+            ));
+            cx.notify();
+            return;
+        } else {
+            let mut path = selected.clone();
+            let last = path.last_mut().expect("not empty");
+            *last += 1;
+            path
+        };
+
+        self.checkpoint();
+        let view = self.view_mut().expect("just borrowed");
+        if view.root.insert(&destination, node) {
+            view.selected = destination;
+        }
+        cx.notify();
+    }
+
+    /// Handles a drop on the insertion point `index` of the container at
+    /// `parent`.
+    pub fn drop_at(
+        &mut self,
+        parent: &[usize],
+        index: usize,
+        dragged: crate::designer::Dragged,
+        cx: &mut Context<Self>,
+    ) {
+        let mut destination = parent.to_vec();
+        destination.push(index);
+
+        match dragged {
+            crate::designer::Dragged::Component(id) => {
+                let Some(mut node) = registry::instantiate(id) else {
+                    return;
+                };
+                let Some(view) = self.view() else {
+                    return;
+                };
+                if id == "input" {
+                    let field = registry::unique_input_field(&view.root);
+                    if let crate::model::Base::Known { args, .. } = &mut node.base {
+                        *args = vec![crate::model::Arg::Verbatim(format!("&self.{field}"))];
+                    }
+                }
+                self.checkpoint();
+                let view = self.view_mut().expect("just borrowed");
+                if view.root.insert(&destination, node) {
+                    view.selected = destination;
+                }
+            }
+            crate::designer::Dragged::Node(from) => {
+                // Dropping a node back where it already is, or into itself.
+                if from == destination {
+                    return;
+                }
+                if destination.len() > from.len() && destination.starts_with(&from) {
+                    self.message =
+                        Some(SharedString::from("un nœud ne peut pas être déposé dans lui-même"));
+                    cx.notify();
+                    return;
+                }
+                self.checkpoint();
+                let view = self.view_mut().expect("a view is open to be dropped on");
+                match view.root.move_node(&from, &destination) {
+                    Some(landed) => view.selected = landed,
+                    None => {
+                        // Nothing moved: drop the checkpoint we just took.
+                        view.past.pop();
+                    }
+                }
+            }
+        }
+        cx.notify();
+    }
+
+    /// Gives the selected node a handler, named after it, if its component has
+    /// an action property and none is set yet. Bound to double-click.
+    pub fn add_handler_to_selection(&mut self, cx: &mut Context<Self>) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        let node = view.selected();
+        let Some(spec) = registry::of(node) else {
+            return;
+        };
+        let Some(prop) =
+            spec.props.iter().find(|prop| matches!(prop.kind, crate::registry::Kind::Handler))
+        else {
+            return;
+        };
+        if registry::read(node, prop).is_some_and(|name| !name.is_empty()) {
+            return;
+        }
+
+        let name = registry::suggested_handler(node);
+        let selected = view.selected.clone();
+        self.checkpoint();
+        let view = self.view_mut().expect("just borrowed");
+        if let Some(node) = view.root.at_mut(&selected) {
+            registry::write(node, prop, &name);
+        }
+        self.message = Some(SharedString::from(format!(
+            "action « {name} » — ⌘S écrit la méthode dans le fichier"
+        )));
+        cx.notify();
+    }
+
+    /// Deletes the selected node. The root is never deleted.
+    pub fn delete_selected(&mut self, cx: &mut Context<Self>) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        if view.selected.is_empty() {
+            return;
+        }
+        let selected = view.selected.clone();
+        self.checkpoint();
+        let view = self.view_mut().expect("just borrowed");
+        if view.root.remove(&selected).is_some() {
+            view.selected = selected[..selected.len() - 1].to_vec();
+        }
+        cx.notify();
+    }
+
+    /// Steps back one edit.
+    pub fn undo(&mut self, cx: &mut Context<Self>) {
+        self.revision += 1;
+        let Some(view) = self.view_mut() else {
+            return;
+        };
+        if let Some(previous) = view.past.pop() {
+            let replaced = std::mem::replace(&mut view.root, previous);
+            view.future.push(replaced);
+            clamp_selection(view);
+            cx.notify();
+        }
+    }
+
+    /// Steps forward one edit.
+    pub fn redo(&mut self, cx: &mut Context<Self>) {
+        self.revision += 1;
+        let Some(view) = self.view_mut() else {
+            return;
+        };
+        if let Some(next) = view.future.pop() {
+            let replaced = std::mem::replace(&mut view.root, next);
+            view.past.push(replaced);
+            clamp_selection(view);
+            cx.notify();
+        }
+    }
+}

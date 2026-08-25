@@ -14,20 +14,20 @@ pub fn create_project(root: &Path, name: &str) -> io::Result<()> {
     if root.join("Cargo.toml").exists() {
         return Err(io::Error::new(
             io::ErrorKind::AlreadyExists,
-            format!("{} contient déjà un Cargo.toml", root.display()),
+            format!("{} already holds a Cargo.toml", root.display()),
         ));
     }
     std::fs::create_dir_all(root.join("src/ui"))?;
     std::fs::create_dir_all(root.join(".cargo"))?;
     std::fs::write(root.join("Cargo.toml"), cargo_toml(&crate_name(name)))?;
     std::fs::write(root.join(".cargo/config.toml"), cargo_config())?;
-    // `maxx.toml` n'y est pas : il dit ce que le projet a pris à maxx, et sert
-    // à lui proposer les corrections plus tard. Il se versionne.
+    // No `maxx.toml` here: it records what the project took from maxx, so the
+    // fixes can be offered later. It is versioned with the project.
     std::fs::write(root.join(".gitignore"), "/target\n/.cargo\n")?;
     std::fs::write(root.join("src/main.rs"), main_rs())?;
     std::fs::write(root.join("src/menus.rs"), menus_rs())?;
-    std::fs::write(root.join("src/ui/mod.rs"), "pub mod accueil;\n")?;
-    std::fs::write(root.join("src/ui/accueil.rs"), view_rs("Accueil"))?;
+    std::fs::write(root.join("src/ui/mod.rs"), "pub mod home;\n")?;
+    std::fs::write(root.join("src/ui/home.rs"), view_rs("Home"))?;
     Ok(())
 }
 
@@ -38,7 +38,7 @@ pub fn create_view(root: &Path, module: &str) -> io::Result<()> {
     if file.exists() {
         return Err(io::Error::new(
             io::ErrorKind::AlreadyExists,
-            format!("{} existe déjà", file.display()),
+            format!("{} already exists", file.display()),
         ));
     }
     std::fs::write(&file, view_rs(&type_name))?;
@@ -73,7 +73,7 @@ pub fn crate_name(name: &str) -> String {
     out
 }
 
-/// `accueil` becomes `Accueil`, `mon_ecran` becomes `MonEcran`.
+/// `home` becomes `Home`, `my_screen` becomes `MyScreen`.
 pub fn to_type_name(module: &str) -> String {
     module
         .split('_')
@@ -115,16 +115,16 @@ opt-level = 2
 /// Losing it costs a rebuild, nothing more.
 fn cargo_config() -> String {
     format!(
-        r#"# Écrit par maxx. Tous les projets maxx compilent dans le même
-# répertoire : gpui et gpui-component représentent environ 750 crates, et un
-# projet qui a son propre `target/` les recompile intégralement. Ce fichier est
-# propre à cette machine, d'où son entrée dans .gitignore.
+        r#"# Written by maxx. Every maxx project builds into the same directory: gpui
+# and gpui-component are about 750 crates, and a project with a `target/` of
+# its own rebuilds all of them. This file is local to this machine, hence its
+# entry in .gitignore.
 [build]
 target-dir = "{}"
 "#,
-        // Une chaîne TOML de base traite `\` comme un échappement, et
-        // `C:\Users\…` n'en contient aucun de valide : le fichier devient
-        // illisible et `cargo` refuse de démarrer avant même de compiler.
+        // A basic TOML string treats `\` as an escape, and `C:\Users\…` holds
+        // no valid one: the file becomes unreadable and `cargo` refuses to
+        // start before it even compiles.
         crate::run::shared_target_dir()
             .display()
             .to_string()
@@ -139,7 +139,30 @@ target-dir = "{}"
 /// holds the fingerprint of each one and fails when a template moves without
 /// its version following — the guard against a fix that never reaches the
 /// projects carrying the old copy.
-pub const MODULES: &[(&str, u32)] = &[("systeme", 1), ("reglages", 1)];
+pub const MODULES: &[(&str, u32)] = &[("system", 1), ("settings", 1)];
+
+/// The name each module carried before it was renamed to English.
+///
+/// A project written by an older maxx has `src/systeme.rs` and `mod systeme;`,
+/// which the new names do not match: adding the module again would write a
+/// second, near-identical file and declare it alongside the first, leaving the
+/// developer to guess which one their code calls.
+const LEGACY: &[(&str, &str)] = &[("system", "systeme"), ("settings", "reglages")];
+
+/// The error to answer when `module` is already in the project under its old
+/// name.
+fn legacy_copy(root: &Path, module: &str) -> Option<io::Error> {
+    let (_, old) = LEGACY.iter().find(|(current, _)| *current == module)?;
+    root.join(format!("src/{old}.rs")).exists().then(|| {
+        io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            format!(
+                "src/{old}.rs is this module under its former name — rename it to \
+                 src/{module}.rs, and its `mod {old};` with it, before adding it again"
+            ),
+        )
+    })
+}
 
 /// The version of `module`, if maxx knows it.
 pub fn module_version(module: &str) -> Option<u32> {
@@ -149,8 +172,8 @@ pub fn module_version(module: &str) -> Option<u32> {
 /// The current text of a module's template.
 pub fn module_body(module: &str) -> Option<String> {
     match module {
-        "systeme" => Some(system_rs()),
-        "reglages" => Some(settings_rs()),
+        "system" => Some(system_rs()),
+        "settings" => Some(settings_rs()),
         _ => None,
     }
 }
@@ -175,7 +198,7 @@ pub fn outdated_modules(root: &Path) -> Vec<String> {
         let Ok(body) = std::fs::read_to_string(&path) else {
             continue;
         };
-        if crate::projectfile::fingerprint(&body) == recorded.empreinte {
+        if crate::projectfile::fingerprint(&body) == recorded.fingerprint {
             outdated.push((*module).to_string());
         }
     }
@@ -188,22 +211,22 @@ pub fn outdated_modules(root: &Path) -> Vec<String> {
 /// edits are not maxx's to discard.
 pub fn update_module(root: &Path, module: &str) -> io::Result<()> {
     let (Some(version), Some(body)) = (module_version(module), module_body(module)) else {
-        return Err(io::Error::new(io::ErrorKind::NotFound, format!("module inconnu : {module}")));
+        return Err(io::Error::new(io::ErrorKind::NotFound, format!("unknown module: {module}")));
     };
     let file = crate::projectfile::load(root);
     let Some(recorded) = file.modules.get(module) else {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
-            format!("maxx.toml ne mentionne pas {module}"),
+            format!("maxx.toml does not mention {module}"),
         ));
     };
 
     let path = root.join(format!("src/{module}.rs"));
     let current = std::fs::read_to_string(&path)?;
-    if crate::projectfile::fingerprint(&current) != recorded.empreinte {
+    if crate::projectfile::fingerprint(&current) != recorded.fingerprint {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("src/{module}.rs a été modifié — maxx ne le remplace pas"),
+            format!("src/{module}.rs has been modified — maxx does not replace it"),
         ));
     }
 
@@ -216,19 +239,22 @@ pub fn update_module(root: &Path, module: &str) -> io::Result<()> {
 /// A copied module, not a dependency: a generated project owes nothing to
 /// maxx, and this one owes nothing to gpui either — it is plain `std`.
 pub fn add_system_module(root: &Path) -> io::Result<()> {
+    if let Some(error) = legacy_copy(root, "system") {
+        return Err(error);
+    }
     let main_path = root.join("src/main.rs");
     let source = std::fs::read_to_string(&main_path)?;
     let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
 
-    if !lines.iter().any(|line| line.trim() == "mod systeme;") {
-        lines.insert(header_end(&lines), "mod systeme;".into());
+    if !lines.iter().any(|line| line.trim() == "mod system;") {
+        lines.insert(header_end(&lines), "mod system;".into());
     }
 
-    let path = root.join("src/systeme.rs");
+    let path = root.join("src/system.rs");
     let body = system_rs();
     if !path.exists() {
         std::fs::write(&path, &body)?;
-        crate::projectfile::record(root, "systeme", module_version("systeme").unwrap_or(1), &body)?;
+        crate::projectfile::record(root, "system", module_version("system").unwrap_or(1), &body)?;
     }
 
     let mut out = lines.join("\n");
@@ -307,29 +333,28 @@ fn header_end(lines: &[String]) -> usize {
 /// wrapping them would be noise. What is left is where a system puts an
 /// application's files, and what it calls its trash.
 fn system_rs() -> String {
-    r#"//! Ce que chaque système fait à sa façon.
+    r#"//! What every system does its own way.
 //!
-//! Écrit par maxx, à vous ensuite. Rien ici ne dépend de maxx ni de gpui :
-//! c'est du `std`, copiable ailleurs tel quel.
+//! Written by maxx, yours from here. Nothing in it depends on maxx or on gpui:
+//! it is plain `std`, and copies elsewhere as it stands.
 //!
-//! Ce module ne couvre volontairement pas le presse-papier, l'ouverture d'une
-//! URL, la révélation d'un fichier dans le gestionnaire, ni les sélecteurs de
-//! fichiers : gpui les fournit déjà — `cx.write_to_clipboard`,
-//! `cx.read_from_clipboard`, `cx.open_url`, `cx.reveal_path`,
-//! `cx.open_with_system`, `cx.prompt_for_paths`. Les enrober n'apporterait que
-//! du bruit.
+//! This module deliberately leaves out the clipboard, opening a URL, revealing
+//! a file in the file manager and the file pickers: gpui already has them —
+//! `cx.write_to_clipboard`, `cx.read_from_clipboard`, `cx.open_url`,
+//! `cx.reveal_path`, `cx.open_with_system`, `cx.prompt_for_paths`. Wrapping
+//! them would be noise and nothing else.
 
-// Un module qu'on ajoute avant d'en avoir besoin : sans cela, chaque fonction
-// pas encore appelée produit un avertissement, et sept avertissements le jour
-// où on l'ajoute apprennent à ne plus les lire. À retirer quand tout sert.
+// A module added before it is needed: without this, every function not yet
+// called raises a warning, and seven warnings on the day you add it teach you
+// to stop reading them. Drop it once everything is in use.
 #![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
 
-/// Où ranger les réglages : ce que l'utilisateur édite.
+/// Where the settings live: what the user edits.
 ///
-/// `XDG_CONFIG_HOME` quand il est réglé, `APPDATA` sur Windows,
-/// `Library/Application Support` sur macOS, `.config` ailleurs.
+/// `XDG_CONFIG_HOME` when it is set, `APPDATA` on Windows,
+/// `Library/Application Support` on macOS, `.config` elsewhere.
 pub fn config_dir(application: &str) -> Option<PathBuf> {
     if cfg!(target_os = "windows") {
         return Some(PathBuf::from(std::env::var("APPDATA").ok()?).join(application));
@@ -347,7 +372,7 @@ pub fn config_dir(application: &str) -> Option<PathBuf> {
     })
 }
 
-/// Où ranger ce que l'application retient toute seule.
+/// Where to put what the application remembers on its own.
 pub fn data_dir(application: &str) -> Option<PathBuf> {
     if cfg!(target_os = "windows") {
         return Some(PathBuf::from(std::env::var("LOCALAPPDATA").ok()?).join(application));
@@ -365,7 +390,7 @@ pub fn data_dir(application: &str) -> Option<PathBuf> {
     })
 }
 
-/// Où ranger ce qui se reconstruit.
+/// Where to put what can be rebuilt.
 pub fn cache_dir(application: &str) -> Option<PathBuf> {
     if cfg!(target_os = "windows") {
         return Some(PathBuf::from(std::env::var("LOCALAPPDATA").ok()?).join(application));
@@ -383,43 +408,43 @@ pub fn cache_dir(application: &str) -> Option<PathBuf> {
     })
 }
 
-/// Écrit `body` dans `path`, en passant par un fichier temporaire.
+/// Writes `body` to `path`, through a temporary file.
 ///
-/// Une écriture directe interrompue en cours laisse un fichier tronqué, que la
-/// lecture suivante prendra pour un fichier abîmé.
+/// A direct write interrupted halfway leaves a truncated file, which the next
+/// read will take for a corrupt one.
 pub fn write_atomically(path: &Path, body: &str) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    // Le nom, pas l'extension : `reglages.json` et `reglages.toml` écriraient
-    // sinon tous deux dans `reglages.tmp` et s'écraseraient l'un l'autre.
+    // The name, not the extension: `settings.json` and `settings.toml` would
+    // otherwise both write to `settings.tmp` and overwrite each other.
     let name = path.file_name().unwrap_or_default().to_string_lossy();
     let temporary = path.with_file_name(format!("{name}.tmp"));
     std::fs::write(&temporary, body)?;
-    if let Err(erreur) = std::fs::rename(&temporary, path) {
+    if let Err(error) = std::fs::rename(&temporary, path) {
         let _ = std::fs::remove_file(&temporary);
-        return Err(erreur);
+        return Err(error);
     }
     Ok(())
 }
 
-/// Déplace `path` vers la corbeille et répond où il a atterri.
+/// Moves `path` to the trash and answers where it landed.
 ///
-/// Jamais un effacement : un clic malheureux doit coûter un aller-retour dans
-/// le gestionnaire de fichiers, pas la journée.
+/// Never a deletion: an unlucky click should cost a round trip through the file
+/// manager, not the day.
 ///
-/// Trois corbeilles différentes. `~/.Trash` sur macOS. Sur Linux la
-/// spécification freedesktop, avec le `.trashinfo` sans lequel le bureau ne
-/// sait pas d'où venait le fichier et ne peut pas le restaurer. Sur Windows,
-/// une corbeille à l'application : la vraie ne s'atteint que par l'API du
-/// shell, ce qui coûterait une dépendance et du code `unsafe`.
+/// Three different trashes. `~/.Trash` on macOS. On Linux the freedesktop
+/// specification, `.trashinfo` included — without it the desktop does not know
+/// where the file came from and cannot restore it. On Windows, a trash of the
+/// application's own: the real one is only reachable through the shell API,
+/// which would cost a dependency and a block of `unsafe`.
 pub fn move_to_trash(path: &Path, application: &str) -> Result<PathBuf, String> {
     let trash = trash_dir(application)?;
     std::fs::create_dir_all(&trash).map_err(|error| error.to_string())?;
 
     let name = path
         .file_name()
-        .ok_or_else(|| String::from("chemin sans nom de fichier"))?
+        .ok_or_else(|| String::from("path with no file name"))?
         .to_string_lossy()
         .into_owned();
     let (stem, extension) = match name.rsplit_once('.') {
@@ -427,7 +452,7 @@ pub fn move_to_trash(path: &Path, application: &str) -> Result<PathBuf, String> 
         _ => (name.clone(), String::new()),
     };
 
-    // La corbeille contient peut-être déjà un fichier de ce nom.
+    // The trash may already hold a file by that name.
     let mut target = trash.join(&name);
     let mut index = 1;
     while target.exists() {
@@ -435,62 +460,62 @@ pub fn move_to_trash(path: &Path, application: &str) -> Result<PathBuf, String> 
         index += 1;
     }
 
-    // D'un volume à l'autre, `rename` échoue avec EXDEV : il faut alors copier
-    // puis effacer. En Rust et non par `mv` ou `cmd /C move` : `move` refuse de
-    // porter un dossier d'un disque à l'autre, ce qui est justement le cas qui
-    // amène ici sous Windows.
+    // Across volumes `rename` fails with EXDEV: copy, then delete. In Rust and
+    // not through `mv` or `cmd /C move`: `move` refuses to carry a folder from
+    // one disk to another, which is exactly the case that leads here on
+    // Windows.
     if std::fs::rename(path, &target).is_err() {
-        copier(path, &target).map_err(|erreur| erreur.to_string())?;
-        // Seulement une fois la copie entière : effacer d'abord ferait d'une
-        // copie ratée une suppression.
-        let efface = if path.is_dir() {
+        copy_all(path, &target).map_err(|error| error.to_string())?;
+        // Only once the copy is complete: deleting first would turn a failed
+        // copy into a deletion.
+        let removed = if path.is_dir() {
             std::fs::remove_dir_all(path)
         } else {
             std::fs::remove_file(path)
         };
-        efface.map_err(|erreur| erreur.to_string())?;
+        removed.map_err(|error| error.to_string())?;
     }
 
     write_trashinfo(&target, path);
     Ok(target)
 }
 
-/// Copie un fichier, ou un dossier et tout ce qu'il contient.
-fn copier(source: &Path, cible: &Path) -> std::io::Result<()> {
+/// Copies a file, or a folder and everything in it.
+fn copy_all(source: &Path, target: &Path) -> std::io::Result<()> {
     if !source.is_dir() {
-        std::fs::copy(source, cible)?;
+        std::fs::copy(source, target)?;
         return Ok(());
     }
-    std::fs::create_dir_all(cible)?;
-    for entree in std::fs::read_dir(source)? {
-        let entree = entree?;
-        copier(&entree.path(), &cible.join(entree.file_name()))?;
+    std::fs::create_dir_all(target)?;
+    for entry in std::fs::read_dir(source)? {
+        let entry = entry?;
+        copy_all(&entry.path(), &target.join(entry.file_name()))?;
     }
     Ok(())
 }
 
-/// Le dossier où ce système garde les fichiers mis à la corbeille.
+/// The folder this system keeps trashed files in.
 fn trash_dir(application: &str) -> Result<PathBuf, String> {
     if cfg!(target_os = "macos") {
-        let home = std::env::var("HOME").map_err(|_| String::from("HOME n'est pas défini"))?;
+        let home = std::env::var("HOME").map_err(|_| String::from("HOME is not set"))?;
         return Ok(PathBuf::from(home).join(".Trash"));
     }
     if cfg!(target_os = "windows") {
         return data_dir(application)
-            .map(|dir| dir.join("corbeille"))
-            .ok_or_else(|| String::from("LOCALAPPDATA n'est pas défini"));
+            .map(|dir| dir.join("trash"))
+            .ok_or_else(|| String::from("LOCALAPPDATA is not set"));
     }
     let data = match std::env::var("XDG_DATA_HOME") {
         Ok(data) if !data.is_empty() => PathBuf::from(data),
         _ => {
-            let home = std::env::var("HOME").map_err(|_| String::from("HOME n'est pas défini"))?;
+            let home = std::env::var("HOME").map_err(|_| String::from("HOME is not set"))?;
             PathBuf::from(home).join(".local/share")
         }
     };
     Ok(data.join("Trash/files"))
 }
 
-/// Écrit la fiche dont un bureau Linux a besoin pour proposer « Restaurer ».
+/// Writes the record a Linux desktop needs to offer “Restore”.
 fn write_trashinfo(target: &Path, original: &Path) {
     if cfg!(target_os = "macos") || cfg!(target_os = "windows") {
         return;
@@ -510,13 +535,13 @@ fn write_trashinfo(target: &Path, original: &Path) {
         })
         .unwrap_or_else(|_| original.to_path_buf());
 
-    // La spécification demande les deux clés, et un chemin encodé : un fichier
-    // nommé `100%.rs` serait sinon mal décodé et restauré ailleurs, ou nulle
-    // part.
+    // The specification asks for both keys, and for an encoded path: a file
+    // named `100%.rs` would otherwise be decoded wrong and restored somewhere
+    // else, or nowhere.
     let body = format!(
         "[Trash Info]\nPath={}\nDeletionDate={}\n",
-        encoder(&absolute.to_string_lossy()),
-        date_de_suppression()
+        encode(&absolute.to_string_lossy()),
+        deletion_date()
     );
     let _ = std::fs::write(
         info.join(format!("{}.trashinfo", name.to_string_lossy())),
@@ -524,61 +549,62 @@ fn write_trashinfo(target: &Path, original: &Path) {
     );
 }
 
-/// Encode un chemin comme la spécification de la corbeille le demande.
-fn encoder(chemin: &str) -> String {
-    let mut sortie = String::with_capacity(chemin.len());
-    for octet in chemin.bytes() {
-        match octet {
+/// Encodes a path the way the trash specification asks for.
+fn encode(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for byte in path.bytes() {
+        match byte {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
-                sortie.push(octet as char)
+                out.push(byte as char)
             }
-            _ => sortie.push_str(&format!("%{octet:02X}")),
+            _ => out.push_str(&format!("%{byte:02X}")),
         }
     }
-    sortie
+    out
 }
 
-/// L'instant de la suppression, dans la forme attendue.
+/// The moment of the deletion, in the expected shape.
 ///
-/// En UTC là où la spécification demande l'heure locale : `std` n'a pas de
-/// fuseau, et prendre une dépendance pour une ligne d'un fichier que personne
-/// ne lit à la main serait cher payé.
-fn date_de_suppression() -> String {
-    let secondes = std::time::SystemTime::now()
+/// In UTC where the specification asks for local time: `std` has no time zone,
+/// and taking a dependency for one line of a file nobody reads by hand would be
+/// paying dearly.
+fn deletion_date() -> String {
+    let seconds = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|ecoule| ecoule.as_secs())
+        .map(|elapsed| elapsed.as_secs())
         .unwrap_or(0);
 
-    let jours = (secondes / 86_400) as i64;
-    let heure = secondes % 86_400;
-    let (annee, mois, jour) = date_civile(jours);
+    let days = (seconds / 86_400) as i64;
+    let time = seconds % 86_400;
+    let (year, month, day) = civil_date(days);
     format!(
-        "{annee:04}-{mois:02}-{jour:02}T{:02}:{:02}:{:02}",
-        heure / 3600,
-        (heure % 3600) / 60,
-        heure % 60
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}",
+        time / 3600,
+        (time % 3600) / 60,
+        time % 60
     )
 }
 
-/// Convertit un nombre de jours depuis 1970-01-01 en date civile.
+/// Turns a number of days since 1970-01-01 into a civil date.
 ///
-/// L'algorithme de Howard Hinnant : il décale l'année pour la faire commencer
-/// en mars, ce qui met le jour bissextile à la fin et évite d'en faire un cas.
-fn date_civile(jours: i64) -> (i64, u32, u32) {
-    let decale = jours + 719_468;
-    let ere = if decale >= 0 { decale } else { decale - 146_096 } / 146_097;
-    let jour_ere = decale - ere * 146_097;
-    let annee_ere = (jour_ere - jour_ere / 1460 + jour_ere / 36_524 - jour_ere / 146_096) / 365;
-    let annee = annee_ere + ere * 400;
-    let jour_annee = jour_ere - (365 * annee_ere + annee_ere / 4 - annee_ere / 100);
-    let mois_decale = (5 * jour_annee + 2) / 153;
-    let jour = (jour_annee - (153 * mois_decale + 2) / 5 + 1) as u32;
-    let mois = if mois_decale < 10 {
-        mois_decale + 3
+/// Howard Hinnant's algorithm: it shifts the year to start in March, which puts
+/// the leap day at the end and saves making a case of it.
+fn civil_date(days: i64) -> (i64, u32, u32) {
+    let shifted = days + 719_468;
+    let era = if shifted >= 0 { shifted } else { shifted - 146_096 } / 146_097;
+    let day_of_era = shifted - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let shifted_month = (5 * day_of_year + 2) / 153;
+    let day = (day_of_year - (153 * shifted_month + 2) / 5 + 1) as u32;
+    let month = if shifted_month < 10 {
+        shifted_month + 3
     } else {
-        mois_decale - 9
+        shifted_month - 9
     } as u32;
-    (if mois <= 2 { annee + 1 } else { annee }, mois, jour)
+    (if month <= 2 { year + 1 } else { year }, month, day)
 }
 "#
     .to_string()
@@ -587,10 +613,13 @@ fn date_civile(jours: i64) -> (i64, u32, u32) {
 /// Adds the settings module to an existing project, with what it needs.
 ///
 /// Pulls the system module in with it: the settings need to know where this
-/// system puts an application's files, and that is exactly what `systeme.rs`
+/// system puts an application's files, and that is exactly what `system.rs`
 /// answers. And declares `serde` and `serde_json_lenient`, both already
 /// compiled in the tree through gpui, so the build does not grow.
 pub fn add_settings_module(root: &Path) -> io::Result<()> {
+    if let Some(error) = legacy_copy(root, "settings") {
+        return Err(error);
+    }
     add_system_module(root)?;
     add_dependencies(
         root,
@@ -603,18 +632,18 @@ pub fn add_settings_module(root: &Path) -> io::Result<()> {
     let main_path = root.join("src/main.rs");
     let source = std::fs::read_to_string(&main_path)?;
     let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
-    if !lines.iter().any(|line| line.trim() == "mod reglages;") {
-        lines.insert(header_end(&lines), "mod reglages;".into());
+    if !lines.iter().any(|line| line.trim() == "mod settings;") {
+        lines.insert(header_end(&lines), "mod settings;".into());
     }
 
-    let path = root.join("src/reglages.rs");
+    let path = root.join("src/settings.rs");
     let body = settings_rs();
     if !path.exists() {
         std::fs::write(&path, &body)?;
         crate::projectfile::record(
             root,
-            "reglages",
-            module_version("reglages").unwrap_or(1),
+            "settings",
+            module_version("settings").unwrap_or(1),
             &body,
         )?;
     }
@@ -636,7 +665,7 @@ fn add_dependencies(root: &Path, crates: &[(&str, &str)]) -> io::Result<()> {
     let Some(section) = lines.iter().position(|line| line.trim() == "[dependencies]") else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "Cargo.toml : pas de section [dependencies]",
+            "Cargo.toml: no [dependencies] section",
         ));
     };
     // The end of the section, not the end of the file: a `[profile]` block
@@ -674,22 +703,21 @@ fn add_dependencies(root: &Path, crates: &[(&str, &str)]) -> io::Result<()> {
 /// changed key rewritten, a documented default file. It is a copy, and a copy
 /// is a debt — a defect found on one side has to be carried to the other.
 fn settings_rs() -> String {
-    r##"//! Les réglages de l'application : ce qu'elle retient d'un lancement à l'autre.
+    r##"//! The application's settings: what it remembers from one run to the next.
 //!
-//! Écrit par maxx, à vous ensuite. Ajoutez vos champs à `Reglages`, une ligne
-//! dans `defauts_documentes`, et c'est tout.
+//! Written by maxx, yours from here. Add your fields to `Settings`, a line to
+//! `documented_defaults`, and that is all.
 //!
-//! Du JSON à commentaires, parce qu'un fichier qu'on invite l'utilisateur à
-//! ouvrir doit accepter d'être annoté — et **seule la clé qui change est
-//! réécrite**. Vos commentaires et votre mise en forme survivent à un
-//! enregistrement, ce qu'une sérialisation de la structure entière ne permet
-//! jamais.
+//! JSON with comments, because a file the user is invited to open has to accept
+//! being annotated — and **only the key that changes is rewritten**. Your
+//! comments and your layout survive a save, which serialising the whole struct
+//! never allows.
 //!
-//! Le principe de lecture : un fichier absent, partiel ou abîmé n'est jamais
-//! pire que pas de fichier. `serde(default)` fait retomber une clé manquante
-//! sur son défaut plutôt que d'échouer la lecture entière, et un fichier
-//! illisible est signalé puis laissé intact — l'écraser perdrait ce que
-//! l'utilisateur était en train d'y écrire.
+//! The reading principle: a file that is missing, partial or damaged is never
+//! worse than no file at all. `serde(default)` drops a missing key back on its
+//! default instead of failing the whole read, and an unreadable file is
+//! reported and then left alone — overwriting it would lose whatever the user
+//! was in the middle of writing.
 
 #![allow(dead_code)]
 
@@ -697,254 +725,253 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// Ce que l'application retient. Ajoutez vos champs ici.
+/// What the application remembers. Add your fields here.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct Reglages {
-    /// Exemple : à remplacer par les vôtres.
-    pub theme_sombre: bool,
-    /// Exemple : à remplacer par les vôtres.
-    pub taille_du_texte: f32,
+pub struct Settings {
+    /// Example: replace it with your own.
+    pub dark_theme: bool,
+    /// Example: replace it with your own.
+    pub text_size: f32,
 }
 
-impl Default for Reglages {
+impl Default for Settings {
     fn default() -> Self {
         Self {
-            theme_sombre: true,
-            taille_du_texte: 14.0,
+            dark_theme: true,
+            text_size: 14.0,
         }
     }
 }
 
-/// Le nom du dossier de l'application, sous le répertoire de configuration.
+/// The application's folder name, under the configuration directory.
 const APPLICATION: &str = env!("CARGO_PKG_NAME");
 
-/// Où vit le fichier.
-pub fn chemin() -> Option<PathBuf> {
-    crate::systeme::config_dir(APPLICATION).map(|dossier| dossier.join("reglages.json"))
+/// Where the file lives.
+pub fn path() -> Option<PathBuf> {
+    crate::system::config_dir(APPLICATION).map(|folder| folder.join("settings.json"))
 }
 
-/// Lit les réglages, en tolérant les commentaires et les virgules finales.
-pub fn charger() -> Reglages {
-    let Some(chemin) = chemin() else {
-        return Reglages::default();
+/// Reads the settings, tolerating comments and trailing commas.
+pub fn load() -> Settings {
+    let Some(path) = path() else {
+        return Settings::default();
     };
-    let Ok(source) = std::fs::read_to_string(&chemin) else {
-        return Reglages::default();
+    let Ok(source) = std::fs::read_to_string(&path) else {
+        return Settings::default();
     };
     match serde_json_lenient::from_str_lenient(&source) {
-        Ok(reglages) => reglages,
-        Err(erreur) => {
-            eprintln!("{} illisible : {erreur}", chemin.display());
-            Reglages::default()
+        Ok(settings) => settings,
+        Err(error) => {
+            eprintln!("{} is unreadable: {error}", path.display());
+            Settings::default()
         }
     }
 }
 
-/// Écrit les réglages en ne touchant que les clés dont la valeur a changé.
-pub fn enregistrer(reglages: &Reglages) -> std::io::Result<()> {
-    let Some(chemin) = chemin() else {
+/// Writes the settings, touching only the keys whose value has changed.
+pub fn save(settings: &Settings) -> std::io::Result<()> {
+    let Some(path) = path() else {
         return Ok(());
     };
-    let source = match std::fs::read_to_string(&chemin) {
+    let source = match std::fs::read_to_string(&path) {
         Ok(source) if source.contains('{') => source,
-        Ok(_) => defauts_documentes(),
-        Err(erreur) if erreur.kind() == std::io::ErrorKind::NotFound => defauts_documentes(),
-        // Illisible pour une autre raison — une permission, un incident : écrire
-        // remplacerait ce que l'utilisateur a écrit par les défauts, ce qui est
-        // le seul résultat pire que ne pas enregistrer.
-        Err(erreur) => return Err(erreur),
+        Ok(_) => documented_defaults(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => documented_defaults(),
+        // Unreadable for another reason — a permission, an incident: writing
+        // would replace what the user wrote with the defaults, which is the one
+        // outcome worse than not saving at all.
+        Err(error) => return Err(error),
     };
-    crate::systeme::write_atomically(&chemin, &rustiner(&source, reglages))
+    crate::system::write_atomically(&path, &patch(&source, settings))
 }
 
-/// Le fichier écrit quand il n'y en a pas : chaque clé, son défaut, et une
-/// ligne qui dit ce qu'elle fait. Le fichier est sa propre documentation.
-pub fn defauts_documentes() -> String {
-    let defauts = Reglages::default();
+/// The file written when there is none: every key, its default, and a line
+/// saying what it does. The file is its own documentation.
+pub fn documented_defaults() -> String {
+    let defaults = Settings::default();
     format!(
-        r#"// Réglages de {APPLICATION}.
+        r#"// Settings for {APPLICATION}.
 //
-// Ce fichier est à vous. L'application ne réécrit que la clé qu'elle change :
-// vos commentaires et votre mise en forme restent en place. Les commentaires et
-// les virgules finales sont acceptés à la lecture.
+// This file is yours. The application only rewrites the key it changes: your
+// comments and your layout stay where they are. Comments and trailing commas
+// are accepted when reading.
 {{
-  // Exemple : à remplacer par les vôtres.
-  "theme_sombre": {},
+  // Example: replace it with your own.
+  "dark_theme": {},
 
-  // Exemple : à remplacer par les vôtres.
-  "taille_du_texte": {}
+  // Example: replace it with your own.
+  "text_size": {}
 }}
 "#,
-        defauts.theme_sombre, defauts.taille_du_texte
+        defaults.dark_theme, defaults.text_size
     )
 }
 
-/// Écrit chaque clé de `reglages` dans `source`, en changeant le moins d'octets
+/// Writes every key of `settings` into `source`, changing as few bytes as
 /// possible.
-pub fn rustiner(source: &str, reglages: &Reglages) -> String {
-    let Ok(serde_json_lenient::Value::Object(valeurs)) = serde_json_lenient::to_value(reglages)
+pub fn patch(source: &str, settings: &Settings) -> String {
+    let Ok(serde_json_lenient::Value::Object(values)) = serde_json_lenient::to_value(settings)
     else {
         return source.to_string();
     };
 
-    let mut sortie = source.to_string();
-    for (cle, valeur) in valeurs {
-        let rendue = valeur.to_string();
-        sortie = match remplacer(&sortie, &cle, &rendue) {
-            Some(rustinee) => rustinee,
-            None => ajouter(&sortie, &cle, &rendue),
+    let mut out = source.to_string();
+    for (key, value) in values {
+        let rendered = value.to_string();
+        out = match replace(&out, &key, &rendered) {
+            Some(patched) => patched,
+            None => insert(&out, &key, &rendered),
         };
     }
-    sortie
+    out
 }
 
-/// Remplace la valeur d'une clé de premier niveau, en gardant tout le reste.
+/// Replaces the value of a top-level key, keeping everything else.
 ///
-/// Répond `None` quand la clé n'y est pas, ce qui dit à l'appelant de
-/// l'ajouter.
-fn remplacer(source: &str, cle: &str, valeur: &str) -> Option<String> {
-    let (membre, _) = parcourir(source, cle);
-    let membre = membre?;
+/// Answers `None` when the key is not there, which tells the caller to add it.
+fn replace(source: &str, key: &str, value: &str) -> Option<String> {
+    let (member, _) = walk(source, key);
+    let member = member?;
     Some(format!(
-        "{}{valeur}{}",
-        &source[..membre.start],
-        &source[membre.end..]
+        "{}{value}{}",
+        &source[..member.start],
+        &source[member.end..]
     ))
 }
 
-/// Ajoute une clé juste après l'accolade ouvrante.
+/// Adds a key just after the opening brace.
 ///
-/// Après l'ouvrante et non avant la fermante : la dernière chose d'un objet est
-/// très souvent un commentaire, et une virgule ajoutée là se retrouverait
-/// commentée — deux membres sans séparateur, fichier invalide.
-fn ajouter(source: &str, cle: &str, valeur: &str) -> String {
-    let (_, position) = parcourir(source, cle);
+/// After the opening brace and not before the closing one: the last thing in an
+/// object is very often a comment, and a comma added there would end up
+/// commented out — two members with no separator, an invalid file.
+fn insert(source: &str, key: &str, value: &str) -> String {
+    let (_, position) = walk(source, key);
     let Some(position) = position else {
-        return format!("{{\n  \"{cle}\": {valeur}\n}}\n");
+        return format!("{{\n  \"{key}\": {value}\n}}\n");
     };
 
-    let octets = source.as_bytes();
-    let suivant = sauter_le_vide(octets, position);
-    let vide = suivant >= octets.len() || octets[suivant] == b'}';
-    let separateur = if vide { "" } else { "," };
+    let bytes = source.as_bytes();
+    let next = skip_blanks(bytes, position);
+    let empty = next >= bytes.len() || bytes[next] == b'}';
+    let separator = if empty { "" } else { "," };
 
     format!(
-        "{}\n  \"{cle}\": {valeur}{separateur}{}",
+        "{}\n  \"{key}\": {value}{separator}{}",
         &source[..position],
         &source[position..]
     )
 }
 
-/// Parcourt les membres de l'objet de premier niveau.
+/// Walks the members of the top-level object.
 ///
-/// Répond l'étendue de la valeur de `cle` si elle y est, et l'endroit où une
-/// nouvelle clé peut être insérée.
-fn parcourir(source: &str, cle: &str) -> (Option<std::ops::Range<usize>>, Option<usize>) {
-    let octets = source.as_bytes();
-    // Pas `find('{')` : le fichier commence par un bloc de commentaires, et une
-    // accolade écrite dedans ancrerait tout le parcours dans le commentaire.
-    let accolade = sauter_le_vide(octets, 0);
-    if accolade >= octets.len() || octets[accolade] != b'{' {
+/// Answers the span of `key`'s value if it is there, and the place where a new
+/// key can be inserted.
+fn walk(source: &str, key: &str) -> (Option<std::ops::Range<usize>>, Option<usize>) {
+    let bytes = source.as_bytes();
+    // Not `find('{')`: the file opens with a block of comments, and a brace
+    // written in there would anchor the whole walk inside the comment.
+    let brace = skip_blanks(bytes, 0);
+    if brace >= bytes.len() || bytes[brace] != b'{' {
         return (None, None);
     }
-    let apres = accolade + 1;
+    let after = brace + 1;
 
-    let attendu = format!("\"{cle}\"");
-    let mut index = sauter_le_vide(octets, apres);
-    while index < octets.len() && octets[index] != b'}' {
-        if octets[index] != b'"' {
+    let expected = format!("\"{key}\"");
+    let mut index = skip_blanks(bytes, after);
+    while index < bytes.len() && bytes[index] != b'}' {
+        if bytes[index] != b'"' {
             break;
         }
-        let fin_du_nom = fin_de_chaine(octets, index);
-        let trouve = source[index..fin_du_nom] == attendu;
+        let name_end = end_of_string(bytes, index);
+        let found = source[index..name_end] == expected;
 
-        let deux_points = sauter_le_vide(octets, fin_du_nom);
-        if deux_points >= octets.len() || octets[deux_points] != b':' {
+        let colon = skip_blanks(bytes, name_end);
+        if colon >= bytes.len() || bytes[colon] != b':' {
             break;
         }
-        let debut = sauter_le_vide(octets, deux_points + 1);
-        let fin = fin_de_valeur(octets, debut);
-        if trouve {
-            return (Some(debut..fin), Some(apres));
+        let start = skip_blanks(bytes, colon + 1);
+        let end = end_of_value(bytes, start);
+        if found {
+            return (Some(start..end), Some(after));
         }
 
-        index = sauter_le_vide(octets, fin);
-        if index < octets.len() && octets[index] == b',' {
-            index = sauter_le_vide(octets, index + 1);
+        index = skip_blanks(bytes, end);
+        if index < bytes.len() && bytes[index] == b',' {
+            index = skip_blanks(bytes, index + 1);
         }
     }
 
-    (None, Some(apres))
+    (None, Some(after))
 }
 
-/// Saute les espaces et les commentaires.
+/// Skips whitespace and comments.
 ///
-/// Un commentaire n'est pas du JSON, et le parcours doit l'enjamber sans lire
-/// comme structure une accolade, un guillemet ou un deux-points écrits dedans.
-/// Un seul guillemet impair dans un commentaire laisserait sinon le balayage
-/// « dans une chaîne » jusqu'à la fin du fichier.
-fn sauter_le_vide(octets: &[u8], mut index: usize) -> usize {
+/// A comment is not JSON, and the walk has to step over it without reading a
+/// brace, a quote or a colon written inside as structure. A single odd quote in
+/// a comment would otherwise leave the scan “inside a string” to the end of the
+/// file.
+fn skip_blanks(bytes: &[u8], mut index: usize) -> usize {
     loop {
-        while index < octets.len() && octets[index].is_ascii_whitespace() {
+        while index < bytes.len() && bytes[index].is_ascii_whitespace() {
             index += 1;
         }
-        if octets[index..].starts_with(b"//") {
-            while index < octets.len() && octets[index] != b'\n' {
+        if bytes[index..].starts_with(b"//") {
+            while index < bytes.len() && bytes[index] != b'\n' {
                 index += 1;
             }
             continue;
         }
-        if octets[index..].starts_with(b"/*") {
+        if bytes[index..].starts_with(b"/*") {
             index += 2;
-            while index + 1 < octets.len() && !(octets[index] == b'*' && octets[index + 1] == b'/') {
+            while index + 1 < bytes.len() && !(bytes[index] == b'*' && bytes[index + 1] == b'/') {
                 index += 1;
             }
-            index = (index + 2).min(octets.len());
+            index = (index + 2).min(bytes.len());
             continue;
         }
         return index;
     }
 }
 
-/// L'index juste après la chaîne dont le guillemet ouvrant est à `index`.
-fn fin_de_chaine(octets: &[u8], index: usize) -> usize {
+/// The index just after the string whose opening quote is at `index`.
+fn end_of_string(bytes: &[u8], index: usize) -> usize {
     let mut index = index + 1;
-    while index < octets.len() {
-        match octets[index] {
+    while index < bytes.len() {
+        match bytes[index] {
             b'\\' => index += 2,
             b'"' => return index + 1,
             _ => index += 1,
         }
     }
-    octets.len()
+    bytes.len()
 }
 
-/// L'index juste après la valeur JSON qui commence à `index`.
-fn fin_de_valeur(octets: &[u8], index: usize) -> usize {
-    if index >= octets.len() {
-        return octets.len();
+/// The index just after the JSON value starting at `index`.
+fn end_of_value(bytes: &[u8], index: usize) -> usize {
+    if index >= bytes.len() {
+        return bytes.len();
     }
-    match octets[index] {
-        b'"' => fin_de_chaine(octets, index),
-        ouvrant @ (b'[' | b'{') => {
-            let fermant = if ouvrant == b'[' { b']' } else { b'}' };
-            let mut profondeur = 0usize;
+    match bytes[index] {
+        b'"' => end_of_string(bytes, index),
+        opening @ (b'[' | b'{') => {
+            let closing = if opening == b'[' { b']' } else { b'}' };
+            let mut depth = 0usize;
             let mut index = index;
-            while index < octets.len() {
-                index = sauter_le_vide(octets, index);
-                if index >= octets.len() {
+            while index < bytes.len() {
+                index = skip_blanks(bytes, index);
+                if index >= bytes.len() {
                     break;
                 }
-                match octets[index] {
+                match bytes[index] {
                     b'"' => {
-                        index = fin_de_chaine(octets, index);
+                        index = end_of_string(bytes, index);
                         continue;
                     }
-                    octet if octet == ouvrant => profondeur += 1,
-                    octet if octet == fermant => {
-                        profondeur -= 1;
-                        if profondeur == 0 {
+                    byte if byte == opening => depth += 1,
+                    byte if byte == closing => {
+                        depth -= 1;
+                        if depth == 0 {
                             return index + 1;
                         }
                     }
@@ -952,19 +979,19 @@ fn fin_de_valeur(octets: &[u8], index: usize) -> usize {
                 }
                 index += 1;
             }
-            octets.len()
+            bytes.len()
         }
-        // Un nombre, `true`, `false` ou `null` : la valeur s'arrête au premier
-        // caractère qui ne peut en faire partie — un séparateur, une espace, ou
-        // le début d'un commentaire.
+        // A number, `true`, `false` or `null`: the value stops at the first
+        // character that cannot be part of it — a separator, whitespace, or the
+        // start of a comment.
         _ => {
             let mut index = index;
-            while index < octets.len() {
-                let octet = octets[index];
-                if octet.is_ascii_whitespace()
-                    || matches!(octet, b',' | b'}' | b']')
-                    || octets[index..].starts_with(b"//")
-                    || octets[index..].starts_with(b"/*")
+            while index < bytes.len() {
+                let byte = bytes[index];
+                if byte.is_ascii_whitespace()
+                    || matches!(byte, b',' | b'}' | b']')
+                    || bytes[index..].starts_with(b"//")
+                    || bytes[index..].starts_with(b"/*")
                 {
                     break;
                 }
@@ -975,22 +1002,23 @@ fn fin_de_valeur(octets: &[u8], index: usize) -> usize {
     }
 }
 
-/// Le chemin d'un fichier, tel quel : pratique pour l'afficher dans un écran de
-/// réglages, ou pour l'ouvrir dans l'éditeur de l'utilisateur.
-pub fn chemin_affichable() -> String {
-    chemin()
-        .map(|chemin| chemin.display().to_string())
-        .unwrap_or_else(|| "emplacement introuvable sur ce système".into())
+/// The file's path, as it stands: handy to show in a settings screen, or to
+/// open in the user's editor.
+pub fn displayable_path() -> String {
+    path()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| "no location for it on this system".into())
 }
 
-/// Pour les tests : lit un fichier donné plutôt que celui de l'application.
-pub fn charger_depuis(chemin: &Path) -> Reglages {
-    let Ok(source) = std::fs::read_to_string(chemin) else {
-        return Reglages::default();
+/// For tests: reads a given file rather than the application's own.
+pub fn load_from(path: &Path) -> Settings {
+    let Ok(source) = std::fs::read_to_string(path) else {
+        return Settings::default();
     };
     serde_json_lenient::from_str_lenient(&source).unwrap_or_default()
 }
-"##.to_string()
+"##
+    .to_string()
 }
 
 /// The menu bar of a generated project.
@@ -1096,7 +1124,7 @@ fn open_about_now(cx: &mut App) {
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         titlebar: Some(TitlebarOptions {
-            title: Some(SharedString::from("À propos")),
+            title: Some(SharedString::from("About")),
             ..Default::default()
         }),
         is_resizable: false,
@@ -1120,30 +1148,30 @@ pub fn app_menus() -> Vec<Menu> {
         Menu {
             name: "app".into(),
             items: vec![
-                MenuItem::action("À propos", About),
+                MenuItem::action("About", About),
                 MenuItem::separator(),
-                MenuItem::action("Masquer", HideApp),
-                MenuItem::action("Masquer les autres", HideOthers),
-                MenuItem::action("Tout afficher", ShowAll),
+                MenuItem::action("Hide", HideApp),
+                MenuItem::action("Hide Others", HideOthers),
+                MenuItem::action("Show All", ShowAll),
                 MenuItem::separator(),
-                MenuItem::action("Quitter", Quit),
+                MenuItem::action("Quit", Quit),
             ],
         },
         Menu {
-            name: "Édition".into(),
+            name: "Edit".into(),
             items: vec![
-                MenuItem::os_action("Annuler", Undo, OsAction::Undo),
-                MenuItem::os_action("Rétablir", Redo, OsAction::Redo),
+                MenuItem::os_action("Undo", Undo, OsAction::Undo),
+                MenuItem::os_action("Redo", Redo, OsAction::Redo),
                 MenuItem::separator(),
-                MenuItem::os_action("Couper", Cut, OsAction::Cut),
-                MenuItem::os_action("Copier", Copy, OsAction::Copy),
-                MenuItem::os_action("Coller", Paste, OsAction::Paste),
-                MenuItem::os_action("Tout sélectionner", SelectAll, OsAction::SelectAll),
+                MenuItem::os_action("Cut", Cut, OsAction::Cut),
+                MenuItem::os_action("Copy", Copy, OsAction::Copy),
+                MenuItem::os_action("Paste", Paste, OsAction::Paste),
+                MenuItem::os_action("Select All", SelectAll, OsAction::SelectAll),
             ],
         },
         Menu {
-            name: "Fenêtre".into(),
-            items: vec![MenuItem::action("Réduire", Minimize)],
+            name: "Window".into(),
+            items: vec![MenuItem::action("Minimize", Minimize)],
         },
     ]
     // maxx:end
@@ -1159,7 +1187,7 @@ mod ui;
 use gpui::{App, Application, Bounds, WindowBounds, WindowOptions, prelude::*, px, size};
 use gpui_component::Root;
 
-use crate::ui::accueil::Accueil;
+use crate::ui::home::Home;
 
 fn main() {
     Application::new().run(|cx: &mut App| {
@@ -1177,11 +1205,11 @@ fn main() {
                 ..Default::default()
             },
             |window, cx| {
-                let view = cx.new(|cx| Accueil::new(window, cx));
+                let view = cx.new(|cx| Home::new(window, cx));
                 cx.new(|cx| Root::new(view, window, cx))
             },
         )
-        .expect("la fenêtre doit s'ouvrir");
+        .expect("the window must open");
     });
 }
 "#
@@ -1208,7 +1236,7 @@ impl Render for {type_name} {{
         v_flex()
             .gap_2()
             .p_4()
-            .child(Label::new("Bienvenue"))
+            .child(Label::new("Welcome"))
         // maxx:end
     }}
 }}
@@ -1243,9 +1271,9 @@ pub fn add_menu_bar(root: &Path) -> io::Result<()> {
         let Some(anchor) = anchor else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "src/main.rs : ni cx.activate(…) ni Application::new().run(…) — \
-                 ajoutez menus::register(cx), cx.bind_keys(menus::key_bindings()) \
-                 et cx.set_menus(menus::app_menus()) à la main",
+                "src/main.rs: neither cx.activate(…) nor Application::new().run(…) — \
+                 add menus::register(cx), cx.bind_keys(menus::key_bindings()) \
+                 and cx.set_menus(menus::app_menus()) by hand",
             ));
         };
 
@@ -1258,9 +1286,9 @@ pub fn add_menu_bar(root: &Path) -> io::Result<()> {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
-                    "src/main.rs : impossible de lire le nom de l'application dans « {} » — \
-                     ajoutez menus::register(…), …bind_keys(menus::key_bindings()) \
-                     et …set_menus(menus::app_menus()) à la main",
+                    "src/main.rs: cannot read the application's name in “{}” — \
+                     add menus::register(…), …bind_keys(menus::key_bindings()) \
+                     and …set_menus(menus::app_menus()) by hand",
                     lines[anchor].trim()
                 ),
             ));

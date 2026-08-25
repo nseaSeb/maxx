@@ -4,7 +4,7 @@ use gpui::{
 };
 use gpui_component::Root;
 
-use crate::ui::inspecteur::Inspecteur;
+use crate::ui::inspector::Inspector;
 
 actions!(
     app,
@@ -21,7 +21,7 @@ actions!(
         Paste,
         SelectAll,
         Minimize,
-        OuvrirInspecteur
+        OpenInspector
     ]
 );
 
@@ -32,8 +32,8 @@ pub fn register(cx: &mut App) {
     cx.on_action(|_: &HideOthers, cx: &mut App| cx.hide_other_apps());
     cx.on_action(|_: &ShowAll, cx: &mut App| cx.unhide_other_apps());
     cx.on_action(|_: &About, cx: &mut App| open_about(cx));
-    cx.set_global(Inspecteurs::default());
-    cx.on_action(|_: &OuvrirInspecteur, cx: &mut App| ouvrir_inspecteur(cx));
+    cx.set_global(Inspectors::default());
+    cx.on_action(|_: &OpenInspector, cx: &mut App| open_inspector(cx));
     cx.on_action(|_: &Minimize, cx: &mut App| {
         // Deferred: an action handler runs inside the window's own update, and
         // gpui refuses to enter a second one.
@@ -53,7 +53,7 @@ pub fn key_bindings() -> Vec<gpui::KeyBinding> {
         KeyBinding::new("cmd-q", Quit, None),
         KeyBinding::new("cmd-h", HideApp, None),
         KeyBinding::new("cmd-alt-h", HideOthers, None),
-        KeyBinding::new("cmd-i", OuvrirInspecteur, None),
+        KeyBinding::new("cmd-i", OpenInspector, None),
         KeyBinding::new("cmd-z", Undo, None),
         KeyBinding::new("cmd-shift-z", Redo, None),
         KeyBinding::new("cmd-x", Cut, None),
@@ -64,24 +64,24 @@ pub fn key_bindings() -> Vec<gpui::KeyBinding> {
     ]
 }
 
-/// Ouvre l'inspecteur dans sa propre fenêtre.
+/// Opens the inspector in a window of its own.
 ///
-/// Deux choses que cette fonction existe pour montrer.
+/// Two things this function exists to show.
 ///
-/// D'abord `cx.defer` : un gestionnaire d'action tourne à l'intérieur de la
-/// mise à jour de la fenêtre qui l'a émis, et gpui refuse d'en entrer une
-/// seconde. Ouvrir une fenêtre directement depuis `cx.on_action` ne fait rien
-/// du tout — sans erreur, sans panique, ce qui est bien pire.
+/// First `cx.defer`: an action handler runs inside the update of the window
+/// that dispatched it, and gpui refuses to enter a second one. Opening a window
+/// straight from `cx.on_action` does nothing at all — no error, no panic, which
+/// is far worse.
 ///
-/// Ensuite `Root` : une fenêtre qui dessine le moindre composant de
-/// gpui-component doit être enracinée dedans. Plusieurs composants remontent
-/// jusqu'à lui et interrompent le processus s'il manque.
-pub fn ouvrir_inspecteur(cx: &mut App) {
+/// Then `Root`: a window drawing the smallest gpui-component widget has to be
+/// rooted in it. Several components walk up to it and abort the process when it
+/// is missing.
+pub fn open_inspector(cx: &mut App) {
     cx.defer(|cx: &mut App| {
-        // Une seule à la fois. La fenêtre est retenue dans un global : toutes
-        // les fenêtres de la démo sont enracinées dans `Root`, donc les
-        // distinguer par leur type est impossible.
-        let known = cx.global::<Inspecteurs>().0;
+        // One at a time. The window is held in a global: every window of the
+        // demo is rooted in `Root`, so telling them apart by their type is
+        // impossible.
+        let known = cx.global::<Inspectors>().0;
         if let Some(handle) = known
             && cx.windows().contains(&handle)
         {
@@ -94,31 +94,31 @@ pub fn ouvrir_inspecteur(cx: &mut App) {
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 titlebar: Some(TitlebarOptions {
-                    title: Some(SharedString::from("Inspecteur")),
+                    title: Some(SharedString::from("Inspector")),
                     ..Default::default()
                 }),
                 ..Default::default()
             },
             |window, cx| {
-                let view = cx.new(|cx| Inspecteur::new(window, cx));
+                let view = cx.new(|cx| Inspector::new(window, cx));
                 cx.new(|cx| Root::new(view, window, cx))
             },
         )
-        .map(|handle| cx.set_global(Inspecteurs(Some(handle.into()))))
+        .map(|handle| cx.set_global(Inspectors(Some(handle.into()))))
         .ok();
     });
 }
 
-/// La fenêtre de l'inspecteur, quand elle est ouverte.
+/// The inspector's window, while it is open.
 #[derive(Default)]
-struct Inspecteurs(Option<gpui::AnyWindowHandle>);
+struct Inspectors(Option<gpui::AnyWindowHandle>);
 
-impl gpui::Global for Inspecteurs {}
+impl gpui::Global for Inspectors {}
 
-/// La fenêtre « À propos », en gpui pur.
+/// The About window, in plain gpui.
 ///
-/// Pas de composant ici, donc pas besoin de `Root` : c'est la seule fenêtre de
-/// la démo qui s'en passe.
+/// No component here, so no need for `Root`: it is the one window of the demo
+/// that does without it.
 fn open_about(cx: &mut App) {
     cx.defer(|cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(320.), px(180.)), cx);
@@ -126,21 +126,21 @@ fn open_about(cx: &mut App) {
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 titlebar: Some(TitlebarOptions {
-                    title: Some(SharedString::from("À propos")),
+                    title: Some(SharedString::from("About")),
                     ..Default::default()
                 }),
                 is_resizable: false,
                 ..Default::default()
             },
-            |_window, cx| cx.new(|_| APropos),
+            |_window, cx| cx.new(|_| AboutWindow),
         )
         .ok();
     });
 }
 
-struct APropos;
+struct AboutWindow;
 
-impl Render for APropos {
+impl Render for AboutWindow {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .flex()
@@ -167,33 +167,33 @@ pub fn app_menus() -> Vec<Menu> {
         Menu {
             name: "app".into(),
             items: vec![
-                MenuItem::action("À propos", About),
+                MenuItem::action("About", About),
                 MenuItem::separator(),
-                MenuItem::action("Masquer", HideApp),
-                MenuItem::action("Masquer les autres", HideOthers),
-                MenuItem::action("Tout afficher", ShowAll),
+                MenuItem::action("Hide", HideApp),
+                MenuItem::action("Hide Others", HideOthers),
+                MenuItem::action("Show All", ShowAll),
                 MenuItem::separator(),
-                MenuItem::action("Quitter", Quit),
+                MenuItem::action("Quit", Quit),
             ],
         },
         Menu {
-            name: "Édition".into(),
+            name: "Edit".into(),
             items: vec![
-                MenuItem::os_action("Annuler", Undo, OsAction::Undo),
-                MenuItem::os_action("Rétablir", Redo, OsAction::Redo),
+                MenuItem::os_action("Undo", Undo, OsAction::Undo),
+                MenuItem::os_action("Redo", Redo, OsAction::Redo),
                 MenuItem::separator(),
-                MenuItem::os_action("Couper", Cut, OsAction::Cut),
-                MenuItem::os_action("Copier", Copy, OsAction::Copy),
-                MenuItem::os_action("Coller", Paste, OsAction::Paste),
-                MenuItem::os_action("Tout sélectionner", SelectAll, OsAction::SelectAll),
+                MenuItem::os_action("Cut", Cut, OsAction::Cut),
+                MenuItem::os_action("Copy", Copy, OsAction::Copy),
+                MenuItem::os_action("Paste", Paste, OsAction::Paste),
+                MenuItem::os_action("Select All", SelectAll, OsAction::SelectAll),
             ],
         },
         Menu {
-            name: "Fenêtre".into(),
+            name: "Window".into(),
             items: vec![
-                MenuItem::action("Ouvrir l'inspecteur", OuvrirInspecteur),
+                MenuItem::action("Open the inspector", OpenInspector),
                 MenuItem::separator(),
-                MenuItem::action("Réduire", Minimize),
+                MenuItem::action("Minimize", Minimize),
             ],
         },
     ]

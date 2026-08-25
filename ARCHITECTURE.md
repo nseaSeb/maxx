@@ -30,7 +30,14 @@ parseur servent à garantir.
 | `menufile.rs` | l'équivalent de `view.rs`, pour `src/menus.rs` |
 | `scaffold.rs` | les gabarits : projet, vue, barre de menus, et leur câblage |
 | `project.rs` | l'arborescence de fichiers montrée dans l'explorateur |
-| `workspace.rs` | la fenêtre : état, commandes, rendu de la coque |
+| `workspace.rs` | la fenêtre : l'état, l'ouverture et la fermeture d'un projet |
+| `workspace/views.rs` | les onglets, la lecture et l'écriture d'une vue |
+| `workspace/inspector.rs` | la sélection, les propriétés, l'état, l'insertion, l'annulation |
+| `workspace/explorer.rs` | l'arbre de fichiers, sa sélection, ses suppressions |
+| `workspace/menus.rs` | l'éditeur de barre de menus |
+| `workspace/chrome.rs` | la coque : titre, écran d'accueil, barre d'état, `Render` |
+| `workspace/process.rs` | `cargo run` et le panneau de sortie |
+| `workspace/modules.rs` | les modules copiés dans le projet |
 | `designer.rs` | le canvas, la structure, l'inspecteur, la palette |
 | `preferences.rs` | l'écran de réglages |
 | `about.rs` | la fenêtre À propos |
@@ -44,7 +51,7 @@ parseur servent à garantir.
 ## Le cycle d'une vue
 
 ```
-src/ui/accueil.rs
+src/ui/home.rs
    │  view::View::load
    ▼
 repérage des marqueurs // maxx:begin / // maxx:end      (parser, balayage textuel)
@@ -63,7 +70,7 @@ codegen rend l'expression   │
 parser::splice réécrit uniquement la plage d'octets entre les marqueurs
    │
    ▼
-src/ui/accueil.rs
+src/ui/home.rs
 ```
 
 Trois choses à retenir de ce cycle.

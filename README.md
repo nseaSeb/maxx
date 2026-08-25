@@ -126,8 +126,8 @@ move.
 a dependency on maxx: what is copied is yours.
 
 - **The menu bar** — `src/menus.rs`, editable afterwards in maxx.
-- **The system module** — `src/systeme.rs`.
-- **The settings** — `src/reglages.rs`, which brings the system module with it.
+- **The system module** — `src/system.rs`.
+- **The settings** — `src/settings.rs`, which brings the system module with it.
 
 What was copied is recorded in `maxx.toml`, to be committed with the project:
 which module, in which version, and the fingerprint it had on the way out. When
@@ -142,13 +142,13 @@ defaults file written on first launch, and **only the key that changes is
 rewritten** — your comments and your layout survive. A missing, partial or
 damaged file never stops the application from starting.
 
-Add your fields to `Reglages`, one line in `defauts_documentes`, and that is it.
+Add your fields to `Settings`, one line in `documented_defaults`, and that is it.
 Two crates are declared along the way, `serde` and `serde_json_lenient`; both
 are already compiled in the tree by gpui, so the build does not grow.
 
 ## The system module
 
-`File > Add to project > The system module` copies `src/systeme.rs` into the
+`File > Add to project > The system module` copies `src/system.rs` into the
 project and declares it in `main.rs`. Plain `std`: no maxx, no gpui, copyable
 elsewhere as is.
 

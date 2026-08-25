@@ -1,2 +1,2 @@
-pub mod accueil;
-pub mod inspecteur;
+pub mod home;
+pub mod inspector;

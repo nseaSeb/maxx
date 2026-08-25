@@ -49,7 +49,7 @@ fn rewriting_a_demo_view_changes_nothing() {
     // l'enregistrement ; maxx passe donc rustfmt après lui, et c'est la
     // composition des deux qui doit être stable. Un fichier de démo mis en
     // forme est aussi ce qu'un projet réel serait.
-    let path = demo().join("src/ui/accueil.rs");
+    let path = demo().join("src/ui/home.rs");
     let before = std::fs::read_to_string(&path).unwrap();
 
     let view = View::load(&path).expect("la vue doit se relire");
@@ -69,7 +69,7 @@ fn rewriting_a_demo_view_changes_nothing() {
 
 #[test]
 fn the_demo_uses_the_components_it_advertises() {
-    let path = demo().join("src/ui/accueil.rs");
+    let path = demo().join("src/ui/home.rs");
     let view = View::load(&path).expect("la vue doit se relire");
 
     let mut bases = Vec::new();
@@ -95,15 +95,15 @@ fn the_demo_uses_the_components_it_advertises() {
 
 #[test]
 fn the_demo_input_is_bound_to_a_field() {
-    let path = demo().join("src/ui/accueil.rs");
+    let path = demo().join("src/ui/home.rs");
     let view = View::load(&path).expect("la vue doit se relire");
 
     let fields = view.state_fields();
     assert!(
-        fields.iter().any(|field| field.name == "nom"),
+        fields.iter().any(|field| field.name == "name"),
         "le champ texte de la démo doit être lié à un champ de la vue"
     );
-    assert!(view.method_line("on_ouvrir").is_some(), "le gestionnaire du bouton doit exister");
+    assert!(view.method_line("on_open").is_some(), "le gestionnaire du bouton doit exister");
 }
 
 #[test]
@@ -111,21 +111,18 @@ fn the_demo_menu_bar_reads_back() {
     let path = demo().join("src/menus.rs");
     let menus = MenuFile::load(&path).expect("la barre de menus doit se relire");
 
-    assert_eq!(menus.menus.len(), 3, "app, Édition, Fenêtre");
+    assert_eq!(menus.menus.len(), 3, "app, Edit, Window");
 
-    let fenetre = menus
+    let window = menus
         .menus
         .iter()
-        .find(|menu| menu.name == "Fenêtre")
+        .find(|menu| menu.name == "Window")
         .expect("le menu Fenêtre doit être là");
     assert!(
-        fenetre.items.iter().any(|item| item.label() == "Ouvrir l'inspecteur"),
+        window.items.iter().any(|item| item.label() == "Open the inspector"),
         "l'entrée qui ouvre une fenêtre est ce que la démo existe pour montrer"
     );
-    assert!(
-        menus.handler_line("OuvrirInspecteur").is_some(),
-        "son action doit avoir un gestionnaire"
-    );
+    assert!(menus.handler_line("OpenInspector").is_some(), "son action doit avoir un gestionnaire");
 }
 
 /// Ramasse la base de chaque nœud de l'arbre.

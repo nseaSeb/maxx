@@ -9,7 +9,7 @@ use maxx::parser;
 fn file_with(expr: &str) -> String {
     let mut out = String::from(
         "use gpui::*;\n\n\
-         impl Render for Accueil {\n\
+         impl Render for Home {\n\
          \x20   fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {\n\
          \x20       // maxx:begin\n",
     );
@@ -125,7 +125,7 @@ fn splicing_preserves_everything_outside_the_markers() {
 use gpui::*;
 
 /// Un commentaire écrit à la main, qui doit survivre.
-impl Render for Accueil {
+impl Render for Home {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // maxx:begin
         v_flex()
@@ -320,7 +320,7 @@ fn interleaved_children_keep_their_place() {
 
 #[test]
 fn a_brace_in_a_comment_does_not_end_a_block() {
-    let source = "impl Accueil {\n    /// Ferme le panneau } et remet tout à zéro.\n    pub fn r(&mut self) {}\n}\n";
+    let source = "impl Home {\n    /// Ferme le panneau } et remet tout à zéro.\n    pub fn r(&mut self) {}\n}\n";
     let open = source.find('{').unwrap();
     let close = maxx::parser::matching_brace(source, open).unwrap();
     assert_eq!(&source[close..], "}\n", "le bloc se ferme à la bonne accolade");
@@ -387,7 +387,7 @@ fn a_multiline_string_survives_a_full_save_cycle() {
     // them on the way back in, so the fix was one-sided and the string drifted
     // a little on every save.
     let mut file = String::from(
-        "impl Render for Accueil {\n\
+        "impl Render for Home {\n\
          \x20   fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {\n\
          \x20       // maxx:begin\n\
          \x20       div().child(\n\

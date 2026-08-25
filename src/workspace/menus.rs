@@ -1,0 +1,333 @@
+//! The menu-bar editor: its panel's boxes, and every edit to `src/menus.rs`.
+
+use super::*;
+
+impl Workspace {
+    /// Refuses to drop menu edits that have not been written.
+    ///
+    /// Returns `true` when the caller must stop.
+    pub(super) fn discard_menu_edits(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.menu_file.as_ref().is_some_and(|menus| menus.dirty()) {
+            self.message =
+                Some(SharedString::from("menus non enregistrés — ⌘S avant de changer de fichier"));
+            cx.notify();
+            return true;
+        }
+        false
+    }
+
+    /// The text box bound to a field of the menu panel.
+    pub(crate) fn menu_input(&self, field: MenuField) -> Option<&Entity<InputState>> {
+        self.menu_inputs.iter().find(|(candidate, _)| *candidate == field).map(|(_, state)| state)
+    }
+
+    /// Rebuilds the menu panel's boxes when its selection changes.
+    pub(super) fn sync_menu_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let key = self.menu_file.as_ref().map(|menus| menus.selected);
+        if key == self.menu_synced {
+            return;
+        }
+        self.menu_synced = key;
+        self.menu_inputs.clear();
+
+        let Some(menus) = self.menu_file.as_ref() else {
+            return;
+        };
+        let mut fields = Vec::new();
+        match menus.selected {
+            Some(Selection::Menu(_)) => {
+                if let Some(menu) = menus.selected_menu() {
+                    fields.push((MenuField::Name, menu.name.clone()));
+                }
+            }
+            Some(Selection::Item(..)) | Some(Selection::SubItem(..)) => {
+                match menus.selected_item() {
+                    Some(ItemDef::Action { label, action, os_action, shortcut }) => {
+                        fields.push((MenuField::Label, label.clone()));
+                        fields.push((MenuField::Action, action.clone()));
+                        // Une action système porte le raccourci que le système
+                        // lui donne : en proposer un autre serait mentir.
+                        if os_action.is_none() {
+                            fields
+                                .push((MenuField::Shortcut, shortcut.clone().unwrap_or_default()));
+                        }
+                    }
+                    // Un sous-menu porte un titre, sous le même champ Libellé
+                    // que l'inspecteur affiche.
+                    Some(ItemDef::Submenu(inner)) => {
+                        fields.push((MenuField::Label, inner.name.clone()));
+                    }
+                    _ => {}
+                }
+            }
+            None => {}
+        }
+
+        for (field, value) in fields {
+            let state = cx.new(|cx| InputState::new(window, cx).default_value(value));
+            cx.subscribe(&state, move |this, state, event: &InputEvent, cx| {
+                if matches!(event, InputEvent::Change) {
+                    let value = state.read(cx).value().to_string();
+                    this.edit_menu_field(field, &value, cx);
+                }
+            })
+            .detach();
+            self.menu_inputs.push((field, state));
+        }
+    }
+
+    /// Writes one field of the menu panel.
+    fn edit_menu_field(&mut self, field: MenuField, value: &str, cx: &mut Context<Self>) {
+        let Some(menus) = self.menu_file.as_mut() else {
+            return;
+        };
+        let Some(selection) = menus.selected else {
+            return;
+        };
+        match (selection, field) {
+            (Selection::Menu(index), MenuField::Name) => {
+                if let Some(menu) = menus.menus.get_mut(index) {
+                    menu.name = value.to_string();
+                }
+            }
+            (Selection::Item(..) | Selection::SubItem(..), _) => {
+                match menus.selected_item_mut() {
+                    Some(ItemDef::Action { label, action, shortcut, .. }) => match field {
+                        MenuField::Label => *label = value.to_string(),
+                        // An action name is a Rust type: refuse what would not
+                        // compile rather than write it.
+                        MenuField::Action if is_type_name(value) => *action = value.to_string(),
+                        // Retenu dans le modèle et écrit à ⌘S avec le reste.
+                        // Écrit sur-le-champ, il partait sur le disque à chaque
+                        // touche — donc à chaque état intermédiaire de la
+                        // frappe — et survivait à l'entrée qu'il désignait.
+                        MenuField::Shortcut => {
+                            let keystroke = value.trim();
+                            *shortcut = match keystroke {
+                                "" => None,
+                                keystroke if crate::menufile::is_keystroke(keystroke) => {
+                                    Some(keystroke.to_string())
+                                }
+                                // Ce qui est en cours de frappe n'est pas
+                                // encore lisible : on garde ce qu'on avait.
+                                _ => shortcut.clone(),
+                            };
+                        }
+                        _ => {}
+                    },
+                    Some(ItemDef::Submenu(inner)) if field == MenuField::Label => {
+                        inner.name = value.to_string();
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+        cx.notify();
+    }
+
+    /// Opens the handler of the selected entry in Zed, on its own line.
+    pub fn open_menu_handler(&mut self, cx: &mut Context<Self>) {
+        let Some(menus) = self.menu_file.as_ref() else {
+            return;
+        };
+        let Some(ItemDef::Action { action, os_action, .. }) = menus.selected_item() else {
+            return;
+        };
+        if os_action.is_some() {
+            self.message = Some(SharedString::from(
+                "cette entrée est déléguée au système — elle n'a pas de gestionnaire",
+            ));
+            cx.notify();
+            return;
+        }
+        if action.contains("::") {
+            self.message = Some(SharedString::from(format!(
+                "« {action} » vit dans un autre module — maxx ne sait pas où il est écrit"
+            )));
+            cx.notify();
+            return;
+        }
+
+        match menus.handler_line(action) {
+            Some(line) => crate::tools::open_in_editor(cx, &menus.path, Some(line)),
+            None => {
+                self.message = Some(SharedString::from(format!(
+                    "« {action} » n'est pas encore câblée — ⌘S l'ajoute au fichier"
+                )));
+                cx.notify();
+            }
+        }
+    }
+
+    /// Selects a menu or one of its entries.
+    pub fn select_menu(&mut self, selection: Selection, cx: &mut Context<Self>) {
+        if let Some(menus) = self.menu_file.as_mut() {
+            menus.selected = Some(selection);
+            cx.notify();
+        }
+    }
+
+    /// Leaves the menu editor.
+    pub fn close_menu_file(&mut self, cx: &mut Context<Self>) {
+        if self.discard_menu_edits(cx) {
+            return;
+        }
+        self.menu_file = None;
+        self.menu_synced = None;
+        cx.notify();
+    }
+
+    /// Opens the project's menu bar for editing.
+    ///
+    /// `src/menus.rs` is a file like any other, so a click in the explorer
+    /// opens it — but nothing in the window said so, and the editor was
+    /// unfindable for anyone who had not been told.
+    pub fn open_menu_bar(&mut self, cx: &mut Context<Self>) {
+        self.preferences = false;
+        let Some(project) = self.project.as_ref() else {
+            self.message = Some(SharedString::from("aucun projet ouvert"));
+            cx.notify();
+            return;
+        };
+        if self.menu_file.is_some() {
+            // Already open — but the preferences may have been covering it.
+            cx.notify();
+            return;
+        }
+        let root = project.root.clone();
+        let path = root.join("src/menus.rs");
+
+        // A project made before maxx generated a menu bar — or one whose bar
+        // was deleted — gets one now rather than a refusal.
+        let added = !path.exists();
+        if added {
+            if let Err(error) = crate::scaffold::add_menu_bar(&root) {
+                self.message = Some(SharedString::from(error.to_string()));
+                cx.notify();
+                return;
+            }
+            self.refresh_entries();
+        }
+
+        self.select_file(path, cx);
+        if added && self.message.is_none() {
+            self.message =
+                Some(SharedString::from("barre de menus ajoutée au projet et câblée dans main.rs"));
+        }
+    }
+
+    /// Takes the menu bar away from the project: `src/menus.rs` to the Trash,
+    /// `main.rs` unwired.
+    pub fn remove_menu_bar(&mut self, cx: &mut Context<Self>) {
+        let Some(project) = self.project.as_ref() else {
+            self.message = Some(SharedString::from("aucun projet ouvert"));
+            cx.notify();
+            return;
+        };
+        let path = project.root.join("src/menus.rs");
+        if !path.exists() {
+            self.message = Some(SharedString::from("ce projet n'a pas de barre de menus"));
+            cx.notify();
+            return;
+        }
+        // Through the panel's own delete, so the file goes to the Trash and
+        // `main.rs` is unwired exactly once, in one place.
+        self.selected = Some(path);
+        self.delete_selected_entry(cx);
+    }
+
+    /// Adds a menu to the bar.
+    pub fn add_menu(&mut self, cx: &mut Context<Self>) {
+        self.open_menu_bar(cx);
+        if let Some(menus) = self.menu_file.as_mut() {
+            menus.add_menu();
+            cx.notify();
+        }
+    }
+
+    /// Adds an entry to the selected menu.
+    pub fn add_menu_item(&mut self, separator: bool, cx: &mut Context<Self>) {
+        self.open_menu_bar(cx);
+        let Some(menus) = self.menu_file.as_mut() else {
+            return;
+        };
+        if menus.selected.is_none() {
+            self.message = Some(SharedString::from("sélectionnez d'abord un menu"));
+            cx.notify();
+            return;
+        }
+        let item = if separator {
+            ItemDef::Separator
+        } else {
+            ItemDef::Action {
+                label: "Entrée".into(),
+                action: "MonAction".into(),
+                os_action: None,
+                shortcut: None,
+            }
+        };
+        menus.add_item(item);
+        cx.notify();
+    }
+
+    /// Moves the selected menu or entry one place up, or down.
+    pub fn move_menu_selection(&mut self, up: bool, cx: &mut Context<Self>) {
+        let Some(menus) = self.menu_file.as_mut() else {
+            return;
+        };
+        if menus.selected.is_none() {
+            self.message = Some(SharedString::from("sélectionnez d'abord une entrée"));
+            cx.notify();
+            return;
+        }
+        if menus.move_selected(up) {
+            // Sans cela, le « déjà en dernier » d'un coup bloqué survivait à
+            // tous les déplacements suivants.
+            self.message = None;
+        } else {
+            // Already at the end of its list: saying so beats a click that
+            // looks broken.
+            self.message = Some(SharedString::from(if up {
+                "déjà en premier"
+            } else {
+                "déjà en dernier"
+            }));
+        }
+        cx.notify();
+    }
+
+    /// Adds a submenu to the selected menu.
+    ///
+    /// Only inside a menu of the bar: a submenu of a submenu is a place nobody
+    /// finds twice, and the model stops at one level on purpose.
+    pub fn add_submenu(&mut self, cx: &mut Context<Self>) {
+        self.open_menu_bar(cx);
+        let Some(menus) = self.menu_file.as_mut() else {
+            return;
+        };
+        // Un sous-menu sélectionné accueillerait l'entrée à l'intérieur de
+        // lui-même, ce que `add_item` fait exprès pour les autres entrées : ici
+        // cela donnerait le sous-menu de sous-menu que le modèle ne sait pas
+        // afficher, et qu'on ne pourrait donc plus ni sélectionner ni retirer.
+        let dans_un_sous_menu = matches!(menus.selected, Some(Selection::SubItem(..)))
+            || matches!(menus.selected_item(), Some(ItemDef::Submenu(_)));
+        if menus.selected.is_none() || dans_un_sous_menu {
+            self.message = Some(SharedString::from(
+                "sélectionnez un menu ou une de ses entrées — un sous-menu ne va pas dans un sous-menu",
+            ));
+            cx.notify();
+            return;
+        }
+        menus.add_item(ItemDef::Submenu(crate::menu_model::MenuDef::named("Sous-menu")));
+        cx.notify();
+    }
+
+    /// Removes the selected menu or entry.
+    pub fn remove_menu_selection(&mut self, cx: &mut Context<Self>) {
+        if let Some(menus) = self.menu_file.as_mut() {
+            menus.remove_selected();
+            cx.notify();
+        }
+    }
+}

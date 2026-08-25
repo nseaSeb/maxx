@@ -4,7 +4,7 @@ mod ui;
 use gpui::{App, Application, Bounds, WindowBounds, WindowOptions, prelude::*, px, size};
 use gpui_component::Root;
 
-use crate::ui::accueil::Accueil;
+use crate::ui::home::Home;
 
 fn main() {
     Application::new().run(|cx: &mut App| {
@@ -21,10 +21,10 @@ fn main() {
                 ..Default::default()
             },
             |window, cx| {
-                let view = cx.new(|cx| Accueil::new(window, cx));
+                let view = cx.new(|cx| Home::new(window, cx));
                 cx.new(|cx| Root::new(view, window, cx))
             },
         )
-        .expect("la fenêtre doit s'ouvrir");
+        .expect("the window must open");
     });
 }

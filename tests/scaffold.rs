@@ -20,7 +20,7 @@ fn a_generated_project_is_readable_by_maxx() {
 
     assert!(root.join("Cargo.toml").exists());
     assert!(root.join("src/main.rs").exists());
-    assert!(root.join("src/ui/accueil.rs").exists());
+    assert!(root.join("src/ui/home.rs").exists());
 
     let cargo = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
     assert!(
@@ -28,7 +28,7 @@ fn a_generated_project_is_readable_by_maxx() {
         "sans cette feature le projet ne compile pas sur cette machine"
     );
 
-    let view = View::load(&root.join("src/ui/accueil.rs")).expect("la vue doit se relire");
+    let view = View::load(&root.join("src/ui/home.rs")).expect("la vue doit se relire");
     assert_eq!(view.root.base.path(), Some("v_flex"));
     assert_eq!(view.root.children.len(), 1);
     assert_eq!(view.root.children[0].base.path(), Some("Label::new"));
@@ -41,7 +41,7 @@ fn adding_a_view_registers_it() {
     scaffold::create_view(&root, "mon_ecran").expect("la vue doit être créée");
 
     let module = std::fs::read_to_string(root.join("src/ui/mod.rs")).unwrap();
-    assert!(module.contains("pub mod accueil;"));
+    assert!(module.contains("pub mod home;"));
     assert!(module.contains("pub mod mon_ecran;"));
 
     let source = std::fs::read_to_string(root.join("src/ui/mon_ecran.rs")).unwrap();
@@ -53,7 +53,7 @@ fn adding_a_view_registers_it() {
 fn saving_a_text_input_adds_the_field_and_the_import() {
     let root = scratch("maxx_scaffold_input_test");
     scaffold::create_project(&root, "essai").unwrap();
-    let path = root.join("src/ui/accueil.rs");
+    let path = root.join("src/ui/home.rs");
 
     let mut view = View::load(&path).unwrap();
     let input = maxx::registry::instantiate("input").expect("le champ texte est au catalogue");
@@ -76,7 +76,7 @@ fn saving_a_text_input_adds_the_field_and_the_import() {
 fn every_component_of_the_catalogue_is_written_out() {
     let root = scratch("maxx_kitchen_sink");
     scaffold::create_project(&root, "essai").unwrap();
-    let path = root.join("src/ui/accueil.rs");
+    let path = root.join("src/ui/home.rs");
 
     let mut view = View::load(&path).unwrap();
     for spec in maxx::registry::CATALOGUE {
@@ -99,7 +99,7 @@ fn every_component_of_the_catalogue_is_written_out() {
 fn saving_twice_produces_the_same_file() {
     let root = scratch("maxx_stable_save");
     scaffold::create_project(&root, "essai").unwrap();
-    let path = root.join("src/ui/accueil.rs");
+    let path = root.join("src/ui/home.rs");
 
     let mut view = View::load(&path).unwrap();
     view.root.push_child(maxx::registry::instantiate("button").unwrap());
@@ -144,7 +144,7 @@ fn a_folder_name_becomes_a_valid_crate_name() {
 fn a_button_action_writes_a_method_stub() {
     let root = scratch("maxx_handler");
     scaffold::create_project(&root, "essai").unwrap();
-    let path = root.join("src/ui/accueil.rs");
+    let path = root.join("src/ui/home.rs");
 
     let mut view = View::load(&path).unwrap();
     let mut button = maxx::registry::instantiate("button").unwrap();
@@ -214,7 +214,7 @@ fn the_runner_reports_a_failure_instead_of_hanging() {
 fn style_properties_reach_the_generated_file() {
     let root = scratch("maxx_styles");
     scaffold::create_project(&root, "essai").unwrap();
-    let path = root.join("src/ui/accueil.rs");
+    let path = root.join("src/ui/home.rs");
 
     let mut view = View::load(&path).unwrap();
     let mut button = maxx::registry::instantiate("button").unwrap();
@@ -292,7 +292,7 @@ fn a_generated_project_shares_the_build_cache() {
 fn a_state_field_is_declared_and_initialised() {
     let root = scratch("maxx_state");
     scaffold::create_project(&root, "essai").unwrap();
-    let path = root.join("src/ui/accueil.rs");
+    let path = root.join("src/ui/home.rs");
 
     let mut view = View::load(&path).unwrap();
     assert!(view.state_fields().is_empty());
@@ -387,13 +387,13 @@ impl Render for Ecrit {
 fn an_outside_change_is_noticed() {
     let root = scratch("maxx_conflict");
     scaffold::create_project(&root, "essai").unwrap();
-    let path = root.join("src/ui/accueil.rs");
+    let path = root.join("src/ui/home.rs");
 
     let view = View::load(&path).unwrap();
     assert!(!view.disk_changed());
 
     // Someone edits the file in Zed.
-    let outside = std::fs::read_to_string(&path).unwrap().replace("Bienvenue", "Modifié dans Zed");
+    let outside = std::fs::read_to_string(&path).unwrap().replace("Welcome", "Modifié dans Zed");
     std::fs::write(&path, &outside).unwrap();
     assert!(view.disk_changed());
 
@@ -417,13 +417,13 @@ fn an_outside_change_is_noticed() {
 fn insertions_land_in_the_view_not_in_a_helper_type() {
     let root = scratch("maxx_anchor");
     scaffold::create_project(&root, "essai").unwrap();
-    let path = root.join("src/ui/accueil.rs");
+    let path = root.join("src/ui/home.rs");
 
     // A helper type declared above the view, as a developer would.
     let source = std::fs::read_to_string(&path).unwrap();
     let source = source.replace(
-        "pub struct Accueil {}",
-        "pub struct Ligne {\n    pub titre: String,\n}\n\nimpl Ligne {\n    pub fn nouvelle() -> Self {\n        Self {\n            titre: String::new(),\n        }\n    }\n}\n\npub struct Accueil {}",
+        "pub struct Home {}",
+        "pub struct Ligne {\n    pub titre: String,\n}\n\nimpl Ligne {\n    pub fn nouvelle() -> Self {\n        Self {\n            titre: String::new(),\n        }\n    }\n}\n\npub struct Home {}",
     );
     std::fs::write(&path, &source).unwrap();
 
@@ -438,22 +438,22 @@ fn insertions_land_in_the_view_not_in_a_helper_type() {
 
     let written = std::fs::read_to_string(&path).unwrap();
     let ligne = &written
-        [written.find("pub struct Ligne").unwrap()..written.find("pub struct Accueil").unwrap()];
+        [written.find("pub struct Ligne").unwrap()..written.find("pub struct Home").unwrap()];
     assert!(!ligne.contains("champ"), "le type auxiliaire est intact :\n{ligne}");
     assert!(!ligne.contains("on_go"), "le stub ne va pas dans le type auxiliaire");
 
-    let accueil = &written[written.find("pub struct Accueil").unwrap()..];
-    assert!(accueil.contains("pub champ: Entity<InputState>,"));
-    assert!(accueil.contains("pub fn on_go("));
+    let home = &written[written.find("pub struct Home").unwrap()..];
+    assert!(home.contains("pub champ: Entity<InputState>,"));
+    assert!(home.contains("pub fn on_go("));
     // And the initializer goes in the struct literal, not in the signature.
-    assert!(accueil.contains("Self {\n            champ: cx.new("));
+    assert!(home.contains("Self {\n            champ: cx.new("));
 }
 
 #[test]
 fn a_state_field_is_refused_when_the_view_has_no_usable_shape() {
     let root = scratch("maxx_shape");
     scaffold::create_project(&root, "essai").unwrap();
-    let path = root.join("src/ui/accueil.rs");
+    let path = root.join("src/ui/home.rs");
 
     // A view with no `Self { .. }` to initialize into.
     let source = std::fs::read_to_string(&path)
@@ -477,7 +477,7 @@ fn a_state_field_is_refused_when_the_view_has_no_usable_shape() {
 fn a_wrapped_import_is_not_duplicated() {
     let root = scratch("maxx_wrapped");
     scaffold::create_project(&root, "essai").unwrap();
-    let path = root.join("src/ui/accueil.rs");
+    let path = root.join("src/ui/home.rs");
 
     let source = std::fs::read_to_string(&path).unwrap().replace(
         "use gpui::{Context, Window, prelude::*};",
@@ -505,11 +505,11 @@ fn a_wrapped_import_is_not_duplicated() {
 fn a_helper_type_whose_name_starts_like_the_view_is_left_alone() {
     let root = scratch("maxx_prefix");
     scaffold::create_project(&root, "essai").unwrap();
-    let path = root.join("src/ui/accueil.rs");
+    let path = root.join("src/ui/home.rs");
 
     let source = std::fs::read_to_string(&path).unwrap().replace(
-        "pub struct Accueil {}",
-        "pub struct AccueilConfig {\n    pub titre: String,\n}\n\npub struct Accueil {}",
+        "pub struct Home {}",
+        "pub struct HomeConfig {\n    pub titre: String,\n}\n\npub struct Home {}",
     );
     std::fs::write(&path, &source).unwrap();
 
@@ -518,8 +518,8 @@ fn a_helper_type_whose_name_starts_like_the_view_is_left_alone() {
     view.save().unwrap();
 
     let written = std::fs::read_to_string(&path).unwrap();
-    let config = &written[written.find("pub struct AccueilConfig").unwrap()
-        ..written.find("pub struct Accueil {").unwrap()];
+    let config = &written[written.find("pub struct HomeConfig").unwrap()
+        ..written.find("pub struct Home {").unwrap()];
     assert!(!config.contains("champ"), "le type voisin est intact :\n{config}");
 }
 
@@ -535,8 +535,8 @@ fn a_generated_project_has_a_menu_bar() {
 
     let mut menus = maxx::menufile::MenuFile::load(&path).expect("les menus doivent se relire");
     assert_eq!(menus.menus.len(), 3);
-    assert_eq!(menus.menus[1].name, "Édition");
-    assert!(menus.menus[0].items.iter().any(|item| item.label() == "Quitter"));
+    assert_eq!(menus.menus[1].name, "Edit");
+    assert!(menus.menus[0].items.iter().any(|item| item.label() == "Quit"));
     assert!(!menus.dirty());
 
     // An entry with a brand new action declares and wires it on save.
@@ -569,8 +569,8 @@ fn an_unknown_menu_entry_is_carried_through() {
     let path = root.join("src/menus.rs");
 
     let source = std::fs::read_to_string(&path).unwrap().replace(
-        "MenuItem::action(\"Quitter\", Quit),",
-        "MenuItem::submenu(sous_menu()),\n                MenuItem::action(\"Quitter\", Quit),",
+        "MenuItem::action(\"Quit\", Quit),",
+        "MenuItem::submenu(sous_menu()),\n                MenuItem::action(\"Quit\", Quit),",
     );
     std::fs::write(&path, &source).unwrap();
 
@@ -617,8 +617,8 @@ fn a_menu_maxx_cannot_read_is_carried_through() {
     let path = root.join("src/menus.rs");
 
     let source = std::fs::read_to_string(&path).unwrap().replace(
-        "        Menu {\n            name: \"Fenêtre\".into(),",
-        "        Menu {\n            name: \"Dynamique\".into(),\n            items: construire(),\n        },\n        Menu {\n            name: \"Fenêtre\".into(),",
+        "        Menu {\n            name: \"Window\".into(),",
+        "        Menu {\n            name: \"Dynamique\".into(),\n            items: construire(),\n        },\n        Menu {\n            name: \"Window\".into(),",
     );
     std::fs::write(&path, &source).unwrap();
 
@@ -642,8 +642,8 @@ fn a_qualified_action_keeps_its_path() {
     let path = root.join("src/menus.rs");
 
     let source = std::fs::read_to_string(&path).unwrap().replace(
-        "MenuItem::action(\"À propos\", About),",
-        "MenuItem::action(\"À propos\", fichier::About),",
+        "MenuItem::action(\"About\", About),",
+        "MenuItem::action(\"About\", fichier::About),",
     );
     std::fs::write(&path, &source).unwrap();
 
@@ -655,7 +655,7 @@ fn a_qualified_action_keeps_its_path() {
     assert!(
         std::fs::read_to_string(&path)
             .unwrap()
-            .contains("MenuItem::action(\"À propos\", fichier::About)")
+            .contains("MenuItem::action(\"About\", fichier::About)")
     );
 }
 
@@ -700,24 +700,52 @@ fn a_menu_action_points_at_its_handler() {
 fn deleting_a_view_unregisters_it() {
     let root = scratch("maxx_delete_view_test");
     scaffold::create_project(&root, "essai").expect("le projet doit être créé");
-    scaffold::create_view(&root, "vue_2").expect("la vue doit être créée");
+    scaffold::create_view(&root, "view_2").expect("la vue doit être créée");
 
     let mod_path = root.join("src/ui/mod.rs");
-    assert!(std::fs::read_to_string(&mod_path).unwrap().contains("pub mod vue_2;"));
+    assert!(std::fs::read_to_string(&mod_path).unwrap().contains("pub mod view_2;"));
 
-    let file = root.join("src/ui/vue_2.rs");
-    assert_eq!(workspace::view_module(&root, &file).as_deref(), Some("vue_2"));
-    workspace::unregister_view(&root, "vue_2");
+    let file = root.join("src/ui/view_2.rs");
+    assert_eq!(workspace::view_module(&root, &file).as_deref(), Some("view_2"));
+    workspace::unregister_view(&root, "view_2");
 
     let source = std::fs::read_to_string(&mod_path).unwrap();
-    assert!(!source.contains("pub mod vue_2;"));
-    assert!(source.contains("pub mod accueil;"), "les autres vues restent déclarées : {source}");
+    assert!(!source.contains("pub mod view_2;"));
+    assert!(source.contains("pub mod home;"), "les autres vues restent déclarées : {source}");
+}
+
+/// Une vue d'entrée qui ne s'appelle pas `home` est protégée comme les autres.
+///
+/// C'est le cas d'un projet écrit par un maxx plus ancien, dont `main.rs`
+/// importe encore `accueil` : supposer le nom du gabarit courant laisserait
+/// supprimer la vue que `main.rs` ouvre, et le projet ne compilerait plus.
+#[test]
+fn the_entry_view_is_read_from_main_rs() {
+    let root = scratch("maxx_entree_ancienne");
+    scaffold::create_project(&root, "essai").unwrap();
+
+    std::fs::rename(root.join("src/ui/home.rs"), root.join("src/ui/accueil.rs")).unwrap();
+    std::fs::write(root.join("src/ui/mod.rs"), "pub mod accueil;\n").unwrap();
+    let main_rs = std::fs::read_to_string(root.join("src/main.rs"))
+        .unwrap()
+        .replace("crate::ui::home::Home", "crate::ui::accueil::Home");
+    std::fs::write(root.join("src/main.rs"), main_rs).unwrap();
+
+    assert!(
+        workspace::protected_entry(&root, &root.join("src/ui/accueil.rs")).is_some(),
+        "la vue que main.rs ouvre est protégée quel que soit son nom"
+    );
+    assert!(
+        workspace::protected_entry(&root, &root.join("src/ui/home.rs")).is_none(),
+        "et le nom du gabarit courant ne protège rien tout seul"
+    );
 }
 
 #[test]
 fn the_project_skeleton_refuses_to_be_deleted() {
-    let root = PathBuf::from("/tmp/essai");
-    for kept in ["Cargo.toml", "src/main.rs", "src/ui/mod.rs", "src/ui/accueil.rs"] {
+    let root = scratch("maxx_protege");
+    scaffold::create_project(&root, "essai").unwrap();
+    for kept in ["Cargo.toml", "src/main.rs", "src/ui/mod.rs", "src/ui/home.rs"] {
         assert!(
             workspace::protected_entry(&root, &root.join(kept)).is_some(),
             "{kept} doit être protégé"
@@ -726,7 +754,7 @@ fn the_project_skeleton_refuses_to_be_deleted() {
     assert!(workspace::protected_entry(&root, &root).is_some());
     // La barre de menus, elle, se retire : sa suppression décâble main.rs.
     assert!(workspace::protected_entry(&root, &root.join("src/menus.rs")).is_none());
-    assert!(workspace::protected_entry(&root, &root.join("src/ui/vue_2.rs")).is_none());
+    assert!(workspace::protected_entry(&root, &root.join("src/ui/view_2.rs")).is_none());
     // `view_module` ne doit pas prendre un fichier hors de src/ui pour une vue.
     assert_eq!(workspace::view_module(&root, &root.join("src/menus.rs")), None);
     assert_eq!(workspace::view_module(&root, &root.join("src/ui/sous/vue.rs")), None);
@@ -878,16 +906,16 @@ fn the_system_module_is_added_declared_and_compiles_on_its_own() {
 
     scaffold::add_system_module(&root).expect("le module doit être ajouté");
 
-    let module = root.join("src/systeme.rs");
+    let module = root.join("src/system.rs");
     assert!(module.exists());
     let wired = std::fs::read_to_string(&main_path).unwrap();
     assert!(wired.starts_with("//! Mon application.\n"), "{wired}");
-    assert!(wired.contains("mod systeme;"), "{wired}");
+    assert!(wired.contains("mod system;"), "{wired}");
 
     // Deux fois de suite ne duplique rien.
     scaffold::add_system_module(&root).expect("la seconde fois ne doit rien casser");
     let twice = std::fs::read_to_string(&main_path).unwrap();
-    assert_eq!(twice.matches("mod systeme;").count(), 1);
+    assert_eq!(twice.matches("mod system;").count(), 1);
 
     // Il ne dépend ni de maxx ni de gpui : rien que du std.
     let body = std::fs::read_to_string(&module).unwrap();
@@ -899,9 +927,9 @@ fn the_system_module_is_added_declared_and_compiles_on_its_own() {
     }
 
     // Le retirer doit retirer sa déclaration, sinon le projet ne compile plus.
-    scaffold::remove_module(&root, "systeme").expect("la déclaration doit partir");
+    scaffold::remove_module(&root, "system").expect("la déclaration doit partir");
     let stripped = std::fs::read_to_string(&main_path).unwrap();
-    assert!(!stripped.contains("mod systeme;"), "{stripped}");
+    assert!(!stripped.contains("mod system;"), "{stripped}");
     assert!(stripped.contains("mod ui;"), "le reste doit rester : {stripped}");
 }
 
@@ -909,12 +937,12 @@ fn the_system_module_is_added_declared_and_compiles_on_its_own() {
 fn only_a_top_level_module_file_has_a_mod_line() {
     let root = PathBuf::from("/tmp/essai");
     assert_eq!(
-        maxx::workspace::top_level_module(&root, &root.join("src/systeme.rs")).as_deref(),
-        Some("systeme")
+        maxx::workspace::top_level_module(&root, &root.join("src/system.rs")).as_deref(),
+        Some("system")
     );
     // main.rs n'est pas un module, ui/ a son propre mod.rs.
     assert_eq!(maxx::workspace::top_level_module(&root, &root.join("src/main.rs")), None);
-    assert_eq!(maxx::workspace::top_level_module(&root, &root.join("src/ui/vue_1.rs")), None);
+    assert_eq!(maxx::workspace::top_level_module(&root, &root.join("src/ui/view_1.rs")), None);
     assert_eq!(maxx::workspace::top_level_module(&root, &root.join("Cargo.toml")), None);
 }
 
@@ -937,7 +965,7 @@ fn a_block_doc_comment_header_is_not_jumped_over() {
 
     let wired = std::fs::read_to_string(&main_path).unwrap();
     let lines: Vec<&str> = wired.lines().collect();
-    let declaration = lines.iter().position(|line| *line == "mod systeme;").unwrap();
+    let declaration = lines.iter().position(|line| *line == "mod system;").unwrap();
     let fin_du_bloc = lines.iter().position(|line| *line == "*/").unwrap();
     let attribut = lines.iter().position(|line| *line == "#![allow(dead_code)]").unwrap();
     assert!(declaration > fin_du_bloc, "{wired}");
@@ -983,12 +1011,12 @@ fn the_settings_module_brings_what_it_needs() {
 
     // Il tire le module système avec lui : il a besoin de savoir où ce système
     // range les fichiers d'une application.
-    assert!(root.join("src/systeme.rs").exists());
-    assert!(root.join("src/reglages.rs").exists());
+    assert!(root.join("src/system.rs").exists());
+    assert!(root.join("src/settings.rs").exists());
 
     let main_rs = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
-    assert!(main_rs.contains("mod systeme;"), "{main_rs}");
-    assert!(main_rs.contains("mod reglages;"), "{main_rs}");
+    assert!(main_rs.contains("mod system;"), "{main_rs}");
+    assert!(main_rs.contains("mod settings;"), "{main_rs}");
 
     // Les deux crates sont déclarées, dans la section des dépendances et pas
     // après le bloc [profile].
@@ -1003,10 +1031,10 @@ fn the_settings_module_brings_what_it_needs() {
     let cargo = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
     assert_eq!(cargo.matches("serde_json_lenient").count(), 1, "{cargo}");
     let main_rs = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
-    assert_eq!(main_rs.matches("mod reglages;").count(), 1, "{main_rs}");
+    assert_eq!(main_rs.matches("mod settings;").count(), 1, "{main_rs}");
 
     // Il ne doit rien devoir à maxx.
-    let body = std::fs::read_to_string(root.join("src/reglages.rs")).unwrap();
+    let body = std::fs::read_to_string(root.join("src/settings.rs")).unwrap();
     assert!(!body.contains("maxx::"), "les réglages ne doivent rien devoir à maxx");
 }
 
@@ -1014,7 +1042,7 @@ fn the_settings_module_brings_what_it_needs() {
 fn a_dropdown_declares_the_field_it_needs() {
     let root = scratch("maxx_select_field");
     scaffold::create_project(&root, "essai").expect("le projet doit être créé");
-    let path = root.join("src/ui/accueil.rs");
+    let path = root.join("src/ui/home.rs");
 
     let mut view = View::load(&path).expect("la vue doit se relire");
     let select =
