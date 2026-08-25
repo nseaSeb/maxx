@@ -58,21 +58,12 @@ impl MenuFile {
         let menus = crate::menu_model::parse(&expr, inner)
             .ok_or("la zone gérée n'est pas un « vec![Menu { .. }] »")?;
 
-        Ok(Self {
-            path: path.to_path_buf(),
-            source,
-            saved: menus.clone(),
-            menus,
-            selected: None,
-        })
+        Ok(Self { path: path.to_path_buf(), source, saved: menus.clone(), menus, selected: None })
     }
 
     /// The file name, for the tab.
     pub fn name(&self) -> String {
-        self.path
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default()
+        self.path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()
     }
 
     /// Whether the menus differ from what is on disk.
@@ -108,11 +99,7 @@ impl MenuFile {
         let mut names = Vec::new();
         for menu in &self.menus {
             for item in &menu.items {
-                if let ItemDef::Action {
-                    action,
-                    os_action: None,
-                    ..
-                } = item
+                if let ItemDef::Action { action, os_action: None, .. } = item
                     && !action.contains("::")
                     && !names.contains(action)
                 {
@@ -127,7 +114,7 @@ impl MenuFile {
     pub fn save(&mut self, force: bool) -> Result<(), String> {
         if !force && self.disk_changed() {
             return Err(
-                "fichier modifié en dehors de maxx — Fichier > Recharger, ou Écraser".into(),
+                "fichier modifié en dehors de maxx — Fichier > Recharger, ou Écraser".into()
             );
         }
         if !self.dirty() && !force {
@@ -155,10 +142,7 @@ impl MenuFile {
     /// both write.
     pub fn handler_line(&self, action: &str) -> Option<usize> {
         let needle = format!("&{action},");
-        self.source
-            .lines()
-            .position(|line| line.contains(&needle))
-            .map(|index| index + 1)
+        self.source.lines().position(|line| line.contains(&needle)).map(|index| index + 1)
     }
 
     /// The selected menu, if a menu or one of its entries is selected.

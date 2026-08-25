@@ -23,10 +23,7 @@ fn writing_a_key_leaves_every_other_byte_alone() {
 }
 "#;
 
-    let preferences = Preferences {
-        show_project_panel: false,
-        ..Preferences::default()
-    };
+    let preferences = Preferences { show_project_panel: false, ..Preferences::default() };
     let patched = patch_preferences(source, &preferences);
 
     assert!(patched.contains("// Mes réglages à moi."));
@@ -56,10 +53,7 @@ fn a_trailing_comment_on_the_line_survives() {
     // Le cas que le commentaire *avant* la clé ne teste pas : le balayage
     // commence après le deux-points, donc c'est ici qu'il peut déraper.
     let source = "{\n  \"show_output\": false // le panneau du bas\n}\n";
-    let preferences = Preferences {
-        show_output: true,
-        ..Preferences::default()
-    };
+    let preferences = Preferences { show_output: true, ..Preferences::default() };
     let patched = patch_preferences(source, &preferences);
 
     assert!(patched.contains("// le panneau du bas"), "{patched}");
@@ -71,10 +65,7 @@ fn a_comment_that_looks_like_a_member_is_not_one() {
     // « "show_output" : à revoir » dans un commentaire : une recherche
     // textuelle y trouve la clé et le deux-points, et écrase le commentaire.
     let source = "{\n  // \"show_output\" : à revoir\n  \"show_output\": false\n}\n";
-    let preferences = Preferences {
-        show_output: true,
-        ..Preferences::default()
-    };
+    let preferences = Preferences { show_output: true, ..Preferences::default() };
     let patched = patch_preferences(source, &preferences);
 
     assert!(patched.contains("// \"show_output\" : à revoir"), "{patched}");
@@ -89,10 +80,7 @@ fn an_odd_quote_in_a_comment_does_not_eat_the_closing_brace() {
     // Un guillemet seul dans un commentaire laissait le balayage « dans une
     // chaîne » jusqu'à la fin du fichier, accolade finale comprise.
     let source = "{\n  \"show_output\": false\n  // 5\" de large\n}\n";
-    let preferences = Preferences {
-        show_output: true,
-        ..Preferences::default()
-    };
+    let preferences = Preferences { show_output: true, ..Preferences::default() };
     let patched = patch_preferences(source, &preferences);
 
     assert!(patched.trim_end().ends_with('}'), "{patched}");
@@ -104,10 +92,7 @@ fn an_odd_quote_in_a_comment_does_not_eat_the_closing_brace() {
 #[test]
 fn a_comment_holding_a_brace_does_not_derail_the_patch() {
     let source = "{\n  \"show_output\": false\n  /* un } et une \" ici */\n}\n";
-    let preferences = Preferences {
-        show_output: true,
-        ..Preferences::default()
-    };
+    let preferences = Preferences { show_output: true, ..Preferences::default() };
     let patched = patch_preferences(source, &preferences);
 
     assert!(patched.contains("/* un } et une \" ici */"), "{patched}");
@@ -188,10 +173,7 @@ fn the_recent_list_moves_deduplicates_and_stops_at_ten() {
 
     assert!(state.remember_project(&PathBuf::from("/tmp/un")));
     assert!(state.remember_project(&PathBuf::from("/tmp/deux")));
-    assert_eq!(
-        state.recent_projects,
-        vec![PathBuf::from("/tmp/deux"), PathBuf::from("/tmp/un")]
-    );
+    assert_eq!(state.recent_projects, vec![PathBuf::from("/tmp/deux"), PathBuf::from("/tmp/un")]);
 
     // Rouvrir celui qui est déjà en tête ne change rien — donc ni fichier
     // réécrit, ni barre de menus reconstruite.
@@ -199,10 +181,7 @@ fn the_recent_list_moves_deduplicates_and_stops_at_ten() {
 
     // Rouvrir un ancien le remonte, sans le dupliquer.
     assert!(state.remember_project(&PathBuf::from("/tmp/un")));
-    assert_eq!(
-        state.recent_projects,
-        vec![PathBuf::from("/tmp/un"), PathBuf::from("/tmp/deux")]
-    );
+    assert_eq!(state.recent_projects, vec![PathBuf::from("/tmp/un"), PathBuf::from("/tmp/deux")]);
 
     for index in 0..15 {
         state.remember_project(&PathBuf::from(format!("/tmp/projet_{index}")));
@@ -221,10 +200,8 @@ fn a_project_that_no_longer_exists_leaves_the_list() {
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
 
-    let mut state = State {
-        recent_projects: vec![root.clone(), root.join("parti")],
-        ..State::default()
-    };
+    let mut state =
+        State { recent_projects: vec![root.clone(), root.join("parti")], ..State::default() };
     state.forget_missing_projects();
 
     assert_eq!(state.recent_projects, vec![root]);
@@ -258,8 +235,8 @@ fn a_hand_written_file_with_every_trap_at_once_survives() {
     assert!(patched.contains("// l'explorateur"), "{patched}");
     assert!(patched.contains(r#""$schema": "./settings-schema.json""#), "{patched}");
 
-    let reread: Preferences =
-        serde_json_lenient::from_str_lenient(&patched).expect("le fichier reste lisible : {patched}");
+    let reread: Preferences = serde_json_lenient::from_str_lenient(&patched)
+        .expect("le fichier reste lisible : {patched}");
     assert_eq!(reread, preferences);
 }
 
@@ -268,14 +245,11 @@ fn a_brace_in_the_header_comment_does_not_anchor_the_walk() {
     // Un utilisateur qui écrit « // éditeur : {code, zed} » au-dessus de
     // l'accolade ouvrante faisait ancrer tout le parcours dans le commentaire.
     let source = "// éditeur : {code, zed}\n{\n  \"show_output\": false\n}\n";
-    let preferences = Preferences {
-        show_output: true,
-        ..Preferences::default()
-    };
+    let preferences = Preferences { show_output: true, ..Preferences::default() };
     let patched = patch_preferences(source, &preferences);
 
     assert!(patched.starts_with("// éditeur : {code, zed}\n{"), "{patched}");
-    let reread: Preferences =
-        serde_json_lenient::from_str_lenient(&patched).expect("le fichier reste lisible : {patched}");
+    let reread: Preferences = serde_json_lenient::from_str_lenient(&patched)
+        .expect("le fichier reste lisible : {patched}");
     assert!(reread.show_output);
 }

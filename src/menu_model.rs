@@ -26,11 +26,7 @@ pub struct MenuDef {
 impl MenuDef {
     /// A menu with a title and no entries.
     pub fn named(name: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            items: Vec::new(),
-            opaque: None,
-        }
+        Self { name: name.into(), items: Vec::new(), opaque: None }
     }
 
     /// Whether maxx can edit this menu.
@@ -74,12 +70,7 @@ impl ItemDef {
 /// source text, so it comes back out unchanged.
 pub fn parse(expr: &Expr, source: &str) -> Option<Vec<MenuDef>> {
     let entries = macro_elements(expr)?;
-    Some(
-        entries
-            .iter()
-            .map(|entry| parse_menu(entry, source))
-            .collect(),
-    )
+    Some(entries.iter().map(|entry| parse_menu(entry, source)).collect())
 }
 
 fn parse_menu(expr: &Expr, source: &str) -> MenuDef {
@@ -114,11 +105,7 @@ fn parse_menu(expr: &Expr, source: &str) -> MenuDef {
             _ => {}
         }
     }
-    MenuDef {
-        name,
-        items,
-        opaque: None,
-    }
+    MenuDef { name, items, opaque: None }
 }
 
 fn parse_item(expr: &Expr, source: &str) -> ItemDef {
@@ -128,38 +115,26 @@ fn parse_item(expr: &Expr, source: &str) -> ItemDef {
     let Expr::Path(path) = call.func.as_ref() else {
         return ItemDef::Opaque(text(expr, source));
     };
-    let name = path
-        .path
-        .segments
-        .last()
-        .map(|segment| segment.ident.to_string())
-        .unwrap_or_default();
+    let name =
+        path.path.segments.last().map(|segment| segment.ident.to_string()).unwrap_or_default();
 
     let mut args = call.args.iter();
     match name.as_str() {
         "separator" => ItemDef::Separator,
         "action" => match (args.next().and_then(string_of), args.next()) {
-            (Some(label), Some(action)) => ItemDef::Action {
+            (Some(label), Some(action)) => {
+                ItemDef::Action { label, action: path_text(action, source), os_action: None }
+            }
+            _ => ItemDef::Opaque(text(expr, source)),
+        },
+        "os_action" => match (args.next().and_then(string_of), args.next(), args.next()) {
+            (Some(label), Some(action), Some(os)) => ItemDef::Action {
                 label,
                 action: path_text(action, source),
-                os_action: None,
+                os_action: Some(last_segment(os).unwrap_or_else(|| text(os, source))),
             },
             _ => ItemDef::Opaque(text(expr, source)),
         },
-        "os_action" => {
-            match (
-                args.next().and_then(string_of),
-                args.next(),
-                args.next(),
-            ) {
-                (Some(label), Some(action), Some(os)) => ItemDef::Action {
-                    label,
-                    action: path_text(action, source),
-                    os_action: Some(last_segment(os).unwrap_or_else(|| text(os, source))),
-                },
-                _ => ItemDef::Opaque(text(expr, source)),
-            }
-        }
         _ => ItemDef::Opaque(text(expr, source)),
     }
 }
@@ -196,19 +171,12 @@ pub fn render(menus: &[MenuDef]) -> String {
 fn render_item(item: &ItemDef) -> String {
     match item {
         ItemDef::Separator => "MenuItem::separator()".into(),
-        ItemDef::Action {
-            label,
-            action,
-            os_action: None,
-        } => format!("MenuItem::action(\"{}\", {action})", escape(label)),
-        ItemDef::Action {
-            label,
-            action,
-            os_action: Some(os),
-        } => format!(
-            "MenuItem::os_action(\"{}\", {action}, OsAction::{os})",
-            escape(label)
-        ),
+        ItemDef::Action { label, action, os_action: None } => {
+            format!("MenuItem::action(\"{}\", {action})", escape(label))
+        }
+        ItemDef::Action { label, action, os_action: Some(os) } => {
+            format!("MenuItem::os_action(\"{}\", {action}, OsAction::{os})", escape(label))
+        }
         ItemDef::Opaque(source) => source.clone(),
     }
 }
@@ -227,9 +195,7 @@ fn macro_elements(expr: &Expr) -> Option<Vec<Expr>> {
 }
 
 fn path_ends_with(path: &syn::Path, name: &str) -> bool {
-    path.segments
-        .last()
-        .is_some_and(|segment| segment.ident == name)
+    path.segments.last().is_some_and(|segment| segment.ident == name)
 }
 
 fn string_of(expr: &Expr) -> Option<String> {
@@ -265,10 +231,7 @@ fn last_segment(expr: &Expr) -> Option<String> {
     let Expr::Path(path) = expr else {
         return None;
     };
-    path.path
-        .segments
-        .last()
-        .map(|segment| segment.ident.to_string())
+    path.path.segments.last().map(|segment| segment.ident.to_string())
 }
 
 fn text(expr: &Expr, source: &str) -> String {

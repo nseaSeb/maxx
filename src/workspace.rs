@@ -8,12 +8,12 @@ use gpui::{
 };
 use gpui::{ScrollHandle, ScrollStrategy, Task, UniformListScrollHandle};
 use gpui_component::Root;
+use gpui_component::Sizable as _;
 use gpui_component::input::{InputEvent, InputState};
+use gpui_component::menu::ContextMenuExt as _;
 use gpui_component::resizable::{ResizableState, h_resizable, resizable_panel};
 use gpui_component::scroll::Scrollbar;
 use gpui_component::spinner::Spinner;
-use gpui_component::Sizable as _;
-use gpui_component::menu::ContextMenuExt as _;
 use std::collections::HashMap;
 
 /// Which workspace lives in which window.
@@ -27,13 +27,13 @@ struct Workspaces(HashMap<WindowId, WeakEntity<Workspace>>);
 impl Global for Workspaces {}
 
 use crate::actions::OpenFolder;
+use crate::menu_model::ItemDef;
+use crate::menufile::{MenuFile, Selection};
 use crate::model::{Node, Path as NodePath};
 use crate::project::{Entry, Project, flatten};
 use crate::registry;
 use crate::registry::Kind;
 use crate::theme;
-use crate::menu_model::ItemDef;
-use crate::menufile::{MenuFile, Selection};
 use crate::view::View;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -69,10 +69,7 @@ fn clamp_selection(view: &mut View) {
 /// The workspace of the frontmost window, if there is one.
 fn active_workspace(cx: &App) -> Option<Entity<Workspace>> {
     let handle = cx.active_window()?;
-    cx.try_global::<Workspaces>()?
-        .0
-        .get(&handle.window_id())?
-        .upgrade()
+    cx.try_global::<Workspaces>()?.0.get(&handle.window_id())?.upgrade()
 }
 
 /// Runs `f` against the workspace of the frontmost window.
@@ -308,9 +305,8 @@ impl Workspace {
     /// later `Open Folder…` can reuse it.
     pub fn close_project(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.view().is_some_and(|view| view.dirty()) {
-            self.message = Some(SharedString::from(
-                "vue non enregistrée — ⌘S avant de fermer le projet",
-            ));
+            self.message =
+                Some(SharedString::from("vue non enregistrée — ⌘S avant de fermer le projet"));
             cx.notify();
             return;
         }
@@ -357,11 +353,7 @@ impl Workspace {
         self.preferences = false;
         if MenuFile::is_menu_file(&path) {
             // Already open and edited: reloading would drop those edits.
-            if self
-                .menu_file
-                .as_ref()
-                .is_some_and(|menus| menus.path == path)
-            {
+            if self.menu_file.as_ref().is_some_and(|menus| menus.path == path) {
                 self.selected = Some(path);
                 cx.notify();
                 return;
@@ -421,11 +413,8 @@ impl Workspace {
         let Some(view) = self.view() else {
             return Vec::new();
         };
-        let Some(state) = view
-            .root
-            .at(&view.selected)
-            .and_then(registry::of)
-            .and_then(|spec| spec.state)
+        let Some(state) =
+            view.root.at(&view.selected).and_then(registry::of).and_then(|spec| spec.state)
         else {
             return Vec::new();
         };
@@ -448,9 +437,8 @@ impl Workspace {
     /// Returns `true` when the caller must stop.
     fn discard_menu_edits(&mut self, cx: &mut Context<Self>) -> bool {
         if self.menu_file.as_ref().is_some_and(|menus| menus.dirty()) {
-            self.message = Some(SharedString::from(
-                "menus non enregistrés — ⌘S avant de changer de fichier",
-            ));
+            self.message =
+                Some(SharedString::from("menus non enregistrés — ⌘S avant de changer de fichier"));
             cx.notify();
             return true;
         }
@@ -459,10 +447,7 @@ impl Workspace {
 
     /// The text box bound to a field of the menu panel.
     pub(crate) fn menu_input(&self, field: MenuField) -> Option<&Entity<InputState>> {
-        self.menu_inputs
-            .iter()
-            .find(|(candidate, _)| *candidate == field)
-            .map(|(_, state)| state)
+        self.menu_inputs.iter().find(|(candidate, _)| *candidate == field).map(|(_, state)| state)
     }
 
     /// Rebuilds the menu panel's boxes when its selection changes.
@@ -521,10 +506,8 @@ impl Workspace {
                 }
             }
             (Selection::Item(menu, item), _) => {
-                if let Some(ItemDef::Action { label, action, .. }) = menus
-                    .menus
-                    .get_mut(menu)
-                    .and_then(|menu| menu.items.get_mut(item))
+                if let Some(ItemDef::Action { label, action, .. }) =
+                    menus.menus.get_mut(menu).and_then(|menu| menu.items.get_mut(item))
                 {
                     match field {
                         MenuField::Label => *label = value.to_string(),
@@ -545,10 +528,7 @@ impl Workspace {
         let Some(menus) = self.menu_file.as_ref() else {
             return;
         };
-        let Some(ItemDef::Action {
-            action, os_action, ..
-        }) = menus.selected_item()
-        else {
+        let Some(ItemDef::Action { action, os_action, .. }) = menus.selected_item() else {
             return;
         };
         if os_action.is_some() {
@@ -695,9 +675,7 @@ impl Workspace {
         let outdated = crate::scaffold::outdated_modules(&root);
 
         if outdated.is_empty() {
-            self.message = Some(SharedString::from(
-                "les modules de ce projet sont à jour",
-            ));
+            self.message = Some(SharedString::from("les modules de ce projet sont à jour"));
             cx.notify();
             return;
         }
@@ -786,9 +764,8 @@ impl Workspace {
 
         self.select_file(path, cx);
         if added && self.message.is_none() {
-            self.message = Some(SharedString::from(
-                "barre de menus ajoutée au projet et câblée dans main.rs",
-            ));
+            self.message =
+                Some(SharedString::from("barre de menus ajoutée au projet et câblée dans main.rs"));
         }
     }
 
@@ -835,11 +812,7 @@ impl Workspace {
         let item = if separator {
             ItemDef::Separator
         } else {
-            ItemDef::Action {
-                label: "Entrée".into(),
-                action: "MonAction".into(),
-                os_action: None,
-            }
+            ItemDef::Action { label: "Entrée".into(), action: "MonAction".into(), os_action: None }
         };
         menus.add_item(item);
         cx.notify();
@@ -857,9 +830,7 @@ impl Workspace {
     /// changed. Called once per frame from `render`, which is the only place
     /// holding both `&mut self` and a `Window`.
     fn sync_prop_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let key = self
-            .view()
-            .map(|view| (self.revision, view.selected.clone()));
+        let key = self.view().map(|view| (self.revision, view.selected.clone()));
         if key == self.synced {
             return;
         }
@@ -900,9 +871,8 @@ impl Workspace {
                 // through the revision counter, rebuild the field under the
                 // caret. One per visit to the field is the right grain.
                 InputEvent::Focus => {
-                    this.edit_snapshot = this
-                        .view()
-                        .map(|view| (view.path.clone(), view.root.clone()));
+                    this.edit_snapshot =
+                        this.view().map(|view| (view.path.clone(), view.root.clone()));
                 }
                 InputEvent::Blur => this.close_text_edit(cx),
                 InputEvent::PressEnter { .. } => this.close_text_edit(cx),
@@ -918,10 +888,7 @@ impl Workspace {
             return;
         };
         let selected = view.selected.clone();
-        let bound = view
-            .root
-            .at(&selected)
-            .and_then(|node| registry::read_binding(node, prop));
+        let bound = view.root.at(&selected).and_then(|node| registry::read_binding(node, prop));
         let fields = view.state_fields();
 
         let expression = match bound {
@@ -956,10 +923,7 @@ impl Workspace {
         if fields.is_empty() {
             return;
         }
-        let current = view
-            .root
-            .at(&selected)
-            .and_then(|node| registry::read_binding(node, prop));
+        let current = view.root.at(&selected).and_then(|node| registry::read_binding(node, prop));
         let index = current
             .and_then(|name| fields.iter().position(|field| field.name == name))
             .map(|index| (index + 1) % fields.len())
@@ -1110,10 +1074,7 @@ impl Workspace {
             return;
         }
         let selected = view.selected.clone();
-        let current = view
-            .root
-            .at(&selected)
-            .and_then(|node| registry::read(node, prop));
+        let current = view.root.at(&selected).and_then(|node| registry::read(node, prop));
         let index = current
             .and_then(|name| fields.iter().position(|field| *field == name))
             .map(|index| (index + 1) % fields.len())
@@ -1131,7 +1092,12 @@ impl Workspace {
     /// Writes a text property without disturbing the field being typed in: no
     /// undo checkpoint per keystroke, and no revision bump, so `sync` leaves the
     /// caret alone.
-    fn edit_prop_text(&mut self, prop: &'static crate::registry::Prop, value: &str, cx: &mut Context<Self>) {
+    fn edit_prop_text(
+        &mut self,
+        prop: &'static crate::registry::Prop,
+        value: &str,
+        cx: &mut Context<Self>,
+    ) {
         let Some(view) = self.view_mut() else {
             return;
         };
@@ -1158,7 +1124,12 @@ impl Workspace {
     }
 
     /// Writes a property of the selected node.
-    pub fn edit_prop(&mut self, prop: &'static crate::registry::Prop, value: &str, cx: &mut Context<Self>) {
+    pub fn edit_prop(
+        &mut self,
+        prop: &'static crate::registry::Prop,
+        value: &str,
+        cx: &mut Context<Self>,
+    ) {
         let Some(view) = self.view_mut() else {
             return;
         };
@@ -1193,16 +1164,9 @@ impl Workspace {
         }
 
         let selected = view.selected.clone();
-        let accepts_children = view
-            .root
-            .at(&selected)
-            .and_then(registry::of)
-            .is_some_and(|spec| spec.container);
-        let child_count = view
-            .root
-            .at(&selected)
-            .map(|node| node.children.len())
-            .unwrap_or(0);
+        let accepts_children =
+            view.root.at(&selected).and_then(registry::of).is_some_and(|spec| spec.container);
+        let child_count = view.root.at(&selected).map(|node| node.children.len()).unwrap_or(0);
 
         let destination = if accepts_children {
             let mut path = selected.clone();
@@ -1247,9 +1211,8 @@ impl Workspace {
             return;
         };
         if self.run_state == crate::run::State::Running {
-            self.message = Some(SharedString::from(
-                "une exécution est déjà en cours — ⌘. pour l'arrêter",
-            ));
+            self.message =
+                Some(SharedString::from("une exécution est déjà en cours — ⌘. pour l'arrêter"));
             cx.notify();
             return;
         }
@@ -1261,11 +1224,7 @@ impl Workspace {
         crate::settings::update_prefs(cx, |preferences| preferences.show_output = true);
         self.message = None;
 
-        let receiver = if prewarm {
-            crate::run::prewarm(root)
-        } else {
-            crate::run::start(root)
-        };
+        let receiver = if prewarm { crate::run::prewarm(root) } else { crate::run::start(root) };
         self.run_task = Some(cx.spawn(async move |workspace, cx| {
             loop {
                 let mut lines = Vec::new();
@@ -1295,9 +1254,7 @@ impl Workspace {
                         }
                         // Follow the tail, the way a terminal does.
                         if let Some(last) = workspace.run_output.len().checked_sub(1) {
-                            workspace
-                                .output_scroll
-                                .scroll_to_item(last, ScrollStrategy::Top);
+                            workspace.output_scroll.scroll_to_item(last, ScrollStrategy::Top);
                         }
                         cx.notify();
                     });
@@ -1309,9 +1266,7 @@ impl Workspace {
                 if finished.is_some() {
                     return;
                 }
-                cx.background_executor()
-                    .timer(std::time::Duration::from_millis(80))
-                    .await;
+                cx.background_executor().timer(std::time::Duration::from_millis(80)).await;
             }
         }));
         cx.notify();
@@ -1373,9 +1328,8 @@ impl Workspace {
                     return;
                 }
                 if destination.len() > from.len() && destination.starts_with(&from) {
-                    self.message = Some(SharedString::from(
-                        "un nœud ne peut pas être déposé dans lui-même",
-                    ));
+                    self.message =
+                        Some(SharedString::from("un nœud ne peut pas être déposé dans lui-même"));
                     cx.notify();
                     return;
                 }
@@ -1403,10 +1357,8 @@ impl Workspace {
         let Some(spec) = registry::of(node) else {
             return;
         };
-        let Some(prop) = spec
-            .props
-            .iter()
-            .find(|prop| matches!(prop.kind, crate::registry::Kind::Handler))
+        let Some(prop) =
+            spec.props.iter().find(|prop| matches!(prop.kind, crate::registry::Kind::Handler))
         else {
             return;
         };
@@ -1491,9 +1443,7 @@ impl Workspace {
 
     /// The entry the project panel is on, falling back to the project root.
     pub fn selected_entry(&self) -> Option<PathBuf> {
-        self.selected
-            .clone()
-            .or_else(|| self.project.as_ref().map(|project| project.root.clone()))
+        self.selected.clone().or_else(|| self.project.as_ref().map(|project| project.root.clone()))
     }
 
     /// Moves the selected entry to the Trash, unregistering it when it is a
@@ -1507,9 +1457,8 @@ impl Workspace {
         };
         let root = project.root.clone();
         let Some(path) = self.selected.clone() else {
-            self.message = Some(SharedString::from(
-                "sélectionnez d'abord un élément dans l'explorateur",
-            ));
+            self.message =
+                Some(SharedString::from("sélectionnez d'abord un élément dans l'explorateur"));
             cx.notify();
             return;
         };
@@ -1596,9 +1545,7 @@ impl Workspace {
         self.selected = None;
         self.expanded.retain(|expanded| !gone(expanded));
         self.refresh_entries();
-        self.message = Some(SharedString::from(format!(
-            "{name} déplacé vers la corbeille"
-        )));
+        self.message = Some(SharedString::from(format!("{name} déplacé vers la corbeille")));
         cx.notify();
     }
 
@@ -1771,9 +1718,8 @@ impl Workspace {
             .clone()
             .filter(|path| path.extension().is_some_and(|extension| extension == "rs"))
         else {
-            self.message = Some(SharedString::from(
-                "sélectionnez un fichier .rs dans l'explorateur",
-            ));
+            self.message =
+                Some(SharedString::from("sélectionnez un fichier .rs dans l'explorateur"));
             cx.notify();
             return;
         };
@@ -1867,12 +1813,7 @@ impl Workspace {
                     .justify_center()
                     .gap_2()
                     .child(div().child(title))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(theme::TEXT_MUTED))
-                            .child(subtitle),
-                    ),
+                    .child(div().text_xs().text_color(rgb(theme::TEXT_MUTED)).child(subtitle)),
             )
     }
 
@@ -1937,25 +1878,15 @@ impl Workspace {
                 menu.menu("Nouvelle vue", Box::new(crate::actions::NewView))
                     .menu("Supprimer", Box::new(crate::actions::DeleteFile))
                     .separator()
-                    .menu(
-                        "Révéler dans le Finder",
-                        Box::new(crate::actions::RevealInFinder),
-                    )
-                    .menu(
-                        format!("Ouvrir dans {editor}"),
-                        Box::new(crate::actions::OpenInZed),
-                    )
+                    .menu("Révéler dans le Finder", Box::new(crate::actions::RevealInFinder))
+                    .menu(format!("Ouvrir dans {editor}"), Box::new(crate::actions::OpenInZed))
             })
     }
 
     fn render_entry(&self, entry: Entry, cx: &mut Context<Self>) -> AnyElement {
         let is_selected = self.selected.as_deref() == Some(entry.path.as_path());
         let is_expanded = self.expanded.contains(&entry.path);
-        let marker = if entry.is_dir {
-            if is_expanded { "▾" } else { "▸" }
-        } else {
-            " "
-        };
+        let marker = if entry.is_dir { if is_expanded { "▾" } else { "▸" } } else { " " };
         let path = entry.path.clone();
         let is_dir = entry.is_dir;
 
@@ -2026,9 +1957,7 @@ impl Workspace {
             .gap_4()
             .child(div().text_2xl().child("maxx"))
             .child(
-                div()
-                    .text_color(rgb(theme::TEXT_MUTED))
-                    .child("Ouvrez un dossier pour commencer."),
+                div().text_color(rgb(theme::TEXT_MUTED)).child("Ouvrez un dossier pour commencer."),
             )
             .child(
                 div()
@@ -2045,12 +1974,7 @@ impl Workspace {
                         window.dispatch_action(Box::new(OpenFolder), cx);
                     })),
             )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(theme::TEXT_MUTED))
-                    .child("⌘O"),
-            )
+            .child(div().text_xs().text_color(rgb(theme::TEXT_MUTED)).child("⌘O"))
             .children(self.render_recent_projects(cx))
             .into_any_element()
     }
@@ -2086,12 +2010,7 @@ impl Workspace {
                 .cursor_pointer()
                 .hover(|this| this.bg(rgb(theme::HOVER_BG)))
                 .child(div().child(name))
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(theme::TEXT_MUTED))
-                        .child(parent),
-                )
+                .child(div().text_xs().text_color(rgb(theme::TEXT_MUTED)).child(parent))
                 .on_click(cx.listener(move |_, _, window, cx| {
                     window.dispatch_action(Box::new(crate::actions::OpenRecent { index }), cx);
                 }))
@@ -2189,31 +2108,35 @@ impl Workspace {
                     .relative()
                     .flex_1()
                     .overflow_hidden()
-                    .child(uniform_list(
-                    "run-output",
-                    lines.len(),
-                    cx.processor(move |this, range: std::ops::Range<usize>, _window, _cx| {
-                        range
-                            .filter_map(|index| this.run_output.get(index).cloned())
-                            .map(|line| {
-                                div()
-                                    .px_3()
-                                    .text_xs()
-                                    .font_family("Menlo")
-                                    .text_color(rgb(if line.contains("error") {
-                                        0xe06c75
-                                    } else if line.contains("warning") {
-                                        0xe5c07b
-                                    } else {
-                                        theme::TEXT_MUTED
-                                    }))
-                                    .child(line)
-                            })
-                            .collect::<Vec<_>>()
-                    }),
+                    .child(
+                        uniform_list(
+                            "run-output",
+                            lines.len(),
+                            cx.processor(
+                                move |this, range: std::ops::Range<usize>, _window, _cx| {
+                                    range
+                                        .filter_map(|index| this.run_output.get(index).cloned())
+                                        .map(|line| {
+                                            div()
+                                                .px_3()
+                                                .text_xs()
+                                                .font_family("Menlo")
+                                                .text_color(rgb(if line.contains("error") {
+                                                    0xe06c75
+                                                } else if line.contains("warning") {
+                                                    0xe5c07b
+                                                } else {
+                                                    theme::TEXT_MUTED
+                                                }))
+                                                .child(line)
+                                        })
+                                        .collect::<Vec<_>>()
+                                },
+                            ),
+                        )
+                        .track_scroll(self.output_scroll.clone())
+                        .size_full(),
                     )
-                    .track_scroll(self.output_scroll.clone())
-                    .size_full())
                     .child(
                         div()
                             .absolute()
@@ -2226,9 +2149,7 @@ impl Workspace {
     }
 
     fn render_status_bar(&self) -> impl IntoElement {
-        let conflict = self
-            .view()
-            .is_some_and(|view| self.conflicts.contains(&view.path));
+        let conflict = self.view().is_some_and(|view| self.conflicts.contains(&view.path));
         if let Some(menus) = self.menu_file.as_ref() {
             let label = match &self.message {
                 Some(message) => message.clone(),
@@ -2261,11 +2182,9 @@ impl Workspace {
                 if conflict { " ⚠ modifié en dehors de maxx" } else { "" },
                 view.root.count()
             )),
-            (None, None, Some(project)) => SharedString::from(format!(
-                "{} · {} éléments",
-                project.name,
-                self.entries.len()
-            )),
+            (None, None, Some(project)) => {
+                SharedString::from(format!("{} · {} éléments", project.name, self.entries.len()))
+            }
             (None, None, None) => SharedString::from("Aucun projet"),
         };
 
@@ -2319,9 +2238,7 @@ impl Render for Workspace {
         // ici qu'on la relit pour la retenir. En mémoire seulement, comme la
         // géométrie de la fenêtre : un fichier par image de glissement serait
         // absurde, et `settings::flush` l'écrit à l'extinction.
-        if show_panel
-            && let Some(largeur) = self.panel_split.read(cx).sizes().first().copied()
-        {
+        if show_panel && let Some(largeur) = self.panel_split.read(cx).sizes().first().copied() {
             let largeur = f32::from(largeur);
             if largeur > 0. {
                 crate::settings::stage_state(cx, |state| state.panel_width = Some(largeur));
@@ -2362,9 +2279,7 @@ impl Render for Workspace {
                     }),
             )
             .when(visible.show_output, |this| this.child(self.render_output(cx)))
-            .when(visible.show_status_bar, |this| {
-                this.child(self.render_status_bar())
-            })
+            .when(visible.show_status_bar, |this| this.child(self.render_status_bar()))
     }
 }
 
@@ -2399,10 +2314,8 @@ pub fn open_workspace_window(path: Option<PathBuf>, cx: &mut App) {
         remember_project(path, cx);
     }
     let project = path.clone().map(Project::open);
-    let title = project
-        .as_ref()
-        .map(|project| project.name.clone())
-        .unwrap_or_else(|| "maxx".into());
+    let title =
+        project.as_ref().map(|project| project.name.clone()).unwrap_or_else(|| "maxx".into());
 
     // Only the first window takes the saved geometry: handing it to a second
     // one would place it exactly over the first, pixel for pixel, hiding the
@@ -2444,9 +2357,7 @@ pub fn open_workspace_window(path: Option<PathBuf>, cx: &mut App) {
         return;
     };
     if let Some(workspace) = created.borrow().as_ref() {
-        cx.default_global::<Workspaces>()
-            .0
-            .insert(handle.window_id(), workspace.downgrade());
+        cx.default_global::<Workspaces>().0.insert(handle.window_id(), workspace.downgrade());
     }
     if let Some(path) = path {
         cx.add_recent_document(&path);
@@ -2521,10 +2432,7 @@ pub fn unregister_view(root: &std::path::Path, module: &str) {
         return;
     };
     let declaration = format!("pub mod {module};");
-    let kept: Vec<&str> = source
-        .lines()
-        .filter(|line| line.trim() != declaration)
-        .collect();
+    let kept: Vec<&str> = source.lines().filter(|line| line.trim() != declaration).collect();
     let mut out = kept.join("\n");
     if !out.is_empty() {
         out.push('\n');
@@ -2568,12 +2476,8 @@ pub fn notify_all(cx: &mut App) {
     // the preferences screen. Leasing an entity that is already leased aborts
     // the process, so the notifications wait for the current update to finish.
     cx.defer(|cx: &mut App| {
-        let workspaces: Vec<WeakEntity<Workspace>> = cx
-            .default_global::<Workspaces>()
-            .0
-            .values()
-            .cloned()
-            .collect();
+        let workspaces: Vec<WeakEntity<Workspace>> =
+            cx.default_global::<Workspaces>().0.values().cloned().collect();
         for workspace in workspaces {
             if let Some(workspace) = workspace.upgrade() {
                 workspace.update(cx, |_, cx| cx.notify());

@@ -377,12 +377,7 @@ fn walk(source: &str, key: &str) -> (Option<Member>, Option<usize>) {
         let value_start = skip_trivia(bytes, colon + 1);
         let value_end = end_of_value(bytes, value_start);
         if matched {
-            return (
-                Some(Member {
-                    value: value_start..value_end,
-                }),
-                Some(after_brace),
-            );
+            return (Some(Member { value: value_start..value_end }), Some(after_brace));
         }
 
         index = skip_trivia(bytes, value_end);
@@ -406,11 +401,7 @@ fn walk(source: &str, key: &str) -> (Option<Member>, Option<usize>) {
 pub fn splice_key(source: &str, key: &str, value: &str) -> Option<String> {
     let (member, _) = walk(source, key);
     let member = member?;
-    Some(format!(
-        "{}{value}{}",
-        &source[..member.value.start],
-        &source[member.value.end..]
-    ))
+    Some(format!("{}{value}{}", &source[..member.value.start], &source[member.value.end..]))
 }
 
 /// Adds `key` to a flat object, right after its opening brace.
@@ -429,11 +420,7 @@ pub fn append_key(source: &str, key: &str, value: &str) -> String {
     let empty = next >= bytes.len() || bytes[next] == b'}';
     let separator = if empty { "" } else { "," };
 
-    format!(
-        "{}\n  \"{key}\": {value}{separator}{}",
-        &source[..insert_at],
-        &source[insert_at..]
-    )
+    format!("{}\n  \"{key}\": {value}{separator}{}", &source[..insert_at], &source[insert_at..])
 }
 
 /// Writes the preferences into `source`, changing as few bytes as possible.

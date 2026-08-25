@@ -12,15 +12,15 @@ use gpui_component::divider::Divider;
 use gpui_component::group_box::GroupBox;
 use gpui_component::input::Input;
 use gpui_component::label::Label;
-use gpui_component::switch::Switch;
 use gpui_component::scroll::Scrollbar;
+use gpui_component::switch::Switch;
 use gpui_component::{Sizable as _, h_flex, v_flex};
 
+use crate::menufile::Selection;
 use crate::model::{Call, Node, Path};
-use gpui::{Pixels, Point, Window};
 use crate::registry::{self, Kind, Prop, Spec};
 use crate::theme;
-use crate::menufile::Selection;
+use gpui::{Pixels, Point, Window};
 use gpui_component::resizable::{h_resizable, resizable_panel};
 
 use crate::workspace::{MenuField, Workspace};
@@ -81,25 +81,20 @@ impl Workspace {
             .child(
                 // Not `h_flex`: it centres its children vertically, which would
                 // leave the side panel floating in the middle of the window.
-                div()
-                    .flex()
-                    .flex_row()
-                    .flex_1()
-                    .overflow_hidden()
-                    .child(
-                        h_resizable("inspecteur")
-                            .with_state(&self.inspector_split)
-                            .child(resizable_panel().child(self.render_canvas(cx)))
-                            .child(
-                                resizable_panel()
-                                    .size(px(self.inspector_width(cx)))
-                                    // En dessous, les champs de l'inspecteur se
-                                    // replient sur eux-mêmes ; au-delà, il ne
-                                    // reste plus de canvas à dessiner.
-                                    .size_range(px(220.)..px(560.))
-                                    .child(self.render_side_panels(cx)),
-                            ),
-                    ),
+                div().flex().flex_row().flex_1().overflow_hidden().child(
+                    h_resizable("inspecteur")
+                        .with_state(&self.inspector_split)
+                        .child(resizable_panel().child(self.render_canvas(cx)))
+                        .child(
+                            resizable_panel()
+                                .size(px(self.inspector_width(cx)))
+                                // En dessous, les champs de l'inspecteur se
+                                // replient sur eux-mêmes ; au-delà, il ne
+                                // reste plus de canvas à dessiner.
+                                .size_range(px(220.)..px(560.))
+                                .child(self.render_side_panels(cx)),
+                        ),
+                ),
             )
             .into_any_element()
     }
@@ -284,9 +279,7 @@ impl Workspace {
                                     "→ {}",
                                     crate::tools::editor_label(cx)
                                 )))
-                                .on_click(
-                                    cx.listener(|this, _, _, cx| this.open_menu_handler(cx)),
-                                ),
+                                .on_click(cx.listener(|this, _, _, cx| this.open_menu_handler(cx))),
                         )
                     })
                     .into_any_element(),
@@ -311,21 +304,16 @@ impl Workspace {
     /// The drawing surface: the tree rendered with real components.
     fn render_canvas(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let view = self.view().expect("checked by the caller");
-        div()
-            .flex()
-            .flex_1()
-            .p_6()
-            .justify_center()
-            .child(
-                div()
-                    .w(px(520.))
-                    .p_2()
-                    .rounded_md()
-                    .border_1()
-                    .border_color(rgb(theme::BORDER))
-                    .bg(rgb(theme::PANEL_BG))
-                    .child(node_element(&view.root, &[], &view.selected, cx)),
-            )
+        div().flex().flex_1().p_6().justify_center().child(
+            div()
+                .w(px(520.))
+                .p_2()
+                .rounded_md()
+                .border_1()
+                .border_color(rgb(theme::BORDER))
+                .bg(rgb(theme::PANEL_BG))
+                .child(node_element(&view.root, &[], &view.selected, cx)),
+        )
     }
 
     /// Tree, inspector and palette, stacked on the right.
@@ -379,9 +367,8 @@ impl Workspace {
             ));
         });
 
-        v_flex()
-            .child(section_title("Structure"))
-            .children(rows.into_iter().map(|(path, label, depth, selected)| {
+        v_flex().child(section_title("Structure")).children(rows.into_iter().map(
+            |(path, label, depth, selected)| {
                 let target = path.clone();
                 div()
                     .id(SharedString::from(format!("tree-{path:?}")))
@@ -397,7 +384,8 @@ impl Workspace {
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.select(target.clone(), cx);
                     }))
-            }))
+            },
+        ))
     }
 
     /// Property editor for the selected node, driven by the catalogue.
@@ -496,19 +484,14 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let current = registry::read(node, prop).unwrap_or_default();
-        let row = h_flex()
-            .items_center()
-            .gap_2()
-            .px_3()
-            .py_1()
-            .child(
-                div()
-                    .w(px(90.))
-                    .flex_none()
-                    .text_xs()
-                    .text_color(rgb(theme::TEXT_MUTED))
-                    .child(prop.label),
-            );
+        let row = h_flex().items_center().gap_2().px_3().py_1().child(
+            div()
+                .w(px(90.))
+                .flex_none()
+                .text_xs()
+                .text_color(rgb(theme::TEXT_MUTED))
+                .child(prop.label),
+        );
 
         match prop.kind {
             // The state panel knows which fields can back an input; making the
@@ -531,9 +514,9 @@ impl Workspace {
                         } else {
                             SharedString::from(current)
                         })
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.cycle_input_field(prop, cx)
-                        })),
+                        .on_click(
+                            cx.listener(move |this, _, _, cx| this.cycle_input_field(prop, cx)),
+                        ),
                 )
             }
             Kind::Text if registry::read_binding(node, prop).is_some() => {
@@ -555,35 +538,35 @@ impl Workspace {
             }
             Kind::Text | Kind::Field | Kind::Handler | Kind::Number | Kind::Color => {
                 match self.prop_input(prop) {
-                Some(state) if matches!(prop.kind, Kind::Handler) => row
-                    .child(div().flex_1().child(Input::new(state).small()))
-                    .child(
+                    Some(state) if matches!(prop.kind, Kind::Handler) => {
+                        row.child(div().flex_1().child(Input::new(state).small())).child(
+                            div()
+                                .id(SharedString::from(format!("goto-{}", prop.label)))
+                                .px_2()
+                                .rounded_sm()
+                                .text_xs()
+                                .cursor_pointer()
+                                .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+                                .child("→ Zed")
+                                .on_click(
+                                    cx.listener(move |this, _, _, cx| this.open_handler(prop, cx)),
+                                ),
+                        )
+                    }
+                    Some(state) if matches!(prop.kind, Kind::Text) => row
+                        .child(div().flex_1().child(Input::new(state).small()))
+                        .child(binding_toggle(spec, prop, false, cx)),
+                    Some(state) => row.child(div().flex_1().child(Input::new(state).small())),
+                    // No input this frame: the sync runs at the top of `render`, so
+                    // this only shows for a frame after a selection change.
+                    None => row.child(
                         div()
-                            .id(SharedString::from(format!("goto-{}", prop.label)))
+                            .flex_1()
                             .px_2()
                             .rounded_sm()
-                            .text_xs()
-                            .cursor_pointer()
-                            .hover(|this| this.bg(rgb(theme::HOVER_BG)))
-                            .child("→ Zed")
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.open_handler(prop, cx)
-                            })),
+                            .bg(rgb(theme::BG))
+                            .child(SharedString::from(current)),
                     ),
-                Some(state) if matches!(prop.kind, Kind::Text) => row
-                    .child(div().flex_1().child(Input::new(state).small()))
-                    .child(binding_toggle(spec, prop, false, cx)),
-                Some(state) => row.child(div().flex_1().child(Input::new(state).small())),
-                // No input this frame: the sync runs at the top of `render`, so
-                // this only shows for a frame after a selection change.
-                None => row.child(
-                    div()
-                        .flex_1()
-                        .px_2()
-                        .rounded_sm()
-                        .bg(rgb(theme::BG))
-                        .child(SharedString::from(current)),
-                ),
                 }
             }
             Kind::Bool => {
@@ -691,9 +674,8 @@ impl Workspace {
 
     /// The component palette. Clicking inserts into the selected container.
     fn render_palette(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
-            .child(section_title("Composants"))
-            .children(registry::CATALOGUE.iter().map(|spec| {
+        v_flex().child(section_title("Composants")).children(registry::CATALOGUE.iter().map(
+            |spec| {
                 div()
                     .id(SharedString::from(format!("palette-{}", spec.id)))
                     .px_3()
@@ -702,14 +684,13 @@ impl Workspace {
                     .hover(|this| this.bg(rgb(theme::HOVER_BG)))
                     .child(spec.label)
                     .on_drag(Dragged::Component(spec.id), move |_, _: Point<Pixels>, _, cx| {
-                        cx.new(|_| DragGhost {
-                            label: SharedString::from(spec.label),
-                        })
+                        cx.new(|_| DragGhost { label: SharedString::from(spec.label) })
                     })
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.insert_component(spec.id, cx);
                     }))
-            }))
+            },
+        ))
     }
 }
 
@@ -909,20 +890,13 @@ fn node_element(
         .when(!path.is_empty(), |this| {
             // The root has nowhere to go, so it is the one node that is not
             // draggable.
-            this.on_drag(
-                Dragged::Node(drag_path),
-                move |_, _: Point<Pixels>, _, cx| {
-                    let label = dragged_label.clone();
-                    cx.new(|_| DragGhost { label })
-                },
-            )
+            this.on_drag(Dragged::Node(drag_path), move |_, _: Point<Pixels>, _, cx| {
+                let label = dragged_label.clone();
+                cx.new(|_| DragGhost { label })
+            })
         })
         .border_1()
-        .border_color(rgb(if is_selected {
-            theme::ACCENT
-        } else {
-            theme::BG
-        }))
+        .border_color(rgb(if is_selected { theme::ACCENT } else { theme::BG }))
         .rounded_sm()
         .cursor_pointer()
         .child(preview(node, path, selected, cx))
@@ -963,11 +937,7 @@ fn preview(
 
     match node.base.path() {
         Some("v_flex") | Some("h_flex") => {
-            let base = if node.base.path() == Some("v_flex") {
-                v_flex()
-            } else {
-                h_flex()
-            };
+            let base = if node.base.path() == Some("v_flex") { v_flex() } else { h_flex() };
             let vertical = node.base.path() == Some("v_flex");
             apply(base, &node.calls)
                 .min_h(px(16.))
@@ -988,9 +958,7 @@ fn preview(
             .children(children_with_zones(node, path, selected, true, cx))
             .into_any_element(),
         Some("Divider::horizontal") => match node.call("label") {
-            Some(_) => Divider::horizontal()
-                .label(call_text(node, "label", ""))
-                .into_any_element(),
+            Some(_) => Divider::horizontal().label(call_text(node, "label", "")).into_any_element(),
             None => Divider::horizontal().into_any_element(),
         },
         // A hand-written `div()` can hold children; only an empty one is the

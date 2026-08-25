@@ -26,16 +26,10 @@ fn recent_projects_menu(cx: &App) -> MenuItem {
                 .unwrap_or_else(|| path.to_string_lossy().into_owned());
             MenuItem::action(label, OpenRecent { index })
         })
-        .chain([
-            MenuItem::separator(),
-            MenuItem::action("Vider la liste", ClearRecentProjects),
-        ])
+        .chain([MenuItem::separator(), MenuItem::action("Vider la liste", ClearRecentProjects)])
         .collect();
 
-    MenuItem::submenu(Menu {
-        name: "Ouvrir un élément récent".into(),
-        items,
-    })
+    MenuItem::submenu(Menu { name: "Ouvrir un élément récent".into(), items })
 }
 
 /// Builds the whole menu bar.
@@ -152,14 +146,8 @@ pub fn app_menus(cx: &App) -> Vec<Menu> {
         },
         Menu {
             name: "Fenêtre".into(),
-            items: vec![
-                MenuItem::action("Réduire", Minimize),
-                MenuItem::action("Zoom", Zoom),
-            ],
+            items: vec![MenuItem::action("Réduire", Minimize), MenuItem::action("Zoom", Zoom)],
         },
-        Menu {
-            name: "Aide".into(),
-            items: vec![MenuItem::action("Documentation GPUI", OpenDocs)],
-        },
+        Menu { name: "Aide".into(), items: vec![MenuItem::action("Documentation GPUI", OpenDocs)] },
     ]
 }

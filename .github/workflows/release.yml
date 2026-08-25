@@ -62,6 +62,12 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # Ne compile rien : c'est la vérification la moins chère de toutes, et
+      # elle évite qu'un `cargo fmt` de contributeur noie son vrai changement
+      # dans un reformatage de fichier entier.
+      - name: Mise en forme
+        run: cargo fmt --check
+
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 

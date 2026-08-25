@@ -23,10 +23,7 @@ impl Project {
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| root.to_string_lossy().into_owned());
 
-        Self {
-            root,
-            name: name.into(),
-        }
+        Self { root, name: name.into() }
     }
 }
 
@@ -62,19 +59,12 @@ pub fn read_children(dir: &Path, depth: usize) -> Vec<Entry> {
             }
 
             let is_dir = entry.file_type().map(|ty| ty.is_dir()).unwrap_or(false);
-            Some(Entry {
-                path: entry.path(),
-                name: name.into(),
-                is_dir,
-                depth,
-            })
+            Some(Entry { path: entry.path(), name: name.into(), is_dir, depth })
         })
         .collect();
 
     entries.sort_by(|a, b| {
-        b.is_dir
-            .cmp(&a.is_dir)
-            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        b.is_dir.cmp(&a.is_dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
     entries
 }

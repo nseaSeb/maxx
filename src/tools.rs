@@ -208,18 +208,18 @@ pub fn on_path(command: &str) -> bool {
     let extensions: Vec<String> = if cfg!(target_os = "windows") {
         let list = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into());
         std::iter::once(String::new())
-            .chain(list.split(';').filter(|part| !part.is_empty()).map(|part| {
-                part.to_ascii_lowercase()
-            }))
+            .chain(
+                list.split(';')
+                    .filter(|part| !part.is_empty())
+                    .map(|part| part.to_ascii_lowercase()),
+            )
             .collect()
     } else {
         vec![String::new()]
     };
 
     std::env::split_paths(&path).any(|directory| {
-        extensions
-            .iter()
-            .any(|extension| directory.join(format!("{command}{extension}")).is_file())
+        extensions.iter().any(|extension| directory.join(format!("{command}{extension}")).is_file())
     })
 }
 
@@ -232,10 +232,7 @@ fn bundle_installed(bundle: &str) -> bool {
         .iter()
         .any(|directory| Path::new(directory).join(format!("{bundle}.app")).is_dir())
         || std::env::var("HOME").is_ok_and(|home| {
-            Path::new(&home)
-                .join("Applications")
-                .join(format!("{bundle}.app"))
-                .is_dir()
+            Path::new(&home).join("Applications").join(format!("{bundle}.app")).is_dir()
         })
 }
 
@@ -260,10 +257,7 @@ pub fn installed_editors() -> Vec<&'static Editor> {
 
 /// The terminals found on this machine.
 pub fn installed_terminals() -> Vec<&'static Terminal> {
-    TERMINALS
-        .iter()
-        .filter(|terminal| terminal.installed())
-        .collect()
+    TERMINALS.iter().filter(|terminal| terminal.installed()).collect()
 }
 
 /// The editor to use: the one chosen, or the first installed.
@@ -274,17 +268,14 @@ pub fn installed_terminals() -> Vec<&'static Terminal> {
 pub fn editor(cx: &App) -> Option<&'static Editor> {
     let chosen = crate::settings::prefs(cx).editor.clone();
     if chosen != AUTOMATIC
-        && let Some(editor) = EDITORS
-            .iter()
-            .find(|editor| editor.id == chosen && editor.installed())
+        && let Some(editor) =
+            EDITORS.iter().find(|editor| editor.id == chosen && editor.installed())
     {
         return Some(editor);
     }
 
-    let from_environment = ["VISUAL", "EDITOR"]
-        .iter()
-        .filter_map(|name| std::env::var(name).ok())
-        .find_map(|value| {
+    let from_environment =
+        ["VISUAL", "EDITOR"].iter().filter_map(|name| std::env::var(name).ok()).find_map(|value| {
             let command = value.split_whitespace().next()?.to_string();
             let name = Path::new(&command).file_name()?.to_string_lossy().into_owned();
             EDITORS.iter().find(|editor| editor.command == name)
@@ -298,9 +289,8 @@ pub fn terminal(cx: &App) -> Option<&'static Terminal> {
     // An editor or a terminal chosen on another machine, or since uninstalled,
     // falls back rather than running a command that is not there.
     if chosen != AUTOMATIC
-        && let Some(terminal) = TERMINALS
-            .iter()
-            .find(|terminal| terminal.id == chosen && terminal.installed())
+        && let Some(terminal) =
+            TERMINALS.iter().find(|terminal| terminal.id == chosen && terminal.installed())
     {
         return Some(terminal);
     }
@@ -309,9 +299,7 @@ pub fn terminal(cx: &App) -> Option<&'static Terminal> {
 
 /// What the menu bar and the inspector call the chosen editor.
 pub fn editor_label(cx: &App) -> String {
-    editor(cx)
-        .map(|editor| editor.label.to_string())
-        .unwrap_or_else(|| "l'éditeur".into())
+    editor(cx).map(|editor| editor.label.to_string()).unwrap_or_else(|| "l'éditeur".into())
 }
 
 /// Opens `path` in the chosen editor, at `line` when there is one.

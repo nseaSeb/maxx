@@ -25,9 +25,8 @@ fn every_demo_view_reads_back() {
         if path.file_name().is_some_and(|name| name == "mod.rs") {
             continue;
         }
-        let view = View::load(&path).unwrap_or_else(|error| {
-            panic!("{} ne se relit pas : {error}", path.display())
-        });
+        let view = View::load(&path)
+            .unwrap_or_else(|error| panic!("{} ne se relit pas : {error}", path.display()));
         assert!(
             !view.root.children.is_empty(),
             "{} : arbre vide, la région gérée est mal repérée",

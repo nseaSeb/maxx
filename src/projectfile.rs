@@ -67,13 +67,7 @@ pub fn save(root: &Path, file: &ProjectFile) -> std::io::Result<()> {
 /// Note qu'un module a été copié, avec sa version et son empreinte.
 pub fn record(root: &Path, module: &str, version: u32, body: &str) -> std::io::Result<()> {
     let mut file = load(root);
-    file.modules.insert(
-        module.to_string(),
-        Module {
-            version,
-            empreinte: fingerprint(body),
-        },
-    );
+    file.modules.insert(module.to_string(), Module { version, empreinte: fingerprint(body) });
     save(root, &file)
 }
 

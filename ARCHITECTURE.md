@@ -336,6 +336,22 @@ Il reste que rustfmt met en forme le fichier entier, donc au-delà de la zone
 gérée. Sur un projet déjà passé au formateur cela ne change rien ailleurs ; sur
 un projet qui l'ignore, le réglage s'éteint.
 
+## La mise en forme du dépôt
+
+maxx passe à `rustfmt`, avec une seule dérogation : `use_small_heuristics =
+"Max"`, qui laisse une expression courte tenir sur sa ligne. C'est ce qui
+préserve les tables de `registry.rs`, le fichier qu'on invite les autres à
+étendre — y lire une liste de styles à raison d'un mot par ligne serait une
+punition. Le reste est le rustfmt par défaut.
+
+La raison de s'y plier est la même que pour les projets générés : un éditeur
+Rust formate à l'enregistrement. Sans référence commune, le premier
+contributeur qui ouvre un fichier dans Zed le reformate en entier et son vrai
+changement se noie dedans. `cargo fmt --check` en CI clôt la question.
+
+La démo a son propre `rustfmt.toml`, vide, et n'est donc pas concernée : elle
+doit être mise en forme comme un projet généré ailleurs, au rustfmt par défaut.
+
 ## La démo comme référence
 
 `demo/` est un projet complet, versionné, avec sa propre racine d'espace de

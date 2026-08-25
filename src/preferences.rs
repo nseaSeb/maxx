@@ -93,9 +93,8 @@ fn tools_page() -> SettingPage {
     // A terminal editor is driven through the chosen terminal, so the two
     // choices are not independent — worth saying rather than leaving to be
     // discovered on a click that does nothing.
-    let bound = crate::tools::EDITORS
-        .iter()
-        .any(|editor| editor.terminal_bound && editor.installed());
+    let bound =
+        crate::tools::EDITORS.iter().any(|editor| editor.terminal_bound && editor.installed());
 
     SettingPage::new("Outils").group(
         SettingGroup::new()

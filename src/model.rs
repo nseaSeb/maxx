@@ -61,18 +61,12 @@ pub struct Call {
 impl Call {
     /// A call with no arguments, e.g. `.flex_1()`.
     pub fn bare(name: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            args: Vec::new(),
-        }
+        Self { name: name.into(), args: Vec::new() }
     }
 
     /// A call with a single argument.
     pub fn with(name: impl Into<String>, arg: Arg) -> Self {
-        Self {
-            name: name.into(),
-            args: vec![arg],
-        }
+        Self { name: name.into(), args: vec![arg] }
     }
 }
 
@@ -120,10 +114,7 @@ impl Node {
     /// A node with the given constructor and no arguments.
     pub fn known(path: impl Into<String>) -> Self {
         Self {
-            base: Base::Known {
-                path: path.into(),
-                args: Vec::new(),
-            },
+            base: Base::Known { path: path.into(), args: Vec::new() },
             calls: Vec::new(),
             children: Vec::new(),
         }
@@ -131,11 +122,7 @@ impl Node {
 
     /// A node that stands for an expression `maxx` did not interpret.
     pub fn opaque(source: impl Into<String>) -> Self {
-        Self {
-            base: Base::Opaque(source.into()),
-            calls: Vec::new(),
-            children: Vec::new(),
-        }
+        Self { base: Base::Opaque(source.into()), calls: Vec::new(), children: Vec::new() }
     }
 
     /// Whether this node is an unparsed Rust expression.

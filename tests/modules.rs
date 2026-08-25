@@ -8,9 +8,8 @@ use maxx::projectfile::{self, fingerprint};
 use maxx::scaffold;
 
 fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::var("MAXX_SCRATCH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| std::env::temp_dir());
+    let dir =
+        std::env::var("MAXX_SCRATCH").map(PathBuf::from).unwrap_or_else(|_| std::env::temp_dir());
     let path = dir.join(name);
     let _ = std::fs::remove_dir_all(&path);
     path
@@ -22,10 +21,8 @@ fn scratch(name: &str) -> PathBuf {
 /// échouer ce test, ce qui oblige à décider si la version doit monter. Sans
 /// lui, une correction n'atteindrait jamais les projets déjà écrits — et
 /// personne ne s'en apercevrait.
-const EMPREINTES: &[(&str, u32, &str)] = &[
-    ("systeme", 1, "9f760f0126a35c23"),
-    ("reglages", 1, "b28297b08580657f"),
-];
+const EMPREINTES: &[(&str, u32, &str)] =
+    &[("systeme", 1, "9f760f0126a35c23"), ("reglages", 1, "b28297b08580657f")];
 
 #[test]
 fn changing_a_template_forces_a_decision_about_its_version() {
@@ -92,10 +89,7 @@ fn an_old_copy_is_offered_an_update_and_a_touched_one_is_not() {
     assert_eq!(body, scaffold::module_body("systeme").unwrap());
     assert!(scaffold::outdated_modules(&root).is_empty());
     // L'empreinte notée suit le nouveau contenu.
-    assert_eq!(
-        projectfile::load(&root).modules["systeme"].empreinte,
-        fingerprint(&body)
-    );
+    assert_eq!(projectfile::load(&root).modules["systeme"].empreinte, fingerprint(&body));
 }
 
 #[test]
@@ -114,10 +108,7 @@ fn a_module_the_developer_edited_is_left_alone() {
     std::fs::write(&path, &modifie).unwrap();
 
     // Il n'est plus proposé…
-    assert!(
-        scaffold::outdated_modules(&root).is_empty(),
-        "un fichier modifié n'est plus à maxx"
-    );
+    assert!(scaffold::outdated_modules(&root).is_empty(), "un fichier modifié n'est plus à maxx");
     // …et forcer la mise à jour est refusé, sans rien écraser.
     let erreur = scaffold::update_module(&root, "systeme").expect_err("doit être refusé");
     assert!(erreur.to_string().contains("modifié"), "{erreur}");

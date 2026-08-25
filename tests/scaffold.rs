@@ -6,9 +6,8 @@ use std::path::PathBuf;
 use maxx::{parser, scaffold, view::View, workspace};
 
 fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::var("MAXX_SCRATCH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| std::env::temp_dir());
+    let dir =
+        std::env::var("MAXX_SCRATCH").map(PathBuf::from).unwrap_or_else(|_| std::env::temp_dir());
     let path = dir.join(name);
     let _ = std::fs::remove_dir_all(&path);
     path
@@ -88,19 +87,12 @@ fn every_component_of_the_catalogue_is_written_out() {
 
     let source = std::fs::read_to_string(&path).unwrap();
     for spec in maxx::registry::CATALOGUE {
-        assert!(
-            source.contains(spec.import),
-            "l'import de {} manque",
-            spec.label
-        );
+        assert!(source.contains(spec.import), "l'import de {} manque", spec.label);
     }
 
     // And the file still parses back to the same number of nodes.
     let reloaded = View::load(&path).unwrap();
-    assert_eq!(
-        reloaded.root.children.len(),
-        maxx::registry::CATALOGUE.len() + 1
-    );
+    assert_eq!(reloaded.root.children.len(), maxx::registry::CATALOGUE.len() + 1);
 }
 
 #[test]
@@ -115,10 +107,7 @@ fn saving_twice_produces_the_same_file() {
     let once = std::fs::read_to_string(&path).unwrap();
 
     // The block sits at the markers' own indentation, not twice it.
-    assert!(
-        once.contains("\n            .gap_2()"),
-        "indentation inattendue :\n{once}"
-    );
+    assert!(once.contains("\n            .gap_2()"), "indentation inattendue :\n{once}");
 
     let mut reloaded = View::load(&path).unwrap();
     reloaded.save().unwrap();
@@ -129,8 +118,7 @@ fn saving_twice_produces_the_same_file() {
 #[test]
 fn two_text_fields_do_not_share_one_state() {
     let mut root = maxx::model::Node::known("v_flex");
-    root.children
-        .push(maxx::registry::instantiate("input").unwrap());
+    root.children.push(maxx::registry::instantiate("input").unwrap());
     let second = maxx::registry::unique_input_field(&root);
     assert_eq!(second, "champ_2");
 }
@@ -142,10 +130,7 @@ fn an_existing_crate_is_not_overwritten() {
     std::fs::write(root.join("src/ui/mod.rs"), "pub mod a_moi;\n").unwrap();
 
     assert!(scaffold::create_project(&root, "essai").is_err());
-    assert_eq!(
-        std::fs::read_to_string(root.join("src/ui/mod.rs")).unwrap(),
-        "pub mod a_moi;\n"
-    );
+    assert_eq!(std::fs::read_to_string(root.join("src/ui/mod.rs")).unwrap(), "pub mod a_moi;\n");
 }
 
 #[test]
@@ -264,10 +249,8 @@ fn style_properties_reach_the_generated_file() {
     // And they read back.
     let reloaded = View::load(&path).unwrap();
     let button = &reloaded.root.children[1];
-    let width = maxx::registry::props(spec)
-        .into_iter()
-        .find(|prop| prop.label == "Largeur")
-        .unwrap();
+    let width =
+        maxx::registry::props(spec).into_iter().find(|prop| prop.label == "Largeur").unwrap();
     assert_eq!(maxx::registry::read(button, width).as_deref(), Some("120"));
 }
 
@@ -329,23 +312,13 @@ fn a_state_field_is_declared_and_initialised() {
 fn a_property_can_read_a_state_field() {
     let mut label = maxx::registry::instantiate("label").unwrap();
     let spec = maxx::registry::of(&label).unwrap();
-    let text = spec
-        .props
-        .iter()
-        .find(|prop| prop.label == "Texte")
-        .unwrap();
+    let text = spec.props.iter().find(|prop| prop.label == "Texte").unwrap();
 
     assert_eq!(maxx::registry::read_binding(&label, text), None);
 
     maxx::registry::write_binding(&mut label, text, Some("self.message.clone()"));
-    assert_eq!(
-        maxx::codegen::render(&label, 0),
-        "Label::new(self.message.clone())"
-    );
-    assert_eq!(
-        maxx::registry::read_binding(&label, text).as_deref(),
-        Some("message")
-    );
+    assert_eq!(maxx::codegen::render(&label, 0), "Label::new(self.message.clone())");
+    assert_eq!(maxx::registry::read_binding(&label, text).as_deref(), Some("message"));
     // A bound value is not editable as free text: overwriting it with a string
     // literal would silently change what the code means.
     assert!(!maxx::registry::editable(&label, text));
@@ -399,10 +372,7 @@ impl Render for Ecrit {
     }
 }
 ";
-    assert!(matches!(
-        maxx::parser::adopt(source),
-        Err(maxx::parser::Error::NoTrailingExpression)
-    ));
+    assert!(matches!(maxx::parser::adopt(source), Err(maxx::parser::Error::NoTrailingExpression)));
 }
 
 #[test]
@@ -415,9 +385,7 @@ fn an_outside_change_is_noticed() {
     assert!(!view.disk_changed());
 
     // Someone edits the file in Zed.
-    let outside = std::fs::read_to_string(&path)
-        .unwrap()
-        .replace("Bienvenue", "Modifié dans Zed");
+    let outside = std::fs::read_to_string(&path).unwrap().replace("Bienvenue", "Modifié dans Zed");
     std::fs::write(&path, &outside).unwrap();
     assert!(view.disk_changed());
 
@@ -461,8 +429,8 @@ fn insertions_land_in_the_view_not_in_a_helper_type() {
     view.save().expect("l'enregistrement doit réussir");
 
     let written = std::fs::read_to_string(&path).unwrap();
-    let ligne = &written[written.find("pub struct Ligne").unwrap()
-        ..written.find("pub struct Accueil").unwrap()];
+    let ligne = &written
+        [written.find("pub struct Ligne").unwrap()..written.find("pub struct Accueil").unwrap()];
     assert!(!ligne.contains("champ"), "le type auxiliaire est intact :\n{ligne}");
     assert!(!ligne.contains("on_go"), "le stub ne va pas dans le type auxiliaire");
 
@@ -512,10 +480,8 @@ fn a_wrapped_import_is_not_duplicated() {
     let mut view = View::load(&path).unwrap();
     let mut button = maxx::registry::instantiate("button").unwrap();
     let spec = maxx::registry::of(&button).unwrap();
-    let width = maxx::registry::props(spec)
-        .into_iter()
-        .find(|prop| prop.label == "Largeur")
-        .unwrap();
+    let width =
+        maxx::registry::props(spec).into_iter().find(|prop| prop.label == "Largeur").unwrap();
     maxx::registry::write(&mut button, width, "120");
     view.root.push_child(button);
     view.save().unwrap();
@@ -540,8 +506,7 @@ fn a_helper_type_whose_name_starts_like_the_view_is_left_alone() {
     std::fs::write(&path, &source).unwrap();
 
     let mut view = View::load(&path).unwrap();
-    view.root
-        .push_child(maxx::registry::instantiate("input").unwrap());
+    view.root.push_child(maxx::registry::instantiate("input").unwrap());
     view.save().unwrap();
 
     let written = std::fs::read_to_string(&path).unwrap();
@@ -563,10 +528,7 @@ fn a_generated_project_has_a_menu_bar() {
     let mut menus = maxx::menufile::MenuFile::load(&path).expect("les menus doivent se relire");
     assert_eq!(menus.menus.len(), 3);
     assert_eq!(menus.menus[1].name, "Édition");
-    assert!(menus.menus[0]
-        .items
-        .iter()
-        .any(|item| item.label() == "Quitter"));
+    assert!(menus.menus[0].items.iter().any(|item| item.label() == "Quitter"));
     assert!(!menus.dirty());
 
     // An entry with a brand new action declares and wires it on save.
@@ -604,17 +566,17 @@ fn an_unknown_menu_entry_is_carried_through() {
     std::fs::write(&path, &source).unwrap();
 
     let mut menus = maxx::menufile::MenuFile::load(&path).expect("doit se relire quand même");
-    assert!(menus
-        .menus
-        .iter()
-        .flat_map(|menu| &menu.items)
-        .any(|item| matches!(item, maxx::menu_model::ItemDef::Opaque(_))));
+    assert!(
+        menus
+            .menus
+            .iter()
+            .flat_map(|menu| &menu.items)
+            .any(|item| matches!(item, maxx::menu_model::ItemDef::Opaque(_)))
+    );
 
     menus.save(false).unwrap();
     assert!(
-        std::fs::read_to_string(&path)
-            .unwrap()
-            .contains("MenuItem::submenu(sous_menu())"),
+        std::fs::read_to_string(&path).unwrap().contains("MenuItem::submenu(sous_menu())"),
         "ce que maxx ne comprend pas ressort tel quel"
     );
 }
@@ -692,11 +654,8 @@ fn a_qualified_action_keeps_its_path() {
 fn a_view_named_menus_is_not_taken_for_the_menu_bar() {
     use maxx::menufile::MenuFile;
     assert!(MenuFile::is_menu_file(std::path::Path::new("/p/src/menus.rs")));
-    assert!(!MenuFile::is_menu_file(std::path::Path::new(
-        "/p/src/ui/menus.rs"
-    )));
+    assert!(!MenuFile::is_menu_file(std::path::Path::new("/p/src/ui/menus.rs")));
 }
-
 
 #[test]
 fn a_menu_action_points_at_its_handler() {
@@ -722,9 +681,7 @@ fn a_menu_action_points_at_its_handler() {
     menus.save(false).unwrap();
 
     let reloaded = maxx::menufile::MenuFile::load(&path).unwrap();
-    let line = reloaded
-        .handler_line("Preferences")
-        .expect("l'enregistrement l'a câblée");
+    let line = reloaded.handler_line("Preferences").expect("l'enregistrement l'a câblée");
     let source = std::fs::read_to_string(&path).unwrap();
     assert!(source.lines().nth(line - 1).unwrap().contains("&Preferences,"));
 }
@@ -739,18 +696,12 @@ fn deleting_a_view_unregisters_it() {
     assert!(std::fs::read_to_string(&mod_path).unwrap().contains("pub mod vue_2;"));
 
     let file = root.join("src/ui/vue_2.rs");
-    assert_eq!(
-        workspace::view_module(&root, &file).as_deref(),
-        Some("vue_2")
-    );
+    assert_eq!(workspace::view_module(&root, &file).as_deref(), Some("vue_2"));
     workspace::unregister_view(&root, "vue_2");
 
     let source = std::fs::read_to_string(&mod_path).unwrap();
     assert!(!source.contains("pub mod vue_2;"));
-    assert!(
-        source.contains("pub mod accueil;"),
-        "les autres vues restent déclarées : {source}"
-    );
+    assert!(source.contains("pub mod accueil;"), "les autres vues restent déclarées : {source}");
 }
 
 #[test]
@@ -768,10 +719,7 @@ fn the_project_skeleton_refuses_to_be_deleted() {
     assert!(workspace::protected_entry(&root, &root.join("src/ui/vue_2.rs")).is_none());
     // `view_module` ne doit pas prendre un fichier hors de src/ui pour une vue.
     assert_eq!(workspace::view_module(&root, &root.join("src/menus.rs")), None);
-    assert_eq!(
-        workspace::view_module(&root, &root.join("src/ui/sous/vue.rs")),
-        None
-    );
+    assert_eq!(workspace::view_module(&root, &root.join("src/ui/sous/vue.rs")), None);
 }
 
 #[test]
@@ -819,11 +767,8 @@ fn wiring_the_menu_bar_keeps_the_header_of_main_rs_valid() {
     // interne : un `mod menus;` en ligne 1 ne compilerait pas.
     let main_path = root.join("src/main.rs");
     let source = std::fs::read_to_string(&main_path).unwrap();
-    std::fs::write(
-        &main_path,
-        format!("//! Mon application.\n#![allow(dead_code)]\n\n{source}"),
-    )
-    .unwrap();
+    std::fs::write(&main_path, format!("//! Mon application.\n#![allow(dead_code)]\n\n{source}"))
+        .unwrap();
 
     scaffold::add_menu_bar(&root).expect("la barre doit être ajoutée");
 
@@ -833,10 +778,7 @@ fn wiring_the_menu_bar_keeps_the_header_of_main_rs_valid() {
     assert_eq!(lines[1], "#![allow(dead_code)]");
     assert!(
         lines.iter().position(|line| *line == "mod menus;").unwrap()
-            > lines
-                .iter()
-                .position(|line| *line == "#![allow(dead_code)]")
-                .unwrap(),
+            > lines.iter().position(|line| *line == "#![allow(dead_code)]").unwrap(),
         "{wired}"
     );
 }
@@ -943,10 +885,7 @@ fn the_system_module_is_added_declared_and_compiles_on_its_own() {
     assert!(!body.contains("maxx::"), "le module ne doit rien devoir à maxx");
     // Et il ne double pas ce que gpui fournit déjà.
     for covered in ["clipboard", "open_url", "reveal_path"] {
-        assert!(
-            !body.contains(&format!("pub fn {covered}")),
-            "{covered} est déjà dans gpui"
-        );
+        assert!(!body.contains(&format!("pub fn {covered}")), "{covered} est déjà dans gpui");
     }
 
     // Le retirer doit retirer sa déclaration, sinon le projet ne compile plus.
@@ -964,18 +903,9 @@ fn only_a_top_level_module_file_has_a_mod_line() {
         Some("systeme")
     );
     // main.rs n'est pas un module, ui/ a son propre mod.rs.
-    assert_eq!(
-        maxx::workspace::top_level_module(&root, &root.join("src/main.rs")),
-        None
-    );
-    assert_eq!(
-        maxx::workspace::top_level_module(&root, &root.join("src/ui/vue_1.rs")),
-        None
-    );
-    assert_eq!(
-        maxx::workspace::top_level_module(&root, &root.join("Cargo.toml")),
-        None
-    );
+    assert_eq!(maxx::workspace::top_level_module(&root, &root.join("src/main.rs")), None);
+    assert_eq!(maxx::workspace::top_level_module(&root, &root.join("src/ui/vue_1.rs")), None);
+    assert_eq!(maxx::workspace::top_level_module(&root, &root.join("Cargo.toml")), None);
 }
 
 #[test]
@@ -999,10 +929,7 @@ fn a_block_doc_comment_header_is_not_jumped_over() {
     let lines: Vec<&str> = wired.lines().collect();
     let declaration = lines.iter().position(|line| *line == "mod systeme;").unwrap();
     let fin_du_bloc = lines.iter().position(|line| *line == "*/").unwrap();
-    let attribut = lines
-        .iter()
-        .position(|line| *line == "#![allow(dead_code)]")
-        .unwrap();
+    let attribut = lines.iter().position(|line| *line == "#![allow(dead_code)]").unwrap();
     assert!(declaration > fin_du_bloc, "{wired}");
     assert!(declaration > attribut, "{wired}");
 }
@@ -1034,10 +961,7 @@ fn the_shared_target_dir_survives_being_written_into_toml() {
     let target = parsed["build"]["target-dir"].as_str().unwrap();
     assert!(!target.is_empty());
     // Ce qui a été échappé pour TOML doit se relire tel quel.
-    assert_eq!(
-        std::path::PathBuf::from(target),
-        maxx::run::shared_target_dir()
-    );
+    assert_eq!(std::path::PathBuf::from(target), maxx::run::shared_target_dir());
 }
 
 #[test]
@@ -1083,18 +1007,13 @@ fn a_dropdown_declares_the_field_it_needs() {
     let path = root.join("src/ui/accueil.rs");
 
     let mut view = View::load(&path).expect("la vue doit se relire");
-    let select = maxx::registry::by_id("select").expect("la liste déroulante doit être au catalogue");
-    view.root
-        .children
-        .push(maxx::registry::instantiate("select").unwrap());
+    let select =
+        maxx::registry::by_id("select").expect("la liste déroulante doit être au catalogue");
+    view.root.children.push(maxx::registry::instantiate("select").unwrap());
 
     // Lier le champ, comme le fait l'inspecteur.
     let index = view.root.children.len() - 1;
-    let prop = select
-        .props
-        .iter()
-        .find(|prop| prop.label == "Champ lié")
-        .unwrap();
+    let prop = select.props.iter().find(|prop| prop.label == "Champ lié").unwrap();
     maxx::registry::write_binding(&mut view.root.children[index], prop, Some("&self.pays"));
     view.save().expect("la vue doit s'enregistrer");
 
@@ -1104,16 +1023,17 @@ fn a_dropdown_declares_the_field_it_needs() {
         "{source}"
     );
     assert!(source.contains("SelectState::new("), "{source}");
-    assert!(source.contains("use gpui_component::select::{SearchableVec, SelectState};"), "{source}");
+    assert!(
+        source.contains("use gpui_component::select::{SearchableVec, SelectState};"),
+        "{source}"
+    );
     assert!(source.contains("use gpui_component::select::Select;"), "{source}");
     // `new` prend ses arguments : le gabarit les ignorait.
     assert!(source.contains("pub fn new(window: &mut Window, cx: &mut Context<Self>)"), "{source}");
 
     // Et une seconde liste ne redéclare pas le même champ.
     let mut view = View::load(&path).expect("la vue doit se relire");
-    view.root
-        .children
-        .push(maxx::registry::instantiate("select").unwrap());
+    view.root.children.push(maxx::registry::instantiate("select").unwrap());
     let index = view.root.children.len() - 1;
     maxx::registry::write_binding(&mut view.root.children[index], prop, Some("&self.pays"));
     view.save().expect("la vue doit s'enregistrer");

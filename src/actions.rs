@@ -103,10 +103,7 @@ pub fn register_handlers(cx: &mut App) {
     cx.on_action(new_project);
 
     cx.on_action(|action: &OpenRecent, cx: &mut App| {
-        let path = crate::settings::state(cx)
-            .recent_projects
-            .get(action.index)
-            .cloned();
+        let path = crate::settings::state(cx).recent_projects.get(action.index).cloned();
         // The project may have been moved since the bar was built.
         let Some(path) = path.filter(|path| path.is_dir()) else {
             return;
@@ -325,9 +322,7 @@ fn new_project(_: &NewProject, cx: &mut App) {
                     workspace::open_folder(path, cx);
                     // The dependency tree costs minutes the first time; pay it
                     // now, while there is drawing to do.
-                    workspace::with_active(cx, |workspace, _, cx| {
-                        workspace.prewarm_project(cx)
-                    });
+                    workspace::with_active(cx, |workspace, _, cx| workspace.prewarm_project(cx));
                 }
                 Err(error) => eprintln!("création du projet impossible : {error}"),
             }
@@ -353,9 +348,6 @@ fn selected_entry_path(cx: &mut App) -> Option<std::path::PathBuf> {
 
 /// Absolute path of the frontmost window's project, if it has one.
 fn active_workspace_path(cx: &mut App) -> Option<std::path::PathBuf> {
-    workspace::read_active(cx, |workspace| {
-        workspace.project().map(|project| project.root.clone())
-    })
-    .flatten()
+    workspace::read_active(cx, |workspace| workspace.project().map(|project| project.root.clone()))
+        .flatten()
 }
-

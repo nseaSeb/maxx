@@ -61,16 +61,12 @@ pub fn create_view(root: &Path, module: &str) -> io::Result<()> {
 /// Turns a folder name into a name cargo accepts: lowercase, `_` for anything
 /// that is not alphanumeric, and never starting with a digit.
 pub fn crate_name(name: &str) -> String {
-    let mut out: String = name
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() {
-                character.to_ascii_lowercase()
-            } else {
-                '_'
-            }
-        })
-        .collect();
+    let mut out: String =
+        name.chars()
+            .map(|character| {
+                if character.is_ascii_alphanumeric() { character.to_ascii_lowercase() } else { '_' }
+            })
+            .collect();
     if out.is_empty() || out.starts_with(|character: char| character.is_ascii_digit()) {
         out.insert(0, '_');
     }
@@ -147,10 +143,7 @@ pub const MODULES: &[(&str, u32)] = &[("systeme", 1), ("reglages", 1)];
 
 /// The version of `module`, if maxx knows it.
 pub fn module_version(module: &str) -> Option<u32> {
-    MODULES
-        .iter()
-        .find(|(name, _)| *name == module)
-        .map(|(_, version)| *version)
+    MODULES.iter().find(|(name, _)| *name == module).map(|(_, version)| *version)
 }
 
 /// The current text of a module's template.
@@ -195,10 +188,7 @@ pub fn outdated_modules(root: &Path) -> Vec<String> {
 /// edits are not maxx's to discard.
 pub fn update_module(root: &Path, module: &str) -> io::Result<()> {
     let (Some(version), Some(body)) = (module_version(module), module_body(module)) else {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("module inconnu : {module}"),
-        ));
+        return Err(io::Error::new(io::ErrorKind::NotFound, format!("module inconnu : {module}")));
     };
     let file = crate::projectfile::load(root);
     let Some(recorded) = file.modules.get(module) else {
@@ -621,7 +611,12 @@ pub fn add_settings_module(root: &Path) -> io::Result<()> {
     let body = settings_rs();
     if !path.exists() {
         std::fs::write(&path, &body)?;
-        crate::projectfile::record(root, "reglages", module_version("reglages").unwrap_or(1), &body)?;
+        crate::projectfile::record(
+            root,
+            "reglages",
+            module_version("reglages").unwrap_or(1),
+            &body,
+        )?;
     }
 
     let mut out = lines.join("\n");
@@ -654,11 +649,9 @@ fn add_dependencies(root: &Path, crates: &[(&str, &str)]) -> io::Result<()> {
 
     let mut inserted = 0;
     for (name, requirement) in crates {
-        let declared = lines[section + 1..end].iter().any(|line| {
-            line.split('=')
-                .next()
-                .is_some_and(|left| left.trim() == *name)
-        });
+        let declared = lines[section + 1..end]
+            .iter()
+            .any(|line| line.split('=').next().is_some_and(|left| left.trim() == *name));
         if declared {
             continue;
         }
@@ -1244,14 +1237,9 @@ pub fn add_menu_bar(root: &Path) -> io::Result<()> {
     if !source.contains("menus::app_menus()") {
         // `cx.activate` is what every gpui `main` does first; failing that, the
         // line that opens the closure `run` was given.
-        let anchor = lines
-            .iter()
-            .position(|line| line.contains(".activate("))
-            .or_else(|| {
-                lines
-                    .iter()
-                    .position(|line| line.contains(".run(") && line.trim_end().ends_with('{'))
-            });
+        let anchor = lines.iter().position(|line| line.contains(".activate(")).or_else(|| {
+            lines.iter().position(|line| line.contains(".run(") && line.trim_end().ends_with('{'))
+        });
         let Some(anchor) = anchor else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -1278,10 +1266,8 @@ pub fn add_menu_bar(root: &Path) -> io::Result<()> {
             ));
         };
 
-        let indent: String = lines[anchor]
-            .chars()
-            .take_while(|character| character.is_whitespace())
-            .collect();
+        let indent: String =
+            lines[anchor].chars().take_while(|character| character.is_whitespace()).collect();
         for (offset, call) in [
             format!("menus::register({app});"),
             format!("{app}.bind_keys(menus::key_bindings());"),
@@ -1320,16 +1306,12 @@ fn is_menu_wiring(line: &str) -> bool {
     if line == "mod menus;" || line == "menus::register" {
         return true;
     }
-    if let Some(argument) = line
-        .strip_prefix("menus::register(")
-        .and_then(|rest| rest.strip_suffix(");"))
+    if let Some(argument) =
+        line.strip_prefix("menus::register(").and_then(|rest| rest.strip_suffix(");"))
     {
         return identifier(argument).is_some();
     }
-    for call in [
-        ".bind_keys(menus::key_bindings());",
-        ".set_menus(menus::app_menus());",
-    ] {
+    for call in [".bind_keys(menus::key_bindings());", ".set_menus(menus::app_menus());"] {
         if let Some(receiver) = line.strip_suffix(call)
             && identifier(receiver).is_some()
         {
@@ -1362,9 +1344,7 @@ fn application_binding(line: &str) -> Option<String> {
 /// `name` when it can be a Rust binding, nothing otherwise.
 fn identifier(name: &str) -> Option<String> {
     let valid = !name.is_empty()
-        && name
-            .chars()
-            .all(|character| character.is_alphanumeric() || character == '_')
+        && name.chars().all(|character| character.is_alphanumeric() || character == '_')
         && !name.starts_with(|character: char| character.is_ascii_digit());
     valid.then(|| name.to_string())
 }
@@ -1381,10 +1361,7 @@ pub fn remove_menu_bar(root: &Path) -> io::Result<()> {
     // with the name the project gave its application, which is `cx` in the
     // template and anything at all in a hand-written `main.rs`. Filtering
     // literal `cx` lines would leave a call to a module that no longer exists.
-    let kept: Vec<&str> = source
-        .lines()
-        .filter(|line| !is_menu_wiring(line.trim()))
-        .collect();
+    let kept: Vec<&str> = source.lines().filter(|line| !is_menu_wiring(line.trim())).collect();
     let mut out = kept.join("\n");
     out.push('\n');
     std::fs::write(&main_path, out)

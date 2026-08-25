@@ -102,6 +102,12 @@ jobs:
       # gagne donc presque rien : c'est `cargo test` qui coûte, parce que lui
       # doit produire du code machine là où les deux autres s'arrêtent aux
       # métadonnées.
+      # Ne compile rien : c'est la vérification la moins chère de toutes, et
+      # elle évite qu'un `cargo fmt` de contributeur noie son vrai changement
+      # dans un reformatage de fichier entier.
+      - name: Mise en forme
+        run: cargo fmt --check
+
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 

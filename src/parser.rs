@@ -30,9 +30,7 @@ pub fn matching_brace(source: &str, open: usize) -> Option<usize> {
     while index < bytes.len() {
         match bytes[index] {
             b'/' if bytes.get(index + 1) == Some(&b'/') => {
-                index = source[index..]
-                    .find('\n')
-                    .map_or(bytes.len(), |offset| index + offset + 1);
+                index = source[index..].find('\n').map_or(bytes.len(), |offset| index + offset + 1);
                 continue;
             }
             b'/' if bytes.get(index + 1) == Some(&b'*') => {
@@ -128,9 +126,7 @@ fn raw_string_end(source: &str, start: usize) -> Option<usize> {
         return None;
     }
     let terminator = format!("\"{}", "#".repeat(hashes));
-    source[index + 1..]
-        .find(&terminator)
-        .map(|offset| index + 1 + offset + terminator.len())
+    source[index + 1..].find(&terminator).map(|offset| index + 1 + offset + terminator.len())
 }
 
 /// The byte ranges of the string literals in `source`.
@@ -143,9 +139,7 @@ fn string_ranges(source: &str) -> Vec<std::ops::Range<usize>> {
     while index < bytes.len() {
         match bytes[index] {
             b'/' if bytes.get(index + 1) == Some(&b'/') => {
-                index = source[index..]
-                    .find('\n')
-                    .map_or(bytes.len(), |offset| index + offset + 1);
+                index = source[index..].find('\n').map_or(bytes.len(), |offset| index + offset + 1);
             }
             b'/' if bytes.get(index + 1) == Some(&b'*') => {
                 index = source[index + 2..]
@@ -186,10 +180,7 @@ pub fn adopt(source: &str) -> Result<String, Error> {
     }
 
     let offset = source.find("fn render(").ok_or(Error::NoRender)?;
-    let open = source[offset..]
-        .find('{')
-        .map(|index| offset + index)
-        .ok_or(Error::NoRender)?;
+    let open = source[offset..].find('{').map(|index| offset + index).ok_or(Error::NoRender)?;
     // The first `{` after `fn render(` closes the argument list's type
     // parameters in no case we generate, but a return type like `impl
     // IntoElement` has none either, so this is the body.
@@ -217,9 +208,7 @@ pub fn adopt(source: &str) -> Result<String, Error> {
     if !indent.trim().is_empty() {
         return Err(Error::NoTrailingExpression);
     }
-    let line_end = source[end..]
-        .find('\n')
-        .map_or(source.len(), |index| end + index + 1);
+    let line_end = source[end..].find('\n').map_or(source.len(), |index| end + index + 1);
 
     let mut out = String::with_capacity(source.len() + 48);
     out.push_str(&source[..line_start]);
@@ -334,12 +323,7 @@ pub fn locate(source: &str) -> Result<Region, Error> {
     let indent = source[line_start..begin].to_string();
     let newline = if source.contains("\r\n") { "\r\n" } else { "\n" };
 
-    Ok(Region {
-        start,
-        end: end.max(start),
-        indent,
-        newline,
-    })
+    Ok(Region { start, end: end.max(start), indent, newline })
 }
 
 /// Parses the managed region of `source` into a view tree.
@@ -368,9 +352,8 @@ pub(crate) fn dedent(source: &str, indent: &str) -> String {
     let mut offset = 0usize;
 
     for line in source.lines() {
-        let inside_literal = literals
-            .iter()
-            .any(|range| range.start < offset && offset < range.end);
+        let inside_literal =
+            literals.iter().any(|range| range.start < offset && offset < range.end);
         if inside_literal {
             out.push_str(line);
         } else {
@@ -398,9 +381,8 @@ pub fn splice(source: &str, block: &str) -> Result<String, Error> {
 
     let mut rendered = String::with_capacity(block.len() + 16);
     for line in block.lines() {
-        let inside_literal = literals
-            .iter()
-            .any(|range| range.start < offset && offset < range.end);
+        let inside_literal =
+            literals.iter().any(|range| range.start < offset && offset < range.end);
         if line.is_empty() {
             rendered.push_str(region.newline);
         } else {
@@ -458,11 +440,7 @@ fn node_from_expr(expr: &Expr, source: &str) -> Node {
         } else {
             node.calls.push(Call {
                 name,
-                args: method
-                    .args
-                    .iter()
-                    .map(|arg| arg_from_expr(arg, source))
-                    .collect(),
+                args: method.args.iter().map(|arg| arg_from_expr(arg, source)).collect(),
             });
         }
     }

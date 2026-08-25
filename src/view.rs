@@ -108,10 +108,7 @@ impl View {
             if name.is_empty() || !name.chars().all(|c| c == '_' || c.is_alphanumeric()) {
                 continue;
             }
-            fields.push(StateField {
-                name: name.to_string(),
-                ty: ty.trim().to_string(),
-            });
+            fields.push(StateField { name: name.to_string(), ty: ty.trim().to_string() });
         }
         fields
     }
@@ -131,10 +128,7 @@ impl View {
 
     /// Adds a field to the view's struct and initializes it in `new`.
     pub fn add_state_field(&mut self, name: &str, ty: &str, initial: &str) -> Result<(), String> {
-        if !name
-            .chars()
-            .next()
-            .is_some_and(|first| first == '_' || first.is_alphabetic())
+        if !name.chars().next().is_some_and(|first| first == '_' || first.is_alphabetic())
             || !name.chars().all(|c| c == '_' || c.is_alphanumeric())
         {
             return Err(format!("« {name} » n'est pas un nom de champ valide"));
@@ -155,10 +149,9 @@ impl View {
         };
         // Both anchors, or neither: initializing a field that was never
         // declared reports success and leaves the project unbuildable.
-        let (Some(_), Some(_)) = (
-            struct_brace(&source, &type_name),
-            self_brace(&source, &type_name),
-        ) else {
+        let (Some(_), Some(_)) =
+            (struct_brace(&source, &type_name), self_brace(&source, &type_name))
+        else {
             self.source = source;
             return Err(format!(
                 "« {type_name} » n'a pas la forme attendue — struct et « Self {{ … }} » introuvables"
@@ -203,18 +196,12 @@ impl View {
     /// The line where a method is declared, for jumping to it in an editor.
     pub fn method_line(&self, name: &str) -> Option<usize> {
         let needle = format!("fn {name}(");
-        self.source
-            .lines()
-            .position(|line| line.contains(&needle))
-            .map(|index| index + 1)
+        self.source.lines().position(|line| line.contains(&needle)).map(|index| index + 1)
     }
 
     /// The file name, for tabs and the status bar.
     pub fn name(&self) -> String {
-        self.path
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default()
+        self.path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()
     }
 
     /// The selected node, falling back to the root.
@@ -231,8 +218,7 @@ impl View {
         // one written inside it. Refusing is better than losing it quietly.
         if parser::region_has_comment(&self.source) {
             return Err(
-                "un commentaire se trouve dans la zone gérée — l'enregistrement le perdrait"
-                    .into(),
+                "un commentaire se trouve dans la zone gérée — l'enregistrement le perdrait".into(),
             );
         }
         let region = parser::locate(&self.source).map_err(|error| error.to_string())?;
@@ -256,11 +242,8 @@ impl View {
 
 /// Inserts the `use` lines that are missing, after the last existing one.
 fn ensure_imports(source: String, lines: &[&str]) -> String {
-    let missing: Vec<&str> = lines
-        .iter()
-        .copied()
-        .filter(|line| !already_imported(&source, line))
-        .collect();
+    let missing: Vec<&str> =
+        lines.iter().copied().filter(|line| !already_imported(&source, line)).collect();
     if missing.is_empty() {
         return source;
     }
@@ -290,10 +273,7 @@ fn already_imported(source: &str, line: &str) -> bool {
     if source.contains(line) {
         return true;
     }
-    let Some(item) = line
-        .trim()
-        .strip_prefix("use ")
-        .and_then(|rest| rest.strip_suffix(';'))
+    let Some(item) = line.trim().strip_prefix("use ").and_then(|rest| rest.strip_suffix(';'))
     else {
         return false;
     };
@@ -320,20 +300,15 @@ fn use_statements(source: &str) -> Vec<String> {
     let mut search = 0;
     while let Some(index) = source[search..].find("use ") {
         let start = search + index;
-        let at_line_start = source[..start]
-            .chars()
-            .last()
-            .is_none_or(|c| c == '\n' || c == ' ');
+        let at_line_start = source[..start].chars().last().is_none_or(|c| c == '\n' || c == ' ');
         let Some(end) = source[start..].find(';').map(|offset| start + offset) else {
             break;
         };
         if at_line_start {
             // Whitespace collapsed inside the path, but the `use ` kept: the
             // caller matches on `use <path>::`.
-            let body: String = source[start + "use ".len()..end]
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join("");
+            let body: String =
+                source[start + "use ".len()..end].split_whitespace().collect::<Vec<_>>().join("");
             statements.push(format!("use {body}"));
         }
         search = end + 1;
@@ -384,10 +359,8 @@ fn ensure_state_field(source: String, field: &str, state: &registry::StateSpec) 
     };
     // Declaring the field without initializing it, or the reverse, leaves a
     // file that does not compile. Both anchors, or neither.
-    let (Some(_), Some(_)) = (
-        struct_brace(&source, &type_name),
-        self_brace(&source, &type_name),
-    ) else {
+    let (Some(_), Some(_)) = (struct_brace(&source, &type_name), self_brace(&source, &type_name))
+    else {
         return source;
     };
 
@@ -476,10 +449,8 @@ fn struct_brace(source: &str, name: &str) -> Option<usize> {
     while let Some(index) = source[search..].find(&needle) {
         let at = search + index;
         let after = at + needle.len();
-        let boundary = source[after..]
-            .chars()
-            .next()
-            .is_none_or(|c| !c.is_alphanumeric() && c != '_');
+        let boundary =
+            source[after..].chars().next().is_none_or(|c| !c.is_alphanumeric() && c != '_');
         if boundary {
             return source[at..].find('{').map(|offset| at + offset);
         }

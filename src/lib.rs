@@ -13,13 +13,13 @@ pub mod parser;
 pub mod preferences;
 pub mod project;
 pub mod projectfile;
-pub mod run;
 pub mod registry;
+pub mod run;
 pub mod scaffold;
 pub mod settings;
-pub mod view;
 pub mod theme;
 pub mod tools;
+pub mod view;
 pub mod workspace;
 
 use gpui::{App, Application};
@@ -46,10 +46,8 @@ pub fn run() {
         cx.set_menus(menus::app_menus(cx));
 
         // `maxx <chemin>` ouvre directement un projet, comme `zed <chemin>`.
-        let path = std::env::args()
-            .nth(1)
-            .map(std::path::PathBuf::from)
-            .filter(|path| path.is_dir());
+        let path =
+            std::env::args().nth(1).map(std::path::PathBuf::from).filter(|path| path.is_dir());
         workspace::open_workspace_window(path, cx);
     });
 }

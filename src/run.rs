@@ -80,11 +80,7 @@ fn cache_dir() -> PathBuf {
         return std::env::temp_dir();
     };
     let home = PathBuf::from(home);
-    if cfg!(target_os = "macos") {
-        home.join("Library/Caches")
-    } else {
-        home.join(".cache")
-    }
+    if cfg!(target_os = "macos") { home.join("Library/Caches") } else { home.join(".cache") }
 }
 
 fn spawn_cargo(root: PathBuf, subcommand: &'static str) -> Receiver<Message> {
@@ -180,9 +176,7 @@ pub fn editor_arguments(editor: &Editor, path: &Path, line: Option<usize>) -> Ve
 /// `open -a` has nowhere to put it.
 pub fn open_editor(editor: &Editor, path: &Path, line: Option<usize>) {
     let arguments = editor_arguments(editor, path, line);
-    if on_path(editor.command)
-        && Command::new(editor.command).args(&arguments).spawn().is_ok()
-    {
+    if on_path(editor.command) && Command::new(editor.command).args(&arguments).spawn().is_ok() {
         return;
     }
     open_editor_bundle(editor, path);
@@ -251,12 +245,7 @@ fn open_terminal_editor_bundle(
     if let Some(bundle) = terminal.bundle {
         let mut passed = vec![flag.to_string(), editor.command.to_string()];
         passed.extend(arguments.iter().cloned());
-        let _ = Command::new("open")
-            .arg("-na")
-            .arg(bundle)
-            .arg("--args")
-            .args(&passed)
-            .spawn();
+        let _ = Command::new("open").arg("-na").arg(bundle).arg("--args").args(&passed).spawn();
     }
 }
 
@@ -269,7 +258,6 @@ fn open_terminal_editor_bundle(
 ) {
 }
 
-
 /// Kills a run by its operating system pid.
 ///
 /// The child is a `cargo` process that has itself spawned the application, so
@@ -277,10 +265,7 @@ fn open_terminal_editor_bundle(
 /// window it opened on screen.
 #[cfg(unix)]
 pub fn stop(pid: u32) {
-    let _ = Command::new("kill")
-        .arg("-TERM")
-        .arg(format!("-{pid}"))
-        .status();
+    let _ = Command::new("kill").arg("-TERM").arg(format!("-{pid}")).status();
     let _ = Command::new("kill").arg("-TERM").arg(pid.to_string()).status();
 }
 
@@ -291,12 +276,7 @@ pub fn stop(pid: u32) {
 /// is a window that will not close on a polite request.
 #[cfg(windows)]
 pub fn stop(pid: u32) {
-    let _ = Command::new("taskkill")
-        .arg("/PID")
-        .arg(pid.to_string())
-        .arg("/T")
-        .arg("/F")
-        .status();
+    let _ = Command::new("taskkill").arg("/PID").arg(pid.to_string()).arg("/T").arg("/F").status();
 }
 
 fn run(root: PathBuf, subcommand: &str, sender: Sender<Message>) {
@@ -318,8 +298,7 @@ fn run(root: PathBuf, subcommand: &str, sender: Sender<Message>) {
         child.process_group(0)
     };
 
-    let child = child
-        .spawn();
+    let child = child.spawn();
 
     let mut child = match child {
         Ok(child) => child,
@@ -397,10 +376,7 @@ pub fn move_to_trash(path: &Path) -> Result<PathBuf, String> {
     if std::fs::rename(path, &target).is_err() {
         let moved = move_across_volumes(path, &target)?;
         if !moved {
-            return Err(format!(
-                "déplacement vers la corbeille refusé : {}",
-                path.display()
-            ));
+            return Err(format!("déplacement vers la corbeille refusé : {}", path.display()));
         }
     }
 
@@ -476,10 +452,7 @@ fn write_trashinfo(target: &Path, original: &Path) {
         percent_encode(&absolute.to_string_lossy()),
         deletion_date()
     );
-    let _ = std::fs::write(
-        info.join(format!("{}.trashinfo", name.to_string_lossy())),
-        body,
-    );
+    let _ = std::fs::write(info.join(format!("{}.trashinfo", name.to_string_lossy())), body);
 }
 
 /// Percent-encodes a path the way the trash specification asks.
@@ -536,11 +509,7 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
     let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
     let shifted_month = (5 * day_of_year + 2) / 153;
     let day = (day_of_year - (153 * shifted_month + 2) / 5 + 1) as u32;
-    let month = if shifted_month < 10 {
-        shifted_month + 3
-    } else {
-        shifted_month - 9
-    } as u32;
+    let month = if shifted_month < 10 { shifted_month + 3 } else { shifted_month - 9 } as u32;
     (if month <= 2 { year + 1 } else { year }, month, day)
 }
 
@@ -555,11 +524,8 @@ fn move_across_volumes(from: &Path, to: &Path) -> Result<bool, String> {
     copy_recursively(from, to).map_err(|error| error.to_string())?;
     // Only once the copy is whole: removing first would turn a failed copy
     // into a deletion.
-    let removed = if from.is_dir() {
-        std::fs::remove_dir_all(from)
-    } else {
-        std::fs::remove_file(from)
-    };
+    let removed =
+        if from.is_dir() { std::fs::remove_dir_all(from) } else { std::fs::remove_file(from) };
     removed.map_err(|error| error.to_string())?;
     Ok(true)
 }

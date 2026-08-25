@@ -4,15 +4,10 @@
 #[test]
 fn the_gpui_version_comes_from_the_lockfile() {
     let version = maxx::about::GPUI_VERSION;
-    assert_ne!(
-        version, "inconnue",
-        "build.rs n'a pas su lire la version de gpui dans Cargo.lock"
-    );
+    assert_ne!(version, "inconnue", "build.rs n'a pas su lire la version de gpui dans Cargo.lock");
     assert!(
         version.split('.').count() >= 2
-            && version
-                .split('.')
-                .all(|part| part.chars().all(|c| c.is_ascii_digit())),
+            && version.split('.').all(|part| part.chars().all(|c| c.is_ascii_digit())),
         "« {version} » ne ressemble pas à une version"
     );
 
@@ -22,7 +17,8 @@ fn the_gpui_version_comes_from_the_lockfile() {
     let lock = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.lock")).unwrap();
     let lignes: Vec<&str> = lock.lines().collect();
     let trouvee = lignes.windows(2).any(|paire| {
-        paire[0].trim() == "name = \"gpui\"" && paire[1].trim() == format!("version = \"{version}\"")
+        paire[0].trim() == "name = \"gpui\""
+            && paire[1].trim() == format!("version = \"{version}\"")
     });
     assert!(trouvee, "la version affichée n'est pas celle du verrou : {version}");
 }

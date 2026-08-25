@@ -94,10 +94,7 @@ fn arguments_keep_their_kind() {
     }
     assert_eq!(node.call("label").unwrap().args[0], Arg::Str("Valider".into()));
     assert_eq!(node.call("disabled").unwrap().args[0], Arg::Bool(true));
-    assert_eq!(
-        node.call("w").unwrap().args[0],
-        Arg::Verbatim("px(120.)".into())
-    );
+    assert_eq!(node.call("w").unwrap().args[0], Arg::Verbatim("px(120.)".into()));
 }
 
 #[test]
@@ -154,14 +151,8 @@ impl Render for Accueil {
 #[test]
 fn a_file_without_markers_is_refused_not_rewritten() {
     let file = "fn main() {}\n";
-    assert!(matches!(
-        parser::parse(file),
-        Err(parser::Error::NoMarkers)
-    ));
-    assert!(matches!(
-        parser::splice(file, "v_flex()"),
-        Err(parser::Error::NoMarkers)
-    ));
+    assert!(matches!(parser::parse(file), Err(parser::Error::NoMarkers)));
+    assert!(matches!(parser::splice(file, "v_flex()"), Err(parser::Error::NoMarkers)));
 }
 
 #[test]
@@ -219,11 +210,7 @@ fn a_hand_written_argument_is_not_overwritten_by_the_inspector() {
         "un argument écrit à la main n'est pas éditable"
     );
     maxx::registry::write(&mut node, id_prop, "ok");
-    assert_eq!(
-        maxx::codegen::render(&node, 0),
-        source,
-        "l'expression d'origine doit être intacte"
-    );
+    assert_eq!(maxx::codegen::render(&node, 0), source, "l'expression d'origine doit être intacte");
 }
 
 #[test]
@@ -287,14 +274,9 @@ fn dropping_before_an_earlier_sibling_keeps_the_order() {
 fn an_invalid_value_is_explained_not_swallowed() {
     let node = maxx::registry::instantiate("button").unwrap();
     let spec = maxx::registry::of(&node).unwrap();
-    let width = maxx::registry::props(spec)
-        .into_iter()
-        .find(|prop| prop.label == "Largeur")
-        .unwrap();
-    let colour = maxx::registry::props(spec)
-        .into_iter()
-        .find(|prop| prop.label == "Fond")
-        .unwrap();
+    let width =
+        maxx::registry::props(spec).into_iter().find(|prop| prop.label == "Largeur").unwrap();
+    let colour = maxx::registry::props(spec).into_iter().find(|prop| prop.label == "Fond").unwrap();
 
     assert!(maxx::registry::validate(width, "120").is_none());
     assert!(maxx::registry::validate(width, "").is_none());
@@ -332,8 +314,7 @@ fn interleaved_children_keep_their_place() {
     let source = "v_flex().child(entete()).children(self.lignes()).child(pied())";
     assert_eq!(reparse(source), source);
 
-    let conditional =
-        "v_flex().child(a()).when(self.gros, |d| d.child(b())).child(c())";
+    let conditional = "v_flex().child(a()).when(self.gros, |d| d.child(b())).child(c())";
     assert_eq!(reparse(conditional), conditional);
 }
 
@@ -365,10 +346,8 @@ fn a_multiline_string_is_not_reindented() {
 fn a_length_must_be_a_rust_literal() {
     let mut node = maxx::registry::instantiate("button").unwrap();
     let spec = maxx::registry::of(&node).unwrap();
-    let width = maxx::registry::props(spec)
-        .into_iter()
-        .find(|prop| prop.label == "Largeur")
-        .unwrap();
+    let width =
+        maxx::registry::props(spec).into_iter().find(|prop| prop.label == "Largeur").unwrap();
 
     for refused in [".5", "inf", "NaN", "-inf", "12px", "1.2.3"] {
         maxx::registry::write(&mut node, width, refused);
@@ -442,9 +421,5 @@ fn a_lifetime_is_not_a_char_literal() {
     let source = "impl Foo {\n    fn f<'a>() { let c = 'x'; }\n    fn g() {}\n}\n";
     let open = source.find('{').unwrap();
     let close = maxx::parser::matching_brace(source, open).unwrap();
-    assert_eq!(
-        &source[close..],
-        "}\n",
-        "le bloc doit se fermer sur l'accolade de l'impl"
-    );
+    assert_eq!(&source[close..], "}\n", "le bloc doit se fermer sur l'accolade de l'impl");
 }

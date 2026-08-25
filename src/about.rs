@@ -41,9 +41,7 @@ impl Render for About {
             .text_color(rgb(theme::TEXT))
             .child(div().text_2xl().child(self.name.clone()))
             .child(
-                div()
-                    .text_color(rgb(theme::TEXT_MUTED))
-                    .child(format!("version {}", self.version)),
+                div().text_color(rgb(theme::TEXT_MUTED)).child(format!("version {}", self.version)),
             )
             .child(
                 div()
@@ -71,10 +69,8 @@ pub fn open(cx: &mut App) {
 
 fn open_now(cx: &mut App) {
     // A second About window would be a bug you can click twice.
-    if let Some(existing) = cx
-        .windows()
-        .into_iter()
-        .find(|handle| handle.downcast::<About>().is_some())
+    if let Some(existing) =
+        cx.windows().into_iter().find(|handle| handle.downcast::<About>().is_some())
     {
         let _ = existing.update(cx, |_, window, _| window.activate_window());
         return;

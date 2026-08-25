@@ -59,9 +59,8 @@ Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
   de Wayland et de fontconfig, là où le binaire attaché à la version ne demande
   rien. crates.io sert surtout à réserver le nom et à rendre `cargo install`
   possible pour qui a déjà de quoi compiler.
-- **`cargo fmt` une fois** — 82 blocs sur 11 fichiers, surtout des imports.
-  Volontairement laissé de côté pour l'instant : le diff toucherait du code
-  mis en forme à la main. Le jour où c'est fait, ajouter `fmt --check` à la CI.
+- ~~`cargo fmt`~~ — fait, avec `use_small_heuristics = "Max"` pour préserver
+  les tables du catalogue, et `fmt --check` est dans les deux workflows.
 
 ## Portabilité
 

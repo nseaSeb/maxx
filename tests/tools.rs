@@ -17,18 +17,9 @@ fn editor(id: &str) -> &'static Editor {
 fn every_editor_spells_its_line_number_its_own_way() {
     let path = Path::new("/tmp/vue.rs");
 
-    assert_eq!(
-        editor_arguments(editor("zed"), path, Some(12)),
-        vec!["/tmp/vue.rs:12"]
-    );
-    assert_eq!(
-        editor_arguments(editor("code"), path, Some(12)),
-        vec!["-g", "/tmp/vue.rs:12"]
-    );
-    assert_eq!(
-        editor_arguments(editor("nvim"), path, Some(12)),
-        vec!["+12", "/tmp/vue.rs"]
-    );
+    assert_eq!(editor_arguments(editor("zed"), path, Some(12)), vec!["/tmp/vue.rs:12"]);
+    assert_eq!(editor_arguments(editor("code"), path, Some(12)), vec!["-g", "/tmp/vue.rs:12"]);
+    assert_eq!(editor_arguments(editor("nvim"), path, Some(12)), vec!["+12", "/tmp/vue.rs"]);
     assert_eq!(
         editor_arguments(editor("rustrover"), path, Some(12)),
         vec!["--line", "12", "/tmp/vue.rs"]
@@ -54,11 +45,7 @@ fn the_catalogue_holds_no_duplicate_and_no_hole() {
         assert!(!editor.id.is_empty());
         assert!(!editor.label.is_empty());
         // Un éditeur sans commande ni paquet ne peut jamais être détecté.
-        assert!(
-            !editor.command.is_empty() || editor.bundle.is_some(),
-            "{}",
-            editor.id
-        );
+        assert!(!editor.command.is_empty() || editor.bundle.is_some(), "{}", editor.id);
         // Un éditeur de terminal n'a pas de paquet à ouvrir : il n'est qu'une
         // commande.
         if editor.terminal_bound {
@@ -74,19 +61,13 @@ fn the_catalogue_holds_no_duplicate_and_no_hole() {
 
     for (index, terminal) in TERMINALS.iter().enumerate() {
         assert!(!terminal.id.is_empty());
-        assert!(
-            !terminal.command.is_empty() || terminal.bundle.is_some(),
-            "{}",
-            terminal.id
-        );
+        assert!(!terminal.command.is_empty() || terminal.bundle.is_some(), "{}", terminal.id);
         // Lancer une commande suppose une commande à qui la passer.
         if terminal.command_flag.is_some() {
             assert!(!terminal.command.is_empty(), "{}", terminal.id);
         }
         assert!(
-            TERMINALS[index + 1..]
-                .iter()
-                .all(|other| other.id != terminal.id),
+            TERMINALS[index + 1..].iter().all(|other| other.id != terminal.id),
             "{} en double",
             terminal.id
         );
@@ -148,10 +129,7 @@ fn a_file_that_is_not_rust_is_refused_rather_than_mangled() {
     std::fs::write(&path, "ceci n'est pas du Rust {{{\n").unwrap();
 
     if let Err(erreur) = maxx::run::format_rust(&path) {
-        assert!(
-            erreur.contains("refusé") || erreur.contains("introuvable"),
-            "{erreur}"
-        );
+        assert!(erreur.contains("refusé") || erreur.contains("introuvable"), "{erreur}");
     }
     // Et surtout : le fichier n'a pas été abîmé.
     assert!(std::fs::read_to_string(&path).unwrap().contains("ceci n'est pas du Rust"));

@@ -95,7 +95,8 @@ const ALIGNS: &[&str] = &["items_start", "items_center", "items_end"];
 const VARIANTS: &[&str] = &["primary", "danger", "outline", "ghost", "link"];
 const TEXT_SIZES: &[&str] = &["text_xs", "text_sm", "text_base", "text_lg", "text_xl", "text_2xl"];
 const WEIGHTS: &[&str] = &["font_normal", "font_medium", "font_semibold", "font_bold"];
-const ROUNDED: &[&str] = &["rounded_none", "rounded_sm", "rounded_md", "rounded_lg", "rounded_full"];
+const ROUNDED: &[&str] =
+    &["rounded_none", "rounded_sm", "rounded_md", "rounded_lg", "rounded_full"];
 
 /// Properties every component accepts.
 ///
@@ -280,11 +281,7 @@ fn pixel_literal(value: &str) -> Option<String> {
     if digits.is_empty() || !digits.starts_with(|c: char| c.is_ascii_digit()) {
         return None;
     }
-    if !digits
-        .chars()
-        .all(|c| c.is_ascii_digit() || c == '.')
-        || digits.matches('.').count() > 1
-    {
+    if !digits.chars().all(|c| c.is_ascii_digit() || c == '.') || digits.matches('.').count() > 1 {
         return None;
     }
     let number: f32 = value.parse().ok()?;
@@ -343,9 +340,7 @@ pub fn read_binding(node: &Node, prop: &Prop) -> Option<String> {
 /// `self.titre.clone()` and `self.clics.to_string()` both read `titre`/`clics`.
 fn binding_field(source: &str) -> Option<String> {
     let inner = source.strip_prefix("self.")?;
-    let name = inner
-        .strip_suffix(".clone()")
-        .or_else(|| inner.strip_suffix(".to_string()"))?;
+    let name = inner.strip_suffix(".clone()").or_else(|| inner.strip_suffix(".to_string()"))?;
     is_identifier(name).then(|| name.to_string())
 }
 
@@ -408,10 +403,7 @@ pub fn instantiate(id: &str) -> Option<Node> {
         // field, the chain references it.
         vec![Arg::Verbatim("&self.champ".into())]
     } else {
-        spec.default_args
-            .iter()
-            .map(|value| Arg::Str((*value).into()))
-            .collect()
+        spec.default_args.iter().map(|value| Arg::Str((*value).into())).collect()
     };
 
     let mut node = Node::known(spec.base);
@@ -461,10 +453,9 @@ pub fn editable(node: &Node, prop: &Prop) -> bool {
             Base::Opaque(_) => false,
         },
         (Target::Method(name), Kind::Handler) => match node.call(name) {
-            Some(call) => call
-                .args
-                .first()
-                .is_some_and(|arg| handler_name(&arg.to_source()).is_some()),
+            Some(call) => {
+                call.args.first().is_some_and(|arg| handler_name(&arg.to_source()).is_some())
+            }
             None => true,
         },
         _ => !node.is_opaque(),
@@ -488,9 +479,7 @@ fn color_value(source: &str) -> Option<String> {
 /// Anything else — a closure written by hand, a call to something else — is
 /// left alone: the inspector shows it and refuses to rewrite it.
 pub fn handler_name(source: &str) -> Option<String> {
-    let inner = source
-        .strip_prefix("cx.listener(Self::")?
-        .strip_suffix(')')?;
+    let inner = source.strip_prefix("cx.listener(Self::")?.strip_suffix(')')?;
     is_identifier(inner).then(|| inner.to_string())
 }
 
@@ -514,23 +503,17 @@ pub fn handlers(root: &Node) -> Vec<String> {
 /// `on_valider`.
 pub fn suggested_handler(node: &Node) -> String {
     let base = match &node.base {
-        Base::Known { args, .. } => args
-            .first()
-            .and_then(|arg| arg.as_str())
-            .unwrap_or("action")
-            .to_string(),
+        Base::Known { args, .. } => {
+            args.first().and_then(|arg| arg.as_str()).unwrap_or("action").to_string()
+        }
         Base::Opaque(_) => "action".to_string(),
     };
-    let cleaned: String = base
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() {
-                character.to_ascii_lowercase()
-            } else {
-                '_'
-            }
-        })
-        .collect();
+    let cleaned: String =
+        base.chars()
+            .map(|character| {
+                if character.is_ascii_alphanumeric() { character.to_ascii_lowercase() } else { '_' }
+            })
+            .collect();
     format!("on_{}", if cleaned.is_empty() { "action" } else { &cleaned })
 }
 
@@ -553,11 +536,7 @@ pub fn unique_input_field(root: &Node) -> String {
 
     let mut index = 1;
     loop {
-        let candidate = if index == 1 {
-            "champ".to_string()
-        } else {
-            format!("champ_{index}")
-        };
+        let candidate = if index == 1 { "champ".to_string() } else { format!("champ_{index}") };
         if !used.contains(&candidate) {
             return candidate;
         }
@@ -599,10 +578,9 @@ pub fn read(node: &Node, prop: &Prop) -> Option<String> {
             None => None,
         },
         Target::Flag(name) => Some(node.call(name).is_some().to_string()),
-        Target::Family(names) => names
-            .iter()
-            .find(|name| node.call(name).is_some())
-            .map(|name| (*name).to_string()),
+        Target::Family(names) => {
+            names.iter().find(|name| node.call(name).is_some()).map(|name| (*name).to_string())
+        }
     }
 }
 
