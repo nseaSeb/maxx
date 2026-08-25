@@ -232,7 +232,16 @@ de se réintroduire sans qu'on le voie. Ce qu'elle ne prouve pas : que
 l'interface est utilisable, aucun test n'ouvrant de fenêtre. maxx n'a été
 essayé à la main que sur macOS.
 
-Elle coûte cher — environ 750 crates par branche, une dizaine de minutes à
+Deux workflows, deux rôles. `ci.yml` donne un signal rapide et fréquent ;
+`release.yml` est le portail de publication : il part sur un tag `v*`, passe la
+matrice entière, construit en release — ce que la CI ordinaire ne fait jamais,
+et une optimisation révèle ce qu'un build de debug tolère —, vérifie ce qui
+partirait dans un paquet crates.io, et attache les binaires des trois systèmes
+à la version. Un tag reste le pire endroit pour *découvrir* une casse, le
+commit étant déjà celui qu'on voulait publier : ce portail double le filet
+hebdomadaire au moment où l'erreur coûte le plus cher, il ne le remplace pas.
+
+`ci.yml` coûte cher — environ 750 crates par branche, une dizaine de minutes à
 froid, le double sur Windows — donc elle est dosée : une poussée ne vérifie que
 macOS, les trois systèmes tournent sur les pull requests, sur demande
 (`workflow_dispatch`) et une fois par semaine, une poussée qui ne touche que de

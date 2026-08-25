@@ -84,7 +84,10 @@ fontconfig, ALSA. La liste exacte est dans [`.github/workflows/ci.yml`](.github/
 
 **Windows** : la chaîne MSVC.
 
-La CI compile et teste sur les trois à chaque poussée. Ce qu'elle ne prouve pas :
+La CI vérifie macOS à chaque poussée, et les trois systèmes sur les pull
+requests, sur demande et une fois par semaine. Un tag `v*` déclenche le portail
+de publication : matrice entière, construction en release, et les binaires des
+trois systèmes attachés à la version. Ce qu'elle ne prouve pas :
 qu'on peut s'en servir. Aucun test n'ouvre de fenêtre — ils portent sur le
 modèle, le parseur, les gabarits et les réglages. maxx est développé sur macOS,
 et c'est le seul système où son interface a été essayée à la main.

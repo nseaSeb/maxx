@@ -1,0 +1,138 @@
+# Le portail de publication : ce qui doit être vrai avant qu'une version sorte.
+#
+# La CI ordinaire donne un signal rapide sur macOS à chaque poussée. Celle-ci
+# est l'inverse : rare, complète, et sans indulgence. Elle part sur un tag
+# `v*`, et sur demande quand on veut la passer à blanc avant d'étiqueter.
+#
+# Une remarque qui vaut d'être dite : un tag est le pire endroit pour
+# *découvrir* une casse, puisque le commit est déjà celui qu'on voulait
+# publier. Ce portail ne remplace donc pas le filet hebdomadaire, il le double
+# au moment où l'erreur coûte le plus cher.
+
+name: Publication
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verifier:
+    name: ${{ matrix.systeme }}
+    runs-on: ${{ matrix.systeme }}
+    strategy:
+      fail-fast: false
+      matrix:
+        systeme: [macos-latest, ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Dépendances système (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev \
+            libfontconfig-dev \
+            libwayland-dev \
+            libxkbcommon-x11-dev \
+            libx11-xcb-dev \
+            libssl-dev \
+            libvulkan-dev \
+            pkg-config \
+            cmake \
+            clang
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test
+
+      # Ce que la CI ordinaire ne fait jamais : construire en release. Une
+      # optimisation peut révéler ce qu'un build de debug tolère.
+      - name: Construction
+        run: cargo build --release
+
+      - name: Nommer le binaire
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ runner.os }}" in
+            Windows) source="target/release/maxx.exe"; cible="maxx-windows.exe" ;;
+            macOS)   source="target/release/maxx";     cible="maxx-macos" ;;
+            *)       source="target/release/maxx";     cible="maxx-linux" ;;
+          esac
+          mkdir -p paquets
+          cp "$source" "paquets/$cible"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaire-${{ runner.os }}
+          path: paquets/*
+
+  paquet:
+    name: le paquet se tient
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # `cargo package --list` dit ce qui partirait sur crates.io. Deux pièges
+      # qu'il attrape : un fichier oublié, et surtout `Cargo.lock`, que
+      # `build.rs` lit pour connaître la version de gpui — sans lui, la version
+      # affichée par la fenêtre « À propos » deviendrait « inconnue ».
+      - name: Ce qui partirait
+        run: |
+          set -euo pipefail
+          cargo package --list --allow-dirty > paquet.txt
+          cat paquet.txt
+          grep -qx "build.rs" paquet.txt || { echo "build.rs manque au paquet"; exit 1; }
+          grep -qx "Cargo.lock" paquet.txt || {
+            echo "Cargo.lock manque : build.rs ne saurait plus lire la version de gpui"
+            exit 1
+          }
+          grep -q "^demo/" paquet.txt && { echo "la démo n'a rien à faire dans le paquet"; exit 1; }
+          exit 0
+
+  publier:
+    name: attacher les binaires à la version
+    needs: [verifier, paquet]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: paquets
+          merge-multiple: true
+
+      # Des binaires, et pas seulement crates.io : `cargo install` demande à
+      # l'utilisateur Linux d'avoir les paquets de développement de Vulkan, de
+      # Wayland et de fontconfig. Un fichier à télécharger ne demande rien.
+      #
+      # Par le client `gh` plutôt qu'une action tierce : le dépôt est destiné à
+      # devenir public, et chaque action tierce est une surface de plus.
+      - name: Attacher
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ls -l paquets
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            paquets/* \
+            || gh release upload "${GITHUB_REF_NAME}" paquets/* --clobber
