@@ -72,6 +72,14 @@ pub fn app_menus(cx: &App) -> Vec<Menu> {
                 MenuItem::action("Nouvelle vue…", NewView),
                 MenuItem::action("Nouvelle fenêtre", NewWindow),
                 MenuItem::separator(),
+                MenuItem::submenu(Menu {
+                    name: "Ajouter au projet".into(),
+                    items: vec![
+                        MenuItem::action("La barre de menus", OpenMenuBar),
+                        MenuItem::action("Le module système", AddSystemModule),
+                    ],
+                }),
+                MenuItem::separator(),
                 MenuItem::action("Ouvrir un dossier…", OpenFolder),
                 recent_projects_menu(cx),
                 MenuItem::separator(),

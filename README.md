@@ -110,6 +110,23 @@ bouton `→ Zed` à côté de la propriété Action ouvre l'éditeur sur la lign
 méthode. Et il ne faut pas oublier `cx.notify()` — sans lui le champ change et
 l'écran ne bouge pas.
 
+## Le module système
+
+`Fichier > Ajouter au projet > Le module système` copie `src/systeme.rs` dans le
+projet et le déclare dans `main.rs`. Du `std` pur : ni maxx, ni gpui, copiable
+ailleurs tel quel.
+
+Il ne contient que ce qui diffère vraiment d'un système à l'autre **et** que gpui
+ne fournit pas déjà : où vont les fichiers d'une application (réglages, données,
+cache), une écriture atomique, et une mise à la corbeille — `~/.Trash` sur macOS,
+la spécification freedesktop avec son `.trashinfo` sur Linux, une corbeille à
+l'application sur Windows.
+
+Le presse-papier, l'ouverture d'une URL, la révélation dans le gestionnaire de
+fichiers, les sélecteurs : gpui les a déjà (`cx.write_to_clipboard`,
+`cx.open_url`, `cx.reveal_path`, `cx.open_with_system`, `cx.prompt_for_paths`).
+Les enrober n'apporterait que du bruit, donc le module n'y touche pas.
+
 ## Barre de menus
 
 Une application GPUI n'a aucune barre de menus tant qu'elle n'appelle pas

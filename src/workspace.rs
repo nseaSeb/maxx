@@ -563,6 +563,39 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Copies the system module into the project and opens it.
+    ///
+    /// What every desktop application ends up writing on its second day —
+    /// where its files go, and what "delete" means — and what nobody wants to
+    /// write a third time. Copied source, not a dependency: a generated
+    /// project owes nothing to maxx.
+    pub fn add_system_module(&mut self, cx: &mut Context<Self>) {
+        let Some(project) = self.project.as_ref() else {
+            self.message = Some(SharedString::from("aucun projet ouvert"));
+            cx.notify();
+            return;
+        };
+        let root = project.root.clone();
+        let path = root.join("src/systeme.rs");
+        let existed = path.exists();
+
+        if let Err(error) = crate::scaffold::add_system_module(&root) {
+            self.message = Some(SharedString::from(error.to_string()));
+            cx.notify();
+            return;
+        }
+
+        self.refresh_entries();
+        self.preferences = false;
+        self.selected = Some(path);
+        self.message = Some(SharedString::from(if existed {
+            "src/systeme.rs est déjà là"
+        } else {
+            "module système ajouté au projet et déclaré dans main.rs"
+        }));
+        cx.notify();
+    }
+
     /// Shows the preferences, or leaves them when they are already up.
     ///
     /// A toggle rather than an open: `⌘,` pressed twice is how you check a
@@ -1394,6 +1427,11 @@ impl Workspace {
         // calling into it.
         if path == root.join("src/menus.rs") {
             let _ = crate::scaffold::remove_menu_bar(&root);
+        } else if let Some(module) = top_level_module(&root, &path) {
+            // Any other `src/<module>.rs`: its `mod` line would now name a
+            // file that is gone, and the project would stop compiling — which
+            // is the opposite of what deleting a file is for.
+            let _ = crate::scaffold::remove_module(&root, &module);
         }
 
         // Every tab under it, and the menu editor, are now looking at a file
@@ -2233,6 +2271,24 @@ pub fn protected_entry(root: &std::path::Path, path: &std::path::Path) -> Option
     kept.iter()
         .find(|(candidate, _)| *candidate == relative)
         .map(|(_, reason)| format!("suppression refusée : {reason}"))
+}
+
+/// The module name of `path` when it is a `src/<module>.rs` declared in
+/// `main.rs`.
+///
+/// `main.rs` itself is not a module, and `src/ui/` has its own `mod.rs`.
+pub fn top_level_module(root: &std::path::Path, path: &std::path::Path) -> Option<String> {
+    let relative = path.strip_prefix(root).ok()?;
+    let mut parts = relative.components().map(|part| part.as_os_str());
+    if parts.next()? != "src" {
+        return None;
+    }
+    let file = parts.next()?.to_string_lossy().into_owned();
+    if parts.next().is_some() {
+        return None;
+    }
+    let module = file.strip_suffix(".rs")?;
+    (module != "main").then(|| module.to_string())
 }
 
 /// The module name of `path` when it is one of the project's views.

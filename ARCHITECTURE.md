@@ -232,6 +232,25 @@ de se réintroduire sans qu'on le voie. Ce qu'elle ne prouve pas : que
 l'interface est utilisable, aucun test n'ouvrant de fenêtre. maxx n'a été
 essayé à la main que sur macOS.
 
+## Ce que maxx ajoute à un projet
+
+Trois choses s'ajoutent à un projet existant, par insertion textuelle et jamais
+par réécriture depuis le gabarit : une vue, la barre de menus, le module
+système. Le projet peut être antérieur à maxx et faire autre chose au
+démarrage — il doit le garder.
+
+Le module système mérite sa règle : il ne contient que ce qui diffère d'un
+système à l'autre **et** que gpui ne fournit pas déjà. Le presse-papier,
+`open_url`, `reveal_path`, `open_with_system`, les sélecteurs de fichiers sont
+dans gpui ; les enrober ajouterait une couche à maintenir pour rien. Reste où
+vont les fichiers d'une application et ce que « supprimer » veut dire — ce que
+toute application de bureau finit par écrire, et que personne ne veut écrire
+une troisième fois.
+
+Symétrie nécessaire : supprimer `src/<module>.rs` depuis l'explorateur retire
+sa ligne `mod` de `main.rs`. Sans quoi supprimer un fichier casse la
+compilation, ce qui est l'inverse du but.
+
 ## La démo comme référence
 
 `demo/` est un projet complet, versionné, avec sa propre racine d'espace de

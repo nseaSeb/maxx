@@ -912,3 +912,68 @@ fn the_menu_bar_is_unwired_whatever_the_application_is_called() {
     assert!(!stripped.contains("mod menus;"), "{stripped}");
     assert!(stripped.contains("let _ = app;"), "le reste du fichier doit rester : {stripped}");
 }
+
+#[test]
+fn the_system_module_is_added_declared_and_compiles_on_its_own() {
+    let root = scratch("maxx_system_module_test");
+    scaffold::create_project(&root, "essai").expect("le projet doit être créé");
+
+    // Un main.rs qui commence par un commentaire de module : la déclaration ne
+    // doit pas passer devant.
+    let main_path = root.join("src/main.rs");
+    let source = std::fs::read_to_string(&main_path).unwrap();
+    std::fs::write(&main_path, format!("//! Mon application.\n{source}")).unwrap();
+
+    scaffold::add_system_module(&root).expect("le module doit être ajouté");
+
+    let module = root.join("src/systeme.rs");
+    assert!(module.exists());
+    let wired = std::fs::read_to_string(&main_path).unwrap();
+    assert!(wired.starts_with("//! Mon application.\n"), "{wired}");
+    assert!(wired.contains("mod systeme;"), "{wired}");
+
+    // Deux fois de suite ne duplique rien.
+    scaffold::add_system_module(&root).expect("la seconde fois ne doit rien casser");
+    let twice = std::fs::read_to_string(&main_path).unwrap();
+    assert_eq!(twice.matches("mod systeme;").count(), 1);
+
+    // Il ne dépend ni de maxx ni de gpui : rien que du std.
+    let body = std::fs::read_to_string(&module).unwrap();
+    assert!(!body.contains("use gpui"), "le module doit rester du std pur");
+    assert!(!body.contains("maxx::"), "le module ne doit rien devoir à maxx");
+    // Et il ne double pas ce que gpui fournit déjà.
+    for covered in ["clipboard", "open_url", "reveal_path"] {
+        assert!(
+            !body.contains(&format!("pub fn {covered}")),
+            "{covered} est déjà dans gpui"
+        );
+    }
+
+    // Le retirer doit retirer sa déclaration, sinon le projet ne compile plus.
+    scaffold::remove_module(&root, "systeme").expect("la déclaration doit partir");
+    let stripped = std::fs::read_to_string(&main_path).unwrap();
+    assert!(!stripped.contains("mod systeme;"), "{stripped}");
+    assert!(stripped.contains("mod ui;"), "le reste doit rester : {stripped}");
+}
+
+#[test]
+fn only_a_top_level_module_file_has_a_mod_line() {
+    let root = PathBuf::from("/tmp/essai");
+    assert_eq!(
+        maxx::workspace::top_level_module(&root, &root.join("src/systeme.rs")).as_deref(),
+        Some("systeme")
+    );
+    // main.rs n'est pas un module, ui/ a son propre mod.rs.
+    assert_eq!(
+        maxx::workspace::top_level_module(&root, &root.join("src/main.rs")),
+        None
+    );
+    assert_eq!(
+        maxx::workspace::top_level_module(&root, &root.join("src/ui/vue_1.rs")),
+        None
+    );
+    assert_eq!(
+        maxx::workspace::top_level_module(&root, &root.join("Cargo.toml")),
+        None
+    );
+}

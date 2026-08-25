@@ -128,6 +128,272 @@ target-dir = "{}"
     )
 }
 
+/// Adds the system module to an existing project and declares it.
+///
+/// A copied module, not a dependency: a generated project owes nothing to
+/// maxx, and this one owes nothing to gpui either — it is plain `std`.
+pub fn add_system_module(root: &Path) -> io::Result<()> {
+    let main_path = root.join("src/main.rs");
+    let source = std::fs::read_to_string(&main_path)?;
+    let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
+
+    if !lines.iter().any(|line| line.trim() == "mod systeme;") {
+        lines.insert(header_end(&lines), "mod systeme;".into());
+    }
+
+    let path = root.join("src/systeme.rs");
+    if !path.exists() {
+        std::fs::write(&path, system_rs())?;
+    }
+
+    let mut out = lines.join("\n");
+    out.push('\n');
+    std::fs::write(&main_path, out)
+}
+
+/// Drops `mod <module>;` from `src/main.rs`.
+///
+/// Called when a module file goes to the Trash: leaving the declaration behind
+/// stops the project from compiling, which is the opposite of what deleting a
+/// file is meant to achieve.
+pub fn remove_module(root: &Path, module: &str) -> io::Result<()> {
+    let main_path = root.join("src/main.rs");
+    let source = std::fs::read_to_string(&main_path)?;
+    let declaration = format!("mod {module};");
+    let kept: Vec<&str> = source
+        .lines()
+        .filter(|line| {
+            let line = line.trim();
+            line != declaration && line != format!("pub {declaration}")
+        })
+        .collect();
+    let mut out = kept.join("\n");
+    out.push('\n');
+    std::fs::write(&main_path, out)
+}
+
+/// The first line an item may be inserted before.
+///
+/// An inner doc comment or an inner attribute has to stay ahead of every item,
+/// or the crate stops compiling.
+fn header_end(lines: &[String]) -> usize {
+    lines
+        .iter()
+        .position(|line| {
+            let line = line.trim_start();
+            !(line.is_empty() || line.starts_with("//") || line.starts_with("#!["))
+        })
+        .unwrap_or(lines.len())
+}
+
+/// The system module of a generated project.
+///
+/// Only what actually differs from one system to the next *and* is not already
+/// in gpui. The clipboard, opening a URL, revealing a file, the file pickers:
+/// gpui has all of them (`cx.write_to_clipboard`, `cx.open_url`,
+/// `cx.reveal_path`, `cx.open_with_system`, `cx.prompt_for_paths`), and
+/// wrapping them would be noise. What is left is where a system puts an
+/// application's files, and what it calls its trash.
+fn system_rs() -> String {
+    r#"//! Ce que chaque système fait à sa façon.
+//!
+//! Écrit par maxx, à vous ensuite. Rien ici ne dépend de maxx ni de gpui :
+//! c'est du `std`, copiable ailleurs tel quel.
+//!
+//! Ce module ne couvre volontairement pas le presse-papier, l'ouverture d'une
+//! URL, la révélation d'un fichier dans le gestionnaire, ni les sélecteurs de
+//! fichiers : gpui les fournit déjà — `cx.write_to_clipboard`,
+//! `cx.read_from_clipboard`, `cx.open_url`, `cx.reveal_path`,
+//! `cx.open_with_system`, `cx.prompt_for_paths`. Les enrober n'apporterait que
+//! du bruit.
+
+// Un module qu'on ajoute avant d'en avoir besoin : sans cela, chaque fonction
+// pas encore appelée produit un avertissement, et sept avertissements le jour
+// où on l'ajoute apprennent à ne plus les lire. À retirer quand tout sert.
+#![allow(dead_code)]
+
+use std::path::{Path, PathBuf};
+
+/// Où ranger les réglages : ce que l'utilisateur édite.
+///
+/// `XDG_CONFIG_HOME` quand il est réglé, `APPDATA` sur Windows,
+/// `Library/Application Support` sur macOS, `.config` ailleurs.
+pub fn config_dir(application: &str) -> Option<PathBuf> {
+    if cfg!(target_os = "windows") {
+        return Some(PathBuf::from(std::env::var("APPDATA").ok()?).join(application));
+    }
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        if !xdg.is_empty() {
+            return Some(PathBuf::from(xdg).join(application));
+        }
+    }
+    let home = PathBuf::from(std::env::var("HOME").ok()?);
+    Some(if cfg!(target_os = "macos") {
+        home.join("Library/Application Support").join(application)
+    } else {
+        home.join(".config").join(application)
+    })
+}
+
+/// Où ranger ce que l'application retient toute seule.
+pub fn data_dir(application: &str) -> Option<PathBuf> {
+    if cfg!(target_os = "windows") {
+        return Some(PathBuf::from(std::env::var("LOCALAPPDATA").ok()?).join(application));
+    }
+    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+        if !xdg.is_empty() {
+            return Some(PathBuf::from(xdg).join(application));
+        }
+    }
+    let home = PathBuf::from(std::env::var("HOME").ok()?);
+    Some(if cfg!(target_os = "macos") {
+        home.join("Library/Application Support").join(application)
+    } else {
+        home.join(".local/share").join(application)
+    })
+}
+
+/// Où ranger ce qui se reconstruit.
+pub fn cache_dir(application: &str) -> Option<PathBuf> {
+    if cfg!(target_os = "windows") {
+        return Some(PathBuf::from(std::env::var("LOCALAPPDATA").ok()?).join(application));
+    }
+    if let Ok(xdg) = std::env::var("XDG_CACHE_HOME") {
+        if !xdg.is_empty() {
+            return Some(PathBuf::from(xdg).join(application));
+        }
+    }
+    let home = PathBuf::from(std::env::var("HOME").ok()?);
+    Some(if cfg!(target_os = "macos") {
+        home.join("Library/Caches").join(application)
+    } else {
+        home.join(".cache").join(application)
+    })
+}
+
+/// Écrit `body` dans `path`, en passant par un fichier temporaire.
+///
+/// Une écriture directe interrompue en cours laisse un fichier tronqué, que la
+/// lecture suivante prendra pour un fichier abîmé.
+pub fn write_atomically(path: &Path, body: &str) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let temporary = path.with_extension("tmp");
+    std::fs::write(&temporary, body)?;
+    std::fs::rename(&temporary, path)
+}
+
+/// Déplace `path` vers la corbeille et répond où il a atterri.
+///
+/// Jamais un effacement : un clic malheureux doit coûter un aller-retour dans
+/// le gestionnaire de fichiers, pas la journée.
+///
+/// Trois corbeilles différentes. `~/.Trash` sur macOS. Sur Linux la
+/// spécification freedesktop, avec le `.trashinfo` sans lequel le bureau ne
+/// sait pas d'où venait le fichier et ne peut pas le restaurer. Sur Windows,
+/// une corbeille à l'application : la vraie ne s'atteint que par l'API du
+/// shell, ce qui coûterait une dépendance et du code `unsafe`.
+pub fn move_to_trash(path: &Path, application: &str) -> Result<PathBuf, String> {
+    let trash = trash_dir(application)?;
+    std::fs::create_dir_all(&trash).map_err(|error| error.to_string())?;
+
+    let name = path
+        .file_name()
+        .ok_or_else(|| String::from("chemin sans nom de fichier"))?
+        .to_string_lossy()
+        .into_owned();
+    let (stem, extension) = match name.rsplit_once('.') {
+        Some((stem, extension)) if !stem.is_empty() => (stem.to_string(), format!(".{extension}")),
+        _ => (name.clone(), String::new()),
+    };
+
+    // La corbeille contient peut-être déjà un fichier de ce nom.
+    let mut target = trash.join(&name);
+    let mut index = 1;
+    while target.exists() {
+        target = trash.join(format!("{stem} {index}{extension}"));
+        index += 1;
+    }
+
+    // D'un volume à l'autre, `rename` échoue avec EXDEV : il faut alors un
+    // déplacement qui copie.
+    if std::fs::rename(path, &target).is_err() {
+        let moved = std::process::Command::new(if cfg!(target_os = "windows") {
+            "cmd"
+        } else {
+            "/bin/mv"
+        });
+        let mut moved = moved;
+        if cfg!(target_os = "windows") {
+            moved.arg("/C").arg("move").arg("/Y");
+        }
+        let ok = moved
+            .arg(path)
+            .arg(&target)
+            .status()
+            .map(|status| status.success())
+            .map_err(|error| error.to_string())?;
+        if !ok {
+            return Err(format!("déplacement refusé : {}", path.display()));
+        }
+    }
+
+    write_trashinfo(&target, path);
+    Ok(target)
+}
+
+/// Le dossier où ce système garde les fichiers mis à la corbeille.
+fn trash_dir(application: &str) -> Result<PathBuf, String> {
+    if cfg!(target_os = "macos") {
+        let home = std::env::var("HOME").map_err(|_| String::from("HOME n'est pas défini"))?;
+        return Ok(PathBuf::from(home).join(".Trash"));
+    }
+    if cfg!(target_os = "windows") {
+        return data_dir(application)
+            .map(|dir| dir.join("corbeille"))
+            .ok_or_else(|| String::from("LOCALAPPDATA n'est pas défini"));
+    }
+    let data = match std::env::var("XDG_DATA_HOME") {
+        Ok(data) if !data.is_empty() => PathBuf::from(data),
+        _ => {
+            let home = std::env::var("HOME").map_err(|_| String::from("HOME n'est pas défini"))?;
+            PathBuf::from(home).join(".local/share")
+        }
+    };
+    Ok(data.join("Trash/files"))
+}
+
+/// Écrit la fiche dont un bureau Linux a besoin pour proposer « Restaurer ».
+fn write_trashinfo(target: &Path, original: &Path) {
+    if cfg!(target_os = "macos") || cfg!(target_os = "windows") {
+        return;
+    }
+    let Some(files) = target.parent() else { return };
+    let Some(trash) = files.parent() else { return };
+    let Some(name) = target.file_name() else { return };
+
+    let info = trash.join("info");
+    if std::fs::create_dir_all(&info).is_err() {
+        return;
+    }
+    let absolute = std::fs::canonicalize(original.parent().unwrap_or(original))
+        .map(|parent| match original.file_name() {
+            Some(name) => parent.join(name),
+            None => parent,
+        })
+        .unwrap_or_else(|_| original.to_path_buf());
+
+    let body = format!("[Trash Info]\nPath={}\n", absolute.to_string_lossy());
+    let _ = std::fs::write(
+        info.join(format!("{}.trashinfo", name.to_string_lossy())),
+        body,
+    );
+}
+"#
+    .to_string()
+}
+
 /// The menu bar of a generated project.
 ///
 /// A GPUI application gets no menu bar of its own — not even a Quit — unless it
@@ -368,16 +634,7 @@ pub fn add_menu_bar(root: &Path) -> io::Result<()> {
     let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
 
     if !lines.iter().any(|line| line.trim() == "mod menus;") {
-        // Not line 0: an inner doc comment or an inner attribute has to stay
-        // ahead of every item, or the crate stops compiling.
-        let after_header = lines
-            .iter()
-            .position(|line| {
-                let line = line.trim_start();
-                !(line.is_empty() || line.starts_with("//") || line.starts_with("#!["))
-            })
-            .unwrap_or(lines.len());
-        lines.insert(after_header, "mod menus;".into());
+        lines.insert(header_end(&lines), "mod menus;".into());
     }
 
     if !source.contains("menus::app_menus()") {
