@@ -10,3 +10,6 @@
 # Le verrou et les gabarits sont lus par des tests : jamais de conversion.
 Cargo.lock -text
 demo/** -text
+
+# Images are binary: never line-ending conversion.
+*.png binary

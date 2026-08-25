@@ -8,6 +8,8 @@ an action — and what comes out is an ordinary `gpui` + `gpui-component` projec
 that compiles and runs without maxx, and opens in Zed like any other Rust
 project.
 
+![The maxx workshop: project explorer on the left, canvas in the middle, structure and properties on the right](docs/maxx.png)
+
 ## The principle
 
 **The `.rs` file is the truth.** maxx has no screen format of its own; it writes
