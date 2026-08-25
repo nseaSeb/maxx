@@ -29,6 +29,7 @@ actions!(
         OverwriteFile,
         Save,
         DeleteNode,
+        DeleteFile,
         CloseFolder,
         CloseWindow,
         // Edit menu
@@ -38,10 +39,15 @@ actions!(
         Copy,
         Paste,
         SelectAll,
+        AddMenu,
+        AddMenuEntry,
+        AddMenuSeparator,
         // View menu
         ToggleProjectPanel,
         ToggleStatusBar,
         ToggleOutput,
+        OpenMenuBar,
+        RemoveMenuBar,
         // Run menu
         RunProject,
         StopProject,
@@ -97,6 +103,18 @@ pub fn register_handlers(cx: &mut App) {
     cx.on_action(|_: &DeleteNode, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.delete_selected(cx));
     });
+    cx.on_action(|_: &DeleteFile, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.delete_selected_entry(cx));
+    });
+    cx.on_action(|_: &AddMenu, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.add_menu(cx));
+    });
+    cx.on_action(|_: &AddMenuEntry, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.add_menu_item(false, cx));
+    });
+    cx.on_action(|_: &AddMenuSeparator, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.add_menu_item(true, cx));
+    });
     cx.on_action(|_: &Undo, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.undo(cx));
     });
@@ -139,12 +157,18 @@ pub fn register_handlers(cx: &mut App) {
     cx.on_action(|_: &ToggleOutput, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.toggle_output(cx));
     });
+    cx.on_action(|_: &OpenMenuBar, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.open_menu_bar(cx));
+    });
+    cx.on_action(|_: &RemoveMenuBar, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.remove_menu_bar(cx));
+    });
     cx.on_action(|_: &ToggleStatusBar, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.toggle_status_bar(cx));
     });
 
     cx.on_action(|_: &RevealInFinder, cx: &mut App| {
-        let path = active_workspace_path(cx);
+        let path = selected_entry_path(cx);
         if let Some(path) = path {
             cx.reveal_path(&path);
         }
@@ -264,6 +288,12 @@ fn with_active_workspace(
     f: impl FnOnce(&mut Workspace, &mut gpui::Window, &mut gpui::Context<Workspace>) + 'static,
 ) {
     workspace::defer_active(cx, f);
+}
+
+/// Absolute path of the entry the project panel is on, falling back to the
+/// project root.
+fn selected_entry_path(cx: &mut App) -> Option<std::path::PathBuf> {
+    workspace::read_active(cx, |workspace| workspace.selected_entry()).flatten()
 }
 
 /// Absolute path of the frontmost window's project, if it has one.

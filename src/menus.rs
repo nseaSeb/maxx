@@ -56,7 +56,12 @@ pub fn app_menus() -> Vec<Menu> {
                 MenuItem::os_action("Coller", Paste, OsAction::Paste),
                 MenuItem::os_action("Tout sélectionner", SelectAll, OsAction::SelectAll),
                 MenuItem::separator(),
+                MenuItem::action("Ajouter un menu", AddMenu),
+                MenuItem::action("Ajouter une entrée", AddMenuEntry),
+                MenuItem::action("Ajouter un séparateur", AddMenuSeparator),
+                MenuItem::separator(),
                 MenuItem::action("Supprimer le nœud", DeleteNode),
+                MenuItem::action("Supprimer le fichier", DeleteFile),
             ],
         },
         Menu {
@@ -65,6 +70,9 @@ pub fn app_menus() -> Vec<Menu> {
                 MenuItem::action("Panneau du projet", ToggleProjectPanel),
                 MenuItem::action("Sortie", ToggleOutput),
                 MenuItem::action("Barre d'état", ToggleStatusBar),
+                MenuItem::separator(),
+                MenuItem::action("Barre de menus du projet", OpenMenuBar),
+                MenuItem::action("Retirer la barre de menus", RemoveMenuBar),
             ],
         },
         Menu {

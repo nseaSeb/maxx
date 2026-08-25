@@ -168,3 +168,49 @@ fn run(root: PathBuf, subcommand: &str, sender: Sender<Message>) {
     let ok = child.wait().map(|status| status.success()).unwrap_or(false);
     let _ = sender.send(Message::Finished(ok));
 }
+
+/// Moves `path` to the user's Trash and answers where it landed.
+///
+/// A plain rename rather than a call to the Finder: scripting the Finder needs
+/// an automation permission the first time, and a prompt in the middle of a
+/// delete is worse than losing the "Put Back" entry. The name is made unique
+/// because `~/.Trash` may already hold a file of that name from another
+/// project.
+pub fn move_to_trash(path: &Path) -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME n'est pas défini".to_string())?;
+    let trash = PathBuf::from(home).join(".Trash");
+    std::fs::create_dir_all(&trash).map_err(|error| error.to_string())?;
+
+    let name = path
+        .file_name()
+        .ok_or_else(|| "chemin sans nom de fichier".to_string())?
+        .to_string_lossy()
+        .into_owned();
+    let (stem, extension) = match name.rsplit_once('.') {
+        Some((stem, extension)) if !stem.is_empty() => (stem.to_string(), format!(".{extension}")),
+        _ => (name.clone(), String::new()),
+    };
+
+    let mut target = trash.join(&name);
+    let mut index = 1;
+    while target.exists() {
+        target = trash.join(format!("{stem} {index}{extension}"));
+        index += 1;
+    }
+
+    // Across volumes `rename` fails with `EXDEV`; the project may well sit on
+    // an external disk, so fall back to a copy followed by a removal.
+    if std::fs::rename(path, &target).is_ok() {
+        return Ok(target);
+    }
+    let status = Command::new("/bin/mv")
+        .arg(path)
+        .arg(&target)
+        .status()
+        .map_err(|error| error.to_string())?;
+    if status.success() {
+        Ok(target)
+    } else {
+        Err(format!("déplacement vers la corbeille refusé : {}", path.display()))
+    }
+}

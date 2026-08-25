@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use maxx::{parser, scaffold, view::View};
+use maxx::{parser, scaffold, view::View, workspace};
 
 fn scratch(name: &str) -> PathBuf {
     let dir = std::env::var("MAXX_SCRATCH")
@@ -758,4 +758,138 @@ fn a_menu_action_points_at_its_handler() {
         .expect("l'enregistrement l'a câblée");
     let source = std::fs::read_to_string(&path).unwrap();
     assert!(source.lines().nth(line - 1).unwrap().contains("&Preferences,"));
+}
+
+#[test]
+fn deleting_a_view_unregisters_it() {
+    let root = scratch("maxx_delete_view_test");
+    scaffold::create_project(&root, "essai").expect("le projet doit être créé");
+    scaffold::create_view(&root, "vue_2").expect("la vue doit être créée");
+
+    let mod_path = root.join("src/ui/mod.rs");
+    assert!(std::fs::read_to_string(&mod_path).unwrap().contains("pub mod vue_2;"));
+
+    let file = root.join("src/ui/vue_2.rs");
+    assert_eq!(
+        workspace::view_module(&root, &file).as_deref(),
+        Some("vue_2")
+    );
+    workspace::unregister_view(&root, "vue_2");
+
+    let source = std::fs::read_to_string(&mod_path).unwrap();
+    assert!(!source.contains("pub mod vue_2;"));
+    assert!(
+        source.contains("pub mod accueil;"),
+        "les autres vues restent déclarées : {source}"
+    );
+}
+
+#[test]
+fn the_project_skeleton_refuses_to_be_deleted() {
+    let root = PathBuf::from("/tmp/essai");
+    for kept in ["Cargo.toml", "src/main.rs", "src/ui/mod.rs", "src/ui/accueil.rs"] {
+        assert!(
+            workspace::protected_entry(&root, &root.join(kept)).is_some(),
+            "{kept} doit être protégé"
+        );
+    }
+    assert!(workspace::protected_entry(&root, &root).is_some());
+    // La barre de menus, elle, se retire : sa suppression décâble main.rs.
+    assert!(workspace::protected_entry(&root, &root.join("src/menus.rs")).is_none());
+    assert!(workspace::protected_entry(&root, &root.join("src/ui/vue_2.rs")).is_none());
+    // `view_module` ne doit pas prendre un fichier hors de src/ui pour une vue.
+    assert_eq!(workspace::view_module(&root, &root.join("src/menus.rs")), None);
+    assert_eq!(
+        workspace::view_module(&root, &root.join("src/ui/sous/vue.rs")),
+        None
+    );
+}
+
+#[test]
+fn a_menu_bar_can_be_added_to_a_project_that_has_none() {
+    let root = scratch("maxx_add_menu_bar_test");
+    scaffold::create_project(&root, "essai").expect("le projet doit être créé");
+
+    // Un projet antérieur à la barre de menus générée : ni le fichier, ni le
+    // câblage dans main.rs.
+    std::fs::remove_file(root.join("src/menus.rs")).unwrap();
+    scaffold::remove_menu_bar(&root).expect("le câblage doit partir");
+    let stripped = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    assert!(!stripped.contains("mod menus;"));
+    assert!(!stripped.contains("menus::app_menus()"));
+    assert!(stripped.contains("cx.activate(true);"));
+
+    scaffold::add_menu_bar(&root).expect("la barre doit être ajoutée");
+    assert!(root.join("src/menus.rs").exists());
+    let wired = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    assert!(wired.starts_with("mod menus;\n"));
+    assert!(wired.contains("        menus::register(cx);\n"));
+    assert!(wired.contains("        cx.bind_keys(menus::key_bindings());\n"));
+    assert!(wired.contains("        cx.set_menus(menus::app_menus());\n"));
+
+    // Deux fois de suite ne doit rien dupliquer.
+    scaffold::add_menu_bar(&root).expect("la seconde fois ne doit rien casser");
+    let twice = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    assert_eq!(twice.matches("mod menus;").count(), 1);
+    assert_eq!(twice.matches("menus::register(cx);").count(), 1);
+
+    // maxx doit relire la barre qu'il vient d'écrire.
+    let menus = maxx::menufile::MenuFile::load(&root.join("src/menus.rs"))
+        .expect("la barre doit se relire");
+    assert!(!menus.menus.is_empty());
+}
+
+#[test]
+fn wiring_the_menu_bar_keeps_the_header_of_main_rs_valid() {
+    let root = scratch("maxx_menu_bar_header_test");
+    scaffold::create_project(&root, "essai").expect("le projet doit être créé");
+    std::fs::remove_file(root.join("src/menus.rs")).unwrap();
+    scaffold::remove_menu_bar(&root).unwrap();
+
+    // Un main.rs qui commence par un commentaire de module et un attribut
+    // interne : un `mod menus;` en ligne 1 ne compilerait pas.
+    let main_path = root.join("src/main.rs");
+    let source = std::fs::read_to_string(&main_path).unwrap();
+    std::fs::write(
+        &main_path,
+        format!("//! Mon application.\n#![allow(dead_code)]\n\n{source}"),
+    )
+    .unwrap();
+
+    scaffold::add_menu_bar(&root).expect("la barre doit être ajoutée");
+
+    let wired = std::fs::read_to_string(&main_path).unwrap();
+    let lines: Vec<&str> = wired.lines().collect();
+    assert_eq!(lines[0], "//! Mon application.");
+    assert_eq!(lines[1], "#![allow(dead_code)]");
+    assert!(
+        lines.iter().position(|line| *line == "mod menus;").unwrap()
+            > lines
+                .iter()
+                .position(|line| *line == "#![allow(dead_code)]")
+                .unwrap(),
+        "{wired}"
+    );
+}
+
+#[test]
+fn a_main_rs_it_cannot_wire_is_left_alone() {
+    let root = scratch("maxx_menu_bar_refusal_test");
+    scaffold::create_project(&root, "essai").expect("le projet doit être créé");
+    std::fs::remove_file(root.join("src/menus.rs")).unwrap();
+    scaffold::remove_menu_bar(&root).unwrap();
+
+    // Ni cx.activate(…), ni Application::new().run(…) : maxx ne sait pas où
+    // insérer les appels.
+    let main_path = root.join("src/main.rs");
+    std::fs::write(&main_path, "fn main() {\n    println!(\"bonjour\");\n}\n").unwrap();
+
+    let error = scaffold::add_menu_bar(&root).expect_err("le câblage doit être refusé");
+    assert!(error.to_string().contains("cx.activate"));
+    assert!(
+        !root.join("src/menus.rs").exists(),
+        "un menus.rs orphelin ferait croire au projet qu'il a déjà une barre"
+    );
+    let untouched = std::fs::read_to_string(&main_path).unwrap();
+    assert!(!untouched.contains("mod menus;"), "{untouched}");
 }

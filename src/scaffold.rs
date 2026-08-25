@@ -277,3 +277,98 @@ impl Render for {type_name} {{
 "#
     )
 }
+
+/// Gives an existing project a menu bar: writes `src/menus.rs` and wires it
+/// into `src/main.rs`.
+///
+/// Wired by textual insertion, like `create_view`: the project may predate the
+/// template entirely, and rewriting its `main.rs` from the template would throw
+/// away whatever it does at startup.
+pub fn add_menu_bar(root: &Path) -> io::Result<()> {
+    // `main.rs` is patched first, and nothing is written until it is known to
+    // work: a `src/menus.rs` left behind by a failed wiring would make the next
+    // attempt believe the project already has a menu bar.
+    let main_path = root.join("src/main.rs");
+    let source = std::fs::read_to_string(&main_path)?;
+    let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
+
+    if !lines.iter().any(|line| line.trim() == "mod menus;") {
+        // Not line 0: an inner doc comment or an inner attribute has to stay
+        // ahead of every item, or the crate stops compiling.
+        let after_header = lines
+            .iter()
+            .position(|line| {
+                let line = line.trim_start();
+                !(line.is_empty() || line.starts_with("//") || line.starts_with("#!["))
+            })
+            .unwrap_or(lines.len());
+        lines.insert(after_header, "mod menus;".into());
+    }
+
+    if !source.contains("menus::app_menus()") {
+        // `cx.activate` is what every gpui `main` does first; failing that, the
+        // line that opens the closure `run` was given.
+        let anchor = lines
+            .iter()
+            .position(|line| line.contains("cx.activate("))
+            .or_else(|| {
+                lines
+                    .iter()
+                    .position(|line| line.contains(".run(") && line.trim_end().ends_with('{'))
+            });
+        let Some(anchor) = anchor else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "src/main.rs : ni cx.activate(…) ni Application::new().run(…) — \
+                 ajoutez menus::register(cx), cx.bind_keys(menus::key_bindings()) \
+                 et cx.set_menus(menus::app_menus()) à la main",
+            ));
+        };
+        let indent: String = lines[anchor]
+            .chars()
+            .take_while(|character| character.is_whitespace())
+            .collect();
+        for (offset, call) in [
+            "menus::register(cx);",
+            "cx.bind_keys(menus::key_bindings());",
+            "cx.set_menus(menus::app_menus());",
+        ]
+        .iter()
+        .enumerate()
+        {
+            lines.insert(anchor + 1 + offset, format!("{indent}{call}"));
+        }
+    }
+
+    let menus_path = root.join("src/menus.rs");
+    if !menus_path.exists() {
+        std::fs::write(&menus_path, menus_rs())?;
+    }
+
+    let mut out = lines.join("\n");
+    out.push('\n');
+    std::fs::write(&main_path, out)
+}
+
+/// Unwires the menu bar from `src/main.rs`.
+///
+/// The file `src/menus.rs` is the caller's business — the project panel puts it
+/// in the Trash — but leaving `mod menus;` behind would stop the project from
+/// compiling.
+pub fn remove_menu_bar(root: &Path) -> io::Result<()> {
+    let main_path = root.join("src/main.rs");
+    let source = std::fs::read_to_string(&main_path)?;
+    let dropped = [
+        "mod menus;",
+        "menus::register(cx);",
+        "cx.bind_keys(menus::key_bindings());",
+        "cx.set_menus(menus::app_menus());",
+    ];
+    let kept: Vec<&str> = source
+        .lines()
+        .filter(|line| !dropped.contains(&line.trim()))
+        .collect();
+    let mut out = kept.join("\n");
+    out.push('\n');
+    std::fs::write(&main_path, out)
+}

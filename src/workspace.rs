@@ -12,6 +12,7 @@ use gpui_component::input::{InputEvent, InputState};
 use gpui_component::scroll::Scrollbar;
 use gpui_component::spinner::Spinner;
 use gpui_component::Sizable as _;
+use gpui_component::menu::ContextMenuExt as _;
 use std::collections::HashMap;
 
 /// Which workspace lives in which window.
@@ -233,6 +234,7 @@ impl Workspace {
         self.menu_file = None;
         if index < self.views.len() {
             self.active = Some(index);
+            self.selected = Some(self.views[index].path.clone());
             self.revision += 1;
             self.message = None;
             cx.notify();
@@ -295,8 +297,8 @@ impl Workspace {
         self.project = None;
         self.views.clear();
         self.active = None;
-        
-        
+        self.menu_file = None;
+        self.menu_synced = None;
         self.entries.clear();
         self.expanded.clear();
         self.selected = None;
@@ -554,8 +556,66 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Opens the project's menu bar for editing.
+    ///
+    /// `src/menus.rs` is a file like any other, so a click in the explorer
+    /// opens it — but nothing in the window said so, and the editor was
+    /// unfindable for anyone who had not been told.
+    pub fn open_menu_bar(&mut self, cx: &mut Context<Self>) {
+        let Some(project) = self.project.as_ref() else {
+            self.message = Some(SharedString::from("aucun projet ouvert"));
+            cx.notify();
+            return;
+        };
+        if self.menu_file.is_some() {
+            return;
+        }
+        let root = project.root.clone();
+        let path = root.join("src/menus.rs");
+
+        // A project made before maxx generated a menu bar — or one whose bar
+        // was deleted — gets one now rather than a refusal.
+        let added = !path.exists();
+        if added {
+            if let Err(error) = crate::scaffold::add_menu_bar(&root) {
+                self.message = Some(SharedString::from(error.to_string()));
+                cx.notify();
+                return;
+            }
+            self.refresh_entries();
+        }
+
+        self.select_file(path, cx);
+        if added && self.message.is_none() {
+            self.message = Some(SharedString::from(
+                "barre de menus ajoutée au projet et câblée dans main.rs",
+            ));
+        }
+    }
+
+    /// Takes the menu bar away from the project: `src/menus.rs` to the Trash,
+    /// `main.rs` unwired.
+    pub fn remove_menu_bar(&mut self, cx: &mut Context<Self>) {
+        let Some(project) = self.project.as_ref() else {
+            self.message = Some(SharedString::from("aucun projet ouvert"));
+            cx.notify();
+            return;
+        };
+        let path = project.root.join("src/menus.rs");
+        if !path.exists() {
+            self.message = Some(SharedString::from("ce projet n'a pas de barre de menus"));
+            cx.notify();
+            return;
+        }
+        // Through the panel's own delete, so the file goes to the Trash and
+        // `main.rs` is unwired exactly once, in one place.
+        self.selected = Some(path);
+        self.delete_selected_entry(cx);
+    }
+
     /// Adds a menu to the bar.
     pub fn add_menu(&mut self, cx: &mut Context<Self>) {
+        self.open_menu_bar(cx);
         if let Some(menus) = self.menu_file.as_mut() {
             menus.add_menu();
             cx.notify();
@@ -564,6 +624,7 @@ impl Workspace {
 
     /// Adds an entry to the selected menu.
     pub fn add_menu_item(&mut self, separator: bool, cx: &mut Context<Self>) {
+        self.open_menu_bar(cx);
         let Some(menus) = self.menu_file.as_mut() else {
             return;
         };
@@ -760,10 +821,12 @@ impl Workspace {
     /// Opening the folder when a view is on screen means finding the file again
     /// by hand, which is the whole gesture one wanted to avoid.
     pub fn open_in_editor(&mut self, cx: &mut Context<Self>) {
+        // The explorer selection comes first: it is what the context menu is
+        // about, and a left click sets it to the open view anyway.
         let path = self
-            .menu_file
-            .as_ref()
-            .map(|menus| menus.path.clone())
+            .selected
+            .clone()
+            .or_else(|| self.menu_file.as_ref().map(|menus| menus.path.clone()))
             .or_else(|| self.view().map(|view| view.path.clone()))
             .or_else(|| self.project().map(|project| project.root.clone()));
 
@@ -1215,6 +1278,124 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Highlights an entry of the project panel without opening it.
+    ///
+    /// A right click has to land on the entry it is about — the delete and
+    /// reveal actions all read `selected` — but it must not open the file the
+    /// way a left click does.
+    pub fn select_entry(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        self.selected = Some(path);
+        cx.notify();
+    }
+
+    /// The entry the project panel is on, falling back to the project root.
+    pub fn selected_entry(&self) -> Option<PathBuf> {
+        self.selected
+            .clone()
+            .or_else(|| self.project.as_ref().map(|project| project.root.clone()))
+    }
+
+    /// Moves the selected entry to the Trash, unregistering it when it is a
+    /// view.
+    ///
+    /// Nothing is erased: the file lands in `~/.Trash`, so a wrong click costs
+    /// a trip to the Finder and not the afternoon.
+    pub fn delete_selected_entry(&mut self, cx: &mut Context<Self>) {
+        let Some(project) = self.project.as_ref() else {
+            return;
+        };
+        let root = project.root.clone();
+        let Some(path) = self.selected.clone() else {
+            self.message = Some(SharedString::from(
+                "sélectionnez d'abord un élément dans l'explorateur",
+            ));
+            cx.notify();
+            return;
+        };
+
+        if let Some(reason) = protected_entry(&root, &path) {
+            self.message = Some(SharedString::from(reason));
+            cx.notify();
+            return;
+        }
+
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.to_string_lossy().into_owned());
+
+        // A directory takes everything under it: the modules have to be read
+        // off the disk while it is still there.
+        let is_dir = path.is_dir();
+        let modules: Vec<String> = if is_dir {
+            std::fs::read_dir(&path)
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .filter_map(|entry| view_module(&root, &entry.path()))
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            view_module(&root, &path).into_iter().collect()
+        };
+
+        if let Err(error) = crate::run::move_to_trash(&path) {
+            self.message = Some(SharedString::from(error));
+            cx.notify();
+            return;
+        }
+
+        // A view carries a `pub mod` line in `src/ui/mod.rs`; leaving it there
+        // breaks the build the file was deleted to keep clean. A directory
+        // inside `src/ui/` is itself a module, on top of the views it held.
+        for module in &modules {
+            unregister_view(&root, module);
+        }
+        if is_dir
+            && let Some(module) = path
+                .strip_prefix(root.join("src/ui"))
+                .ok()
+                .and_then(|relative| relative.to_str())
+                .filter(|relative| !relative.contains('/'))
+        {
+            unregister_view(&root, module);
+        }
+        // Same for the menu bar: the file is gone, so `main.rs` must stop
+        // calling into it.
+        if path == root.join("src/menus.rs") {
+            let _ = crate::scaffold::remove_menu_bar(&root);
+        }
+
+        // Every tab under it, and the menu editor, are now looking at a file
+        // that is gone.
+        let gone = |candidate: &std::path::Path| {
+            candidate == path || (is_dir && candidate.starts_with(&path))
+        };
+        while let Some(index) = self.views.iter().position(|view| gone(&view.path)) {
+            self.views.remove(index);
+            self.active = match self.active {
+                Some(_) if self.views.is_empty() => None,
+                Some(active) if active >= index && active > 0 => Some(active - 1),
+                Some(active) => Some(active.min(self.views.len() - 1)),
+                None => None,
+            };
+            self.revision += 1;
+        }
+        if self.menu_file.as_ref().is_some_and(|menus| gone(&menus.path)) {
+            self.menu_file = None;
+            self.menu_synced = None;
+        }
+
+        self.selected = None;
+        self.expanded.retain(|expanded| !gone(expanded));
+        self.refresh_entries();
+        self.message = Some(SharedString::from(format!(
+            "{name} déplacé vers la corbeille"
+        )));
+        cx.notify();
+    }
+
     /// Writes the view back to its file, refusing when the file changed
     /// underneath.
     pub fn save_view(&mut self, cx: &mut Context<Self>) {
@@ -1454,6 +1635,14 @@ impl Workspace {
     }
 
     fn render_project_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        // One menu for the whole panel rather than one per row: `ContextMenu`
+        // hard-codes its element id, so a menu per row would have every row
+        // sharing the same open/position state.
+        //
+        // No entry is greyed out from the selection: `ContextMenu` builds the
+        // menu from the builder of the frame it was painted with, so anything
+        // computed here would be one right click behind. `DeleteFile` reports
+        // its own refusal.
         div()
             .flex()
             .flex_col()
@@ -1464,11 +1653,24 @@ impl Workspace {
             .border_color(rgb(theme::BORDER))
             .child(
                 div()
-                    .px_3()
-                    .py_2()
-                    .text_xs()
-                    .text_color(rgb(theme::TEXT_MUTED))
-                    .child("EXPLORATEUR"),
+                    .flex()
+                    .items_center()
+                    .h(px(28.))
+                    .pl(px(12.))
+                    .pr(px(4.))
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_xs()
+                            .text_color(rgb(theme::TEXT_MUTED))
+                            .child("EXPLORATEUR"),
+                    )
+                    .child(panel_icon("panel-new-view", "＋", "Nouvelle vue", cx, |this, cx| {
+                        this.new_view(cx)
+                    }))
+                    .child(panel_icon("panel-delete", "🗑", "Supprimer", cx, |this, cx| {
+                        this.delete_selected_entry(cx)
+                    })),
             )
             .child(
                 uniform_list(
@@ -1483,6 +1685,16 @@ impl Workspace {
                 )
                 .flex_1(),
             )
+            .context_menu(move |menu, _window, _cx| {
+                menu.menu("Nouvelle vue", Box::new(crate::actions::NewView))
+                    .menu("Supprimer", Box::new(crate::actions::DeleteFile))
+                    .separator()
+                    .menu(
+                        "Révéler dans le Finder",
+                        Box::new(crate::actions::RevealInFinder),
+                    )
+                    .menu("Ouvrir dans Zed", Box::new(crate::actions::OpenInZed))
+            })
     }
 
     fn render_entry(&self, entry: Entry, cx: &mut Context<Self>) -> AnyElement {
@@ -1495,6 +1707,8 @@ impl Workspace {
         };
         let path = entry.path.clone();
         let is_dir = entry.is_dir;
+
+        let menu_path = entry.path.clone();
 
         div()
             .id(SharedString::from(entry.path.to_string_lossy().into_owned()))
@@ -1527,6 +1741,15 @@ impl Workspace {
                     this.select_file(path.clone(), cx);
                 }
             }))
+            // The menu acts on `selected`, so the right click has to move the
+            // selection before the menu is built — which it does, the menu
+            // being deferred to the next frame.
+            .on_mouse_down(
+                gpui::MouseButton::Right,
+                cx.listener(move |this, _, _window, cx| {
+                    this.select_entry(menu_path.clone(), cx);
+                }),
+            )
             .into_any_element()
     }
 
@@ -1845,4 +2068,90 @@ pub fn open_workspace_window(path: Option<PathBuf>, cx: &mut App) {
     if let Some(path) = path {
         cx.add_recent_document(&path);
     }
+}
+
+/// Why `path` must not be deleted from the project panel, if it must not.
+///
+/// The generated project names `accueil` in `main.rs` and `menus` in both
+/// `main.rs` and the menu bar it installs: deleting either leaves a project
+/// that no longer compiles, which is a worse outcome than a refusal.
+pub fn protected_entry(root: &std::path::Path, path: &std::path::Path) -> Option<String> {
+    if path == root {
+        return Some("la racine du projet ne se supprime pas ici".into());
+    }
+    if !path.starts_with(root) {
+        return Some("cet élément est hors du projet".into());
+    }
+    let relative = path.strip_prefix(root).ok()?.to_string_lossy().into_owned();
+    let kept = [
+        ("Cargo.toml", "Cargo.toml décrit le projet"),
+        ("src/main.rs", "main.rs est le point d'entrée"),
+        ("src/ui/mod.rs", "ui/mod.rs déclare les vues"),
+        ("src/ui/accueil.rs", "accueil est la vue ouverte par main.rs"),
+        ("src", "le dossier src porte tout le code"),
+        ("src/ui", "le dossier ui porte les vues"),
+    ];
+    kept.iter()
+        .find(|(candidate, _)| *candidate == relative)
+        .map(|(_, reason)| format!("suppression refusée : {reason}"))
+}
+
+/// The module name of `path` when it is one of the project's views.
+pub fn view_module(root: &std::path::Path, path: &std::path::Path) -> Option<String> {
+    let relative = path.strip_prefix(root).ok()?;
+    let mut parts = relative.components().map(|part| part.as_os_str());
+    if parts.next()? != "src" || parts.next()? != "ui" {
+        return None;
+    }
+    let file = parts.next()?.to_string_lossy().into_owned();
+    if parts.next().is_some() {
+        return None;
+    }
+    file.strip_suffix(".rs").map(|module| module.to_string())
+}
+
+/// Drops `pub mod <module>;` from `src/ui/mod.rs`.
+///
+/// Textual, the way `scaffold::create_view` adds it, so the rest of the file
+/// keeps whatever the developer wrote in it.
+pub fn unregister_view(root: &std::path::Path, module: &str) {
+    let mod_path = root.join("src/ui/mod.rs");
+    let Ok(source) = std::fs::read_to_string(&mod_path) else {
+        return;
+    };
+    let declaration = format!("pub mod {module};");
+    let kept: Vec<&str> = source
+        .lines()
+        .filter(|line| line.trim() != declaration)
+        .collect();
+    let mut out = kept.join("\n");
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    let _ = std::fs::write(&mod_path, out);
+}
+
+/// A small clickable glyph in the project panel header.
+fn panel_icon(
+    id: &'static str,
+    glyph: &'static str,
+    tooltip: &'static str,
+    cx: &mut Context<Workspace>,
+    action: impl Fn(&mut Workspace, &mut Context<Workspace>) + 'static,
+) -> impl IntoElement {
+    div()
+        .id(id)
+        .flex()
+        .items_center()
+        .justify_center()
+        .w(px(22.))
+        .h(px(22.))
+        .rounded_sm()
+        .text_xs()
+        .cursor_pointer()
+        .text_color(rgb(theme::TEXT_MUTED))
+        .hover(|this| this.bg(rgb(theme::HOVER_BG)))
+        .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tooltip).build(window, cx))
+        .child(glyph)
+        .on_click(cx.listener(move |this, _, _window, cx| action(this, cx)))
 }
