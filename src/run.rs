@@ -54,8 +54,35 @@ pub fn prewarm(root: PathBuf) -> Receiver<Message> {
 /// `.cargo/config.toml` rather than passed as an environment variable, so a
 /// `cargo run` typed in a terminal lands in the same cache.
 pub fn shared_target_dir() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-    PathBuf::from(home).join("Library/Caches/maxx/target")
+    cache_dir().join("maxx/target")
+}
+
+/// Where this system puts caches.
+///
+/// The three conventions, in the order they take precedence:
+/// `XDG_CACHE_HOME` when the user set it, `LOCALAPPDATA` on Windows, and
+/// otherwise the home directory — `Library/Caches` on macOS, `.cache`
+/// elsewhere.
+fn cache_dir() -> PathBuf {
+    if cfg!(target_os = "windows")
+        && let Ok(local) = std::env::var("LOCALAPPDATA")
+    {
+        return PathBuf::from(local);
+    }
+    if let Ok(xdg) = std::env::var("XDG_CACHE_HOME")
+        && !xdg.is_empty()
+    {
+        return PathBuf::from(xdg);
+    }
+    let Ok(home) = std::env::var("HOME") else {
+        return std::env::temp_dir();
+    };
+    let home = PathBuf::from(home);
+    if cfg!(target_os = "macos") {
+        home.join("Library/Caches")
+    } else {
+        home.join(".cache")
+    }
 }
 
 fn spawn_cargo(root: PathBuf, subcommand: &'static str) -> Receiver<Message> {
@@ -91,6 +118,10 @@ pub fn open_terminal(terminal: Option<&Terminal>, path: &Path) {
         return;
     }
 
+    // The bundle is a macOS notion, and `open` is a macOS tool: elsewhere the
+    // command on the `PATH` is the only way in, and its absence is why nothing
+    // happened.
+    #[cfg(target_os = "macos")]
     if let Some(bundle) = terminal.bundle {
         // `-n` and `--args` are what carry the flag through to a bundle that
         // has no command line tool of its own.
@@ -139,6 +170,7 @@ pub fn open_editor(editor: &Editor, path: &Path, line: Option<usize>) {
     {
         return;
     }
+    #[cfg(target_os = "macos")]
     if let Some(bundle) = editor.bundle {
         let _ = Command::new("open").arg("-a").arg(bundle).arg(path).spawn();
     }
@@ -180,6 +212,7 @@ pub fn open_editor_in_terminal(
         return;
     }
 
+    #[cfg(target_os = "macos")]
     if let Some(bundle) = terminal.bundle {
         let mut passed = vec![flag.to_string(), editor.command.to_string()];
         passed.extend(arguments);
@@ -198,6 +231,7 @@ pub fn open_editor_in_terminal(
 /// The child is a `cargo` process that has itself spawned the application, so
 /// the whole process group is signalled — killing `cargo` alone would leave the
 /// window it opened on screen.
+#[cfg(unix)]
 pub fn stop(pid: u32) {
     let _ = Command::new("kill")
         .arg("-TERM")
@@ -206,19 +240,41 @@ pub fn stop(pid: u32) {
     let _ = Command::new("kill").arg("-TERM").arg(pid.to_string()).status();
 }
 
-fn run(root: PathBuf, subcommand: &str, sender: Sender<Message>) {
-    use std::os::unix::process::CommandExt as _;
+/// Kills a run by its process id, and the tree under it.
+///
+/// Windows has no process groups to signal, so the tree is walked by
+/// `taskkill /T`, which is the equivalent gesture: `/F` because cargo's child
+/// is a window that will not close on a polite request.
+#[cfg(windows)]
+pub fn stop(pid: u32) {
+    let _ = Command::new("taskkill")
+        .arg("/PID")
+        .arg(pid.to_string())
+        .arg("/T")
+        .arg("/F")
+        .status();
+}
 
-    let child = Command::new("cargo")
+fn run(root: PathBuf, subcommand: &str, sender: Sender<Message>) {
+    let mut command = Command::new("cargo");
+    let child = command
         .arg(subcommand)
         .current_dir(&root)
         // Colour codes would end up in the panel as escape sequences.
         .env("CARGO_TERM_COLOR", "never")
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        // Without this the child stays in maxx's own group, and signalling
-        // `-pid` reaches a group that does not exist — or someone else's.
-        .process_group(0)
+        .stderr(Stdio::piped());
+
+    // Without a group of its own the child stays in maxx's, and signalling
+    // `-pid` reaches a group that does not exist — or someone else's. Windows
+    // has no such thing; `stop` walks the tree with `taskkill /T` instead.
+    #[cfg(unix)]
+    let child = {
+        use std::os::unix::process::CommandExt as _;
+        child.process_group(0)
+    };
+
+    let child = child
         .spawn();
 
     let mut child = match child {
@@ -259,16 +315,18 @@ fn run(root: PathBuf, subcommand: &str, sender: Sender<Message>) {
     let _ = sender.send(Message::Finished(ok));
 }
 
-/// Moves `path` to the user's Trash and answers where it landed.
+/// Moves `path` to the system's trash and answers where it landed.
 ///
-/// A plain rename rather than a call to the Finder: scripting the Finder needs
-/// an automation permission the first time, and a prompt in the middle of a
-/// delete is worse than losing the "Put Back" entry. The name is made unique
-/// because `~/.Trash` may already hold a file of that name from another
-/// project.
+/// Never an erase: a wrong click must cost a trip to the file manager, not the
+/// afternoon. Done by moving the file rather than by asking the desktop
+/// environment, which on macOS means scripting the Finder — an automation
+/// permission prompt in the middle of a delete is worse than losing the "Put
+/// Back" entry.
+///
+/// Each system keeps its trash somewhere else, and Linux keeps a record beside
+/// it: [`trash_dir`] and [`write_trashinfo`] hold what differs.
 pub fn move_to_trash(path: &Path) -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").map_err(|_| "HOME n'est pas défini".to_string())?;
-    let trash = PathBuf::from(home).join(".Trash");
+    let trash = trash_dir()?;
     std::fs::create_dir_all(&trash).map_err(|error| error.to_string())?;
 
     let name = path
@@ -281,6 +339,8 @@ pub fn move_to_trash(path: &Path) -> Result<PathBuf, String> {
         _ => (name.clone(), String::new()),
     };
 
+    // The trash may already hold a file of that name, from this project or
+    // another.
     let mut target = trash.join(&name);
     let mut index = 1;
     while target.exists() {
@@ -289,18 +349,106 @@ pub fn move_to_trash(path: &Path) -> Result<PathBuf, String> {
     }
 
     // Across volumes `rename` fails with `EXDEV`; the project may well sit on
-    // an external disk, so fall back to a copy followed by a removal.
-    if std::fs::rename(path, &target).is_ok() {
-        return Ok(target);
+    // an external disk, so fall back to a move that copies.
+    if std::fs::rename(path, &target).is_err() {
+        let moved = move_across_volumes(path, &target)?;
+        if !moved {
+            return Err(format!(
+                "déplacement vers la corbeille refusé : {}",
+                path.display()
+            ));
+        }
     }
-    let status = Command::new("/bin/mv")
-        .arg(path)
-        .arg(&target)
-        .status()
-        .map_err(|error| error.to_string())?;
-    if status.success() {
-        Ok(target)
+
+    write_trashinfo(&target, path);
+    Ok(target)
+}
+
+/// The directory this system's trash keeps its files in.
+fn trash_dir() -> Result<PathBuf, String> {
+    if cfg!(target_os = "macos") {
+        let home = std::env::var("HOME").map_err(|_| "HOME n'est pas défini".to_string())?;
+        return Ok(PathBuf::from(home).join(".Trash"));
+    }
+
+    if cfg!(target_os = "windows") {
+        // The real Recycle Bin is only reachable through the shell API, which
+        // would cost a dependency and a `unsafe` block for a gesture that has
+        // to stay simple. maxx keeps its own, in the place Windows puts
+        // application data, and says so.
+        let local = std::env::var("LOCALAPPDATA")
+            .map_err(|_| "LOCALAPPDATA n'est pas défini".to_string())?;
+        return Ok(PathBuf::from(local).join("maxx/corbeille"));
+    }
+
+    // The freedesktop.org specification: `$XDG_DATA_HOME/Trash/files`, with a
+    // record of where each file came from in `../info`.
+    let data = match std::env::var("XDG_DATA_HOME") {
+        Ok(data) if !data.is_empty() => PathBuf::from(data),
+        _ => {
+            let home = std::env::var("HOME").map_err(|_| "HOME n'est pas défini".to_string())?;
+            PathBuf::from(home).join(".local/share")
+        }
+    };
+    Ok(data.join("Trash/files"))
+}
+
+/// Writes the record a Linux desktop needs to offer "Restore".
+///
+/// Without it the file is in the trash but the desktop does not know where it
+/// came from, and the entry cannot be put back. Elsewhere there is nothing to
+/// write.
+fn write_trashinfo(target: &Path, original: &Path) {
+    if cfg!(target_os = "macos") || cfg!(target_os = "windows") {
+        return;
+    }
+    let Some(files) = target.parent() else {
+        return;
+    };
+    let Some(trash) = files.parent() else {
+        return;
+    };
+    let Some(name) = target.file_name() else {
+        return;
+    };
+
+    let info = trash.join("info");
+    if std::fs::create_dir_all(&info).is_err() {
+        return;
+    }
+    let absolute = std::fs::canonicalize(original.parent().unwrap_or(original))
+        .map(|parent| match original.file_name() {
+            Some(name) => parent.join(name),
+            None => parent,
+        })
+        .unwrap_or_else(|_| original.to_path_buf());
+
+    // The date is the one part maxx cannot fill honestly without a clock it
+    // does not have here; the specification allows it to be approximate, and
+    // every desktop tolerates it missing.
+    let body = format!(
+        "[Trash Info]\nPath={}\n",
+        absolute.to_string_lossy()
+    );
+    let _ = std::fs::write(
+        info.join(format!("{}.trashinfo", name.to_string_lossy())),
+        body,
+    );
+}
+
+/// Moves a file the way the system moves files, for the case `rename` refuses.
+fn move_across_volumes(from: &Path, to: &Path) -> Result<bool, String> {
+    let mut command = if cfg!(target_os = "windows") {
+        let mut command = Command::new("cmd");
+        command.arg("/C").arg("move").arg("/Y").arg(from).arg(to);
+        command
     } else {
-        Err(format!("déplacement vers la corbeille refusé : {}", path.display()))
-    }
+        let mut command = Command::new("/bin/mv");
+        command.arg(from).arg(to);
+        command
+    };
+    command
+        .status()
+        .map(|status| status.success())
+        .map_err(|error| error.to_string())
 }

@@ -38,54 +38,34 @@ Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
 - **Compiler la démo en CI.** `cargo check` dans `demo/` prouve que ce que maxx
   écrit compile encore. Elle n'est pas membre de l'espace de travail, donc rien
   ne la construit aujourd'hui hors d'une commande explicite.
-- **`cargo fmt` une fois** — 82 blocs sur 11 fichiers, surtout des imports —
-  puis les deux avertissements clippy : `expect` après `is_some` dans
-  `workspace.rs`, `filter().next()` dans `tests/round_trip.rs`. Aucun n'est un
-  bug ; c'est ce qui permet de brancher une CI stricte ensuite.
-- **CI GitHub Actions** : `fmt --check`, `clippy -D warnings`, `test`. Avec
-  cache — gpui et gpui-component représentent environ 750 crates, un run à
-  froid est long.
-- **Métadonnées `Cargo.toml`** : `readme`, `keywords`, `categories`, et
-  `rust-version = "1.88"`. Le code utilise les chaînes `&& let`
-  (`actions.rs:244`, `workspace.rs:1356`), donc 1.88 est le vrai plancher, pas
-  le 1.85 que l'édition 2024 laisserait supposer.
-- `publish = false` si crates.io n'est pas l'objectif.
+- ~~Les deux avertissements clippy~~ — faits, et la CI est stricte
+  (`clippy -D warnings`).
+- ~~CI GitHub Actions~~ — faite, en matrice sur les trois systèmes, plus un
+  travail qui compile la démo.
+- ~~Métadonnées `Cargo.toml`~~ — faites, `rust-version = "1.88"` compris.
+- **`cargo fmt` une fois** — 82 blocs sur 11 fichiers, surtout des imports.
+  Volontairement laissé de côté pour l'instant : le diff toucherait du code
+  mis en forme à la main. Le jour où c'est fait, ajouter `fmt --check` à la CI.
 
 ## Portabilité
 
-Rien dans le principe de maxx n'est propre à macOS : gpui 0.2.2 livre les trois
-dorsales (`platform/mac`, `platform/linux` en Wayland et X11, `platform/windows`)
-et les active par défaut. La feature `runtime_shaders` est vide hors macOS, donc
-sans effet ailleurs.
+Le code est porté : plus rien dans `src/` ne suppose macOS. Ce qui diffère est
+dans `run.rs` derrière des `cfg` — cache, corbeille (spécification freedesktop
+sur Linux, `.trashinfo` compris), arbre de processus (`taskkill /T` sur
+Windows), et le repli par paquet d'application, qui n'existe que sur macOS. La
+CI compile et teste sur les trois systèmes à chaque poussée.
 
-Tout ce qui suppose le système est dans `src/run.rs`, à une exception près :
+Ce qui reste, et qui ne se règle pas au clavier :
 
-- `shared_target_dir` écrit dans `~/Library/Caches`. Ailleurs :
-  `$XDG_CACHE_HOME` ou `~/.cache`, et `%LOCALAPPDATA%`.
-- `move_to_trash` écrit dans `~/.Trash`. Linux suit la spécification XDG
-  (`~/.local/share/Trash/files` plus un `.trashinfo`), Windows demande la
-  corbeille du shell. Le crate `trash` fait les trois ; à peser contre une
-  implémentation maison.
-- `open_terminal` et `open_editor` appellent `open -a`. Linux : `$TERMINAL`,
-  `gnome-terminal`, `konsole`, et `zed` ou `$EDITOR`. Windows : `wt.exe`,
-  `start`.
-- `stop` tue un groupe de processus par `kill -TERM -pid`, et `run` appelle
-  `process_group(0)` derrière `std::os::unix::process::CommandExt` : cette
-  ligne seule empêche la compilation sur Windows. Équivalent Windows :
-  `taskkill /T /PID`, ou un objet Job.
-- `traffic_light_position` (`about.rs`, `workspace.rs`) est ignoré hors macOS,
-  rien à faire.
-
-La forme : un module `platform` avec une dorsale par `#[cfg(target_os)]`, et
-`run.rs` qui garde son interface actuelle.
-
-Ce qu'une CI en matrice prouve et ne prouve pas : elle prouve que ça compile et
-que les tests passent sur les trois systèmes — c'est déjà l'essentiel, et c'est
-ce qui empêche une régression comme le `os::unix` ci-dessus de passer
-inaperçue. Elle ne prouve pas que l'interface est utilisable : aucun test ici
-n'ouvre de fenêtre, et Linux réclame en plus les paquets de développement
-X11/Wayland et Vulkan que gpui attend. Il faudra que quelqu'un lance maxx une
-fois sur chaque système.
+- **Personne n'a lancé maxx sur Linux ni sur Windows.** La CI prouve que ça
+  compile et que la suite passe ; aucun test n'ouvre de fenêtre. Il faut un
+  essai humain par système, et c'est la seule façon de savoir.
+- **La corbeille Windows est celle de maxx**, pas celle du système : la vraie
+  demande l'API du shell, donc une dépendance et un bloc `unsafe`. À revoir si
+  quelqu'un utilise maxx là-bas pour de bon.
+- **La détection d'éditeurs hors macOS** se limite au `PATH`. Un éditeur
+  installé mais sans commande sur le `PATH` reste invisible : Linux devrait lire
+  les `.desktop` de `/usr/share/applications`, Windows la base de registre.
 
 ## Réglages
 

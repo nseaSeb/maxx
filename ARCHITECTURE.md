@@ -202,13 +202,35 @@ paquet dans `/Applications`.
 
 ## Le système, et rien d'autre
 
-Tout ce qui suppose une plateforme est dans `run.rs` : `cargo`, le terminal,
-l'éditeur, la corbeille, le cache partagé, la façon de tuer un groupe de
-processus. `settings.rs` connaît en plus les trois conventions de répertoire de
-configuration.
+Tout ce qui suppose une plateforme est dans `run.rs`, et nulle part ailleurs :
+`cargo`, le terminal, l'éditeur, la corbeille, le cache, la façon de tuer
+l'arbre de processus lancé. `settings.rs` connaît en plus les conventions de
+répertoire de configuration, et `tools.rs` celles de détection.
 
-C'est délibéré, et c'est ce qui rend le portage abordable : gpui livre déjà les
-trois dorsales. Le détail est dans `BACKLOG.md`, section Portabilité.
+Ce qui diffère vraiment, système par système :
+
+- **Le cache et la configuration.** `XDG_*` quand l'utilisateur les a réglés,
+  `LOCALAPPDATA` et `APPDATA` sur Windows, `Library/Caches` et
+  `Library/Application Support` sur macOS, `.cache` et `.config` ailleurs.
+- **La corbeille.** `~/.Trash` sur macOS ; sur Linux la spécification
+  freedesktop, `$XDG_DATA_HOME/Trash/files` plus un `.trashinfo` sans lequel le
+  bureau ne sait pas d'où le fichier venait et ne peut pas le restaurer ; sur
+  Windows une corbeille propre à maxx, parce que la vraie ne s'atteint que par
+  l'API du shell — ce qui coûterait une dépendance et un bloc `unsafe` pour un
+  geste qui doit rester simple. maxx le dit plutôt que de faire semblant.
+- **Tuer ce qui a été lancé.** `cargo` lance lui-même l'application : signaler
+  `cargo` seul laisserait la fenêtre ouverte. Sur unix l'enfant reçoit son
+  propre groupe de processus, que `kill -TERM -pid` atteint en entier ; Windows
+  n'a pas cette notion et `taskkill /T` fait le geste équivalent.
+- **Le repli par paquet d'application.** `open -a` est un outil macOS et un
+  `.app` une notion macOS : ailleurs, la commande sur le `PATH` est la seule
+  voie, et son absence est la raison pour laquelle rien ne s'est produit.
+
+Ce que la CI en matrice prouve : que ça compile et que la suite passe sur les
+trois. C'est ce qui empêche une ligne comme `std::os::unix::process::CommandExt`
+de se réintroduire sans qu'on le voie. Ce qu'elle ne prouve pas : que
+l'interface est utilisable, aucun test n'ouvrant de fenêtre. maxx n'a été
+essayé à la main que sur macOS.
 
 ## La démo comme référence
 

@@ -1,0 +1,84 @@
+# Ce que cette CI prouve, et ce qu'elle ne prouve pas.
+#
+# Elle prouve que maxx compile et que sa suite passe sur les trois systèmes.
+# C'est l'essentiel : rien dans maxx n'est propre à macOS, mais il est écrit
+# sur un Mac, et une ligne comme `std::os::unix::process::CommandExt` suffit à
+# casser Windows sans que personne le voie.
+#
+# Elle ne prouve pas que l'interface est utilisable. Aucun test n'ouvre de
+# fenêtre — ils portent sur le modèle, le parseur, les gabarits et les
+# réglages. Il faut qu'un humain lance maxx une fois par système.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verifier:
+    name: ${{ matrix.systeme }}
+    runs-on: ${{ matrix.systeme }}
+    strategy:
+      fail-fast: false
+      matrix:
+        systeme: [macos-latest, ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      # gpui dessine avec Vulkan sur Linux et parle à Wayland comme à X11 ; ses
+      # crates de fontes veulent fontconfig. Sans ces paquets, la compilation
+      # échoue sur des en-têtes C introuvables, pas sur du Rust.
+      - name: Dépendances système (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev \
+            libfontconfig-dev \
+            libwayland-dev \
+            libxkbcommon-x11-dev \
+            libx11-xcb-dev \
+            libssl-dev \
+            libvulkan-dev \
+            pkg-config \
+            cmake \
+            clang
+
+      # gpui et gpui-component représentent environ 750 crates : sans cache, un
+      # run part sur une dizaine de minutes de compilation de dépendances.
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Compilation
+        run: cargo check --all-targets
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test
+
+  demo:
+    name: la démo compile
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: demo
+      # La démo n'est pas membre de l'espace de travail : rien ne la construit
+      # sans commande explicite. Elle est pourtant la preuve que ce que maxx
+      # écrit compile encore.
+      - name: Compilation de la démo
+        working-directory: demo
+        run: cargo check

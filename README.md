@@ -70,11 +70,24 @@ déplacer, relire la barre de menus.
 
 ## Prérequis
 
-macOS avec Xcode. La dépendance `gpui` active la feature `runtime_shaders`,
-qui compile les shaders Metal au lancement plutôt qu'à la compilation : Xcode 26
+Rust 1.88 ou plus récent — maxx utilise les chaînes `&& let`, que l'édition 2024
+seule ne suffit pas à autoriser.
+
+**macOS** : Xcode. La dépendance `gpui` active la feature `runtime_shaders`, qui
+compile les shaders Metal au lancement plutôt qu'à la compilation : Xcode 26
 livre le toolchain Metal en composant séparé, et sans cette feature le build
 échoue sur un outil `metal` introuvable. Les projets générés portent la même
 feature, pour la même raison.
+
+**Linux** : les paquets de développement que gpui attend — Vulkan, Wayland, X11,
+fontconfig, ALSA. La liste exacte est dans [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+**Windows** : la chaîne MSVC.
+
+La CI compile et teste sur les trois à chaque poussée. Ce qu'elle ne prouve pas :
+qu'on peut s'en servir. Aucun test n'ouvre de fenêtre — ils portent sur le
+modèle, le parseur, les gabarits et les réglages. maxx est développé sur macOS,
+et c'est le seul système où son interface a été essayée à la main.
 
 ## État de la vue
 

@@ -2016,8 +2016,7 @@ impl Workspace {
         let conflict = self
             .view()
             .is_some_and(|view| self.conflicts.contains(&view.path));
-        if self.menu_file.is_some() {
-            let menus = self.menu_file.as_ref().expect("just checked");
+        if let Some(menus) = self.menu_file.as_ref() {
             let label = match &self.message {
                 Some(message) => message.clone(),
                 None => SharedString::from(format!(

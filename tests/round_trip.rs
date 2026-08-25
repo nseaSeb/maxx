@@ -180,8 +180,7 @@ fn a_multiline_opaque_expression_does_not_drift() {
 
     let saved = file
         .lines()
-        .filter(|line| line.contains("spinner()"))
-        .next()
+        .find(|line| line.contains("spinner()"))
         .expect("the expression is still there");
     assert_eq!(
         saved, "            spinner()",
