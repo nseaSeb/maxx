@@ -10,6 +10,7 @@ pub mod menufile;
 pub mod menus;
 pub mod model;
 pub mod parser;
+pub mod preferences;
 pub mod project;
 pub mod run;
 pub mod registry;

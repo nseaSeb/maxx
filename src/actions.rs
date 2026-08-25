@@ -48,6 +48,7 @@ actions!(
         ToggleProjectPanel,
         ToggleStatusBar,
         ToggleOutput,
+        OpenPreferences,
         OpenMenuBar,
         RemoveMenuBar,
         // Run menu
@@ -160,6 +161,10 @@ pub fn register_handlers(cx: &mut App) {
         with_active_workspace(cx, |workspace, window, cx| {
             // ⌘W closes the front tab first, the window only once there are no
             // views left — the habit every editor gives you.
+            if workspace.preferences {
+                workspace.close_preferences(cx);
+                return;
+            }
             if workspace.menu_file.is_some() {
                 workspace.close_menu_file(cx);
                 return;
@@ -185,6 +190,9 @@ pub fn register_handlers(cx: &mut App) {
     });
     cx.on_action(|_: &ToggleOutput, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.toggle_output(cx));
+    });
+    cx.on_action(|_: &OpenPreferences, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.toggle_preferences(cx));
     });
     cx.on_action(|_: &OpenMenuBar, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.open_menu_bar(cx));
@@ -246,6 +254,7 @@ pub fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-c", Copy, None),
         KeyBinding::new("cmd-v", Paste, None),
         KeyBinding::new("cmd-a", SelectAll, None),
+        KeyBinding::new("cmd-,", OpenPreferences, None),
         KeyBinding::new("cmd-b", ToggleProjectPanel, None),
         KeyBinding::new("cmd-r", RunProject, None),
         KeyBinding::new("cmd-.", StopProject, None),

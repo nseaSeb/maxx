@@ -26,6 +26,15 @@ use crate::workspace::{MenuField, Workspace};
 impl Workspace {
     /// The designer, or an invitation to open a view.
     pub(crate) fn render_designer(&self, cx: &mut Context<Self>) -> AnyElement {
+        if self.preferences {
+            // The tab strip stays: it is the way back to an open view.
+            return v_flex()
+                .flex_1()
+                .overflow_hidden()
+                .child(self.render_tabs(cx))
+                .child(self.render_preferences(cx))
+                .into_any_element();
+        }
         if self.menu_file.is_some() {
             // The tab strip stays: it is the way back to an open view.
             return v_flex()

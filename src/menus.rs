@@ -54,6 +54,8 @@ pub fn app_menus(cx: &App) -> Vec<Menu> {
             items: vec![
                 MenuItem::action("À propos de maxx", About),
                 MenuItem::separator(),
+                MenuItem::action("Réglages…", OpenPreferences),
+                MenuItem::separator(),
                 MenuItem::os_submenu("Services", SystemMenuType::Services),
                 MenuItem::separator(),
                 MenuItem::action("Masquer maxx", HideApp),

@@ -149,9 +149,13 @@ relance à la demande.
 | `src/workspace.rs` | la fenêtre, l'état, les commandes |
 | `src/about.rs` | la fenêtre « À propos » |
 
+Comment tout cela tient ensemble, et pourquoi : [`ARCHITECTURE.md`](ARCHITECTURE.md).
 Ce qui est connu et reporté est dans [`BACKLOG.md`](BACKLOG.md).
 
 ## Réglages
+
+`⌘,` ouvre l'écran de réglages, comme un onglet et non comme une boîte
+modale : il se referme avec `⌘W` et laisse revenir à la vue en cours.
 
 maxx écrit ce qu'il retient dans un TOML — `~/Library/Application Support/maxx/`
 sur macOS, `$XDG_CONFIG_HOME` ou `~/.config` ailleurs. Il s'édite à la main :

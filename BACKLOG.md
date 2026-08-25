@@ -101,10 +101,17 @@ Restent figés dans le code : l'éditeur (`run.rs:91`), le terminal (`run.rs:71`
 le cache partagé (`run.rs:56`), la palette (`theme.rs`, des `const`) et la
 largeur des panneaux, qui attend de toute façon les panneaux redimensionnables.
 
-Manque surtout **l'écran de préférences** : les réglages ne se changent
-aujourd'hui qu'en éditant le fichier à la main, ou en actionnant ce que les
-menus exposent. `gpui_component::setting` livre la présentation — `Settings`,
-`SettingPage`, `SettingGroup`, `SettingItem` — il n'y a que le câblage à faire.
+L'écran de préférences existe (`⌘,`, `src/preferences.rs`), bâti sur
+`gpui_component::setting` : trois pages, Apparence, Projets, Fichier. Un champ
+lit et écrit les réglages directement, sans copie, donc rien ne peut y diverger
+de ce qui est sur le disque. Il grandira avec les réglages qu'on lui donnera.
+
+**Séparer les préférences de l'état**, comme Zed le fait — `settings.json` à la
+main d'un côté, une base d'état de l'autre. Aujourd'hui un seul TOML mélange ce
+qu'on édite volontiers (panneaux affichés) et ce qu'on n'édite jamais (projets
+récents, géométrie de la fenêtre). Deux fichiers, `settings.toml` et
+`state.toml`, suffiraient : SQLite n'apporterait rien à ces quelques centaines
+d'octets, et coûterait une dépendance et un format illisible à la main.
 
 **Ce que maxx retient d'un projet** : projets récents, dernière vue ouverte,
 dossiers dépliés, largeur des panneaux pour ce projet. N'appartient pas au

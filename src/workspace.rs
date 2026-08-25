@@ -118,10 +118,10 @@ pub struct Workspace {
     entries: Vec<Entry>,
     expanded: HashSet<PathBuf>,
     selected: Option<PathBuf>,
-    show_panel: bool,
-    show_status_bar: bool,
     /// The project's menu bar, when `src/menus.rs` is the file being edited.
     pub menu_file: Option<MenuFile>,
+    /// Whether the preferences screen has taken over the main area.
+    pub preferences: bool,
     /// Text boxes of the menu panel.
     menu_inputs: Vec<(MenuField, Entity<InputState>)>,
     /// Selection the menu boxes were built for.
@@ -147,7 +147,6 @@ pub struct Workspace {
     /// Pid of the running process, so it can be stopped.
     run_pid: Option<u32>,
     /// Whether the output panel is shown.
-    show_output: bool,
     /// The task draining the runner's channel. Dropping it stops the drain.
     run_task: Option<Task<()>>,
     /// Name box of the state panel.
@@ -169,15 +168,14 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    fn new(project: Option<Project>, settings: &crate::settings::Settings) -> Self {
+    fn new(project: Option<Project>) -> Self {
         let mut workspace = Self {
             project,
             entries: Vec::new(),
             expanded: HashSet::new(),
             selected: None,
-            show_panel: settings.show_project_panel,
-            show_status_bar: settings.show_status_bar,
             menu_file: None,
+            preferences: false,
             menu_inputs: Vec::new(),
             menu_synced: None,
             views: Vec::new(),
@@ -189,7 +187,6 @@ impl Workspace {
             run_output: Vec::new(),
             run_state: crate::run::State::Idle,
             run_pid: None,
-            show_output: false,
             run_task: None,
             state_name_input: None,
             state_type: 0,
@@ -309,17 +306,17 @@ impl Workspace {
 
     /// Toggles the project panel (View > Project Panel, `cmd-b`).
     pub fn toggle_project_panel(&mut self, cx: &mut Context<Self>) {
-        self.show_panel = !self.show_panel;
-        let shown = self.show_panel;
-        crate::settings::update(cx, |settings| settings.show_project_panel = shown);
+        crate::settings::update(cx, |settings| {
+            settings.show_project_panel = !settings.show_project_panel;
+        });
         cx.notify();
     }
 
     /// Toggles the status bar (View > Status Bar).
     pub fn toggle_status_bar(&mut self, cx: &mut Context<Self>) {
-        self.show_status_bar = !self.show_status_bar;
-        let shown = self.show_status_bar;
-        crate::settings::update(cx, |settings| settings.show_status_bar = shown);
+        crate::settings::update(cx, |settings| {
+            settings.show_status_bar = !settings.show_status_bar;
+        });
         cx.notify();
     }
 
@@ -559,6 +556,23 @@ impl Workspace {
         self.menu_file = None;
         self.menu_synced = None;
         cx.notify();
+    }
+
+    /// Shows the preferences, or leaves them when they are already up.
+    ///
+    /// A toggle rather than an open: `⌘,` pressed twice is how you check a
+    /// setting and go straight back to what you were drawing.
+    pub fn toggle_preferences(&mut self, cx: &mut Context<Self>) {
+        self.preferences = !self.preferences;
+        cx.notify();
+    }
+
+    /// Leaves the preferences screen.
+    pub fn close_preferences(&mut self, cx: &mut Context<Self>) {
+        if self.preferences {
+            self.preferences = false;
+            cx.notify();
+        }
     }
 
     /// Opens the project's menu bar for editing.
@@ -1064,7 +1078,7 @@ impl Workspace {
         self.run_output.clear();
         self.run_state = crate::run::State::Running;
         self.run_pid = None;
-        self.show_output = true;
+        crate::settings::update(cx, |settings| settings.show_output = true);
         self.message = None;
 
         let receiver = if prewarm {
@@ -1135,9 +1149,9 @@ impl Workspace {
 
     /// Shows or hides the output panel.
     pub fn toggle_output(&mut self, cx: &mut Context<Self>) {
-        self.show_output = !self.show_output;
-        let shown = self.show_output;
-        crate::settings::update(cx, |settings| settings.show_output = shown);
+        crate::settings::update(cx, |settings| {
+            settings.show_output = !settings.show_output;
+        });
         cx.notify();
     }
 
@@ -1761,6 +1775,11 @@ impl Workspace {
     }
 
     fn render_main(&self, cx: &mut Context<Self>) -> AnyElement {
+        // Before the welcome screen: the preferences must be reachable when no
+        // project is open, which is exactly when someone is setting maxx up.
+        if self.preferences {
+            return self.render_designer(cx);
+        }
         if self.project.is_none() {
             return self.render_welcome(cx);
         }
@@ -2059,7 +2078,8 @@ impl Render for Workspace {
 
         self.sync_prop_inputs(window, cx);
         self.sync_menu_inputs(window, cx);
-        let show_panel = self.show_panel && self.project.is_some();
+        let visible = crate::settings::get(cx).clone();
+        let show_panel = visible.show_project_panel && self.project.is_some();
 
         div()
             .flex()
@@ -2077,8 +2097,8 @@ impl Render for Workspace {
                     .when(show_panel, |this| this.child(self.render_project_panel(cx)))
                     .child(self.render_main(cx)),
             )
-            .when(self.show_output, |this| this.child(self.render_output(cx)))
-            .when(self.show_status_bar, |this| {
+            .when(visible.show_output, |this| this.child(self.render_output(cx)))
+            .when(visible.show_status_bar, |this| {
                 this.child(self.render_status_bar())
             })
     }
@@ -2120,11 +2140,11 @@ pub fn open_workspace_window(path: Option<PathBuf>, cx: &mut App) {
         .map(|project| project.name.clone())
         .unwrap_or_else(|| "maxx".into());
 
-    let settings = crate::settings::get(cx).clone();
+    let geometry = crate::settings::get(cx).window;
     // Une géométrie enregistrée sur un écran qui n'est plus branché rendrait la
     // fenêtre invisible ; gpui rabat une fenêtre hors champ sur l'écran
     // principal, donc il n'y a rien de plus à faire ici.
-    let bounds = match settings.window {
+    let bounds = match geometry {
         Some(geometry) => Bounds {
             origin: point(px(geometry.x), px(geometry.y)),
             size: size(px(geometry.width), px(geometry.height)),
@@ -2147,7 +2167,7 @@ pub fn open_workspace_window(path: Option<PathBuf>, cx: &mut App) {
     let created: std::rc::Rc<std::cell::RefCell<Option<Entity<Workspace>>>> = Default::default();
     let slot = created.clone();
     let opened = cx.open_window(options, move |window, cx| {
-        let workspace = cx.new(|_| Workspace::new(project, &settings));
+        let workspace = cx.new(|_| Workspace::new(project));
         *slot.borrow_mut() = Some(workspace.clone());
         cx.new(|cx| Root::new(workspace, window, cx))
     });
