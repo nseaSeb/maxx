@@ -1,20 +1,44 @@
 # Ce que cette CI prouve, et ce qu'elle ne prouve pas.
 #
-# Elle prouve que maxx compile et que sa suite passe sur les trois systèmes.
-# C'est l'essentiel : rien dans maxx n'est propre à macOS, mais il est écrit
-# sur un Mac, et une ligne comme `std::os::unix::process::CommandExt` suffit à
-# casser Windows sans que personne le voie.
+# Elle prouve que maxx compile et que sa suite passe. Rien dans maxx n'est
+# propre à macOS, mais il est écrit sur un Mac, et une ligne comme
+# `std::os::unix::process::CommandExt` suffit à casser Windows sans que
+# personne le voie.
 #
 # Elle ne prouve pas que l'interface est utilisable. Aucun test n'ouvre de
 # fenêtre — ils portent sur le modèle, le parseur, les gabarits et les
 # réglages. Il faut qu'un humain lance maxx une fois par système.
+#
+# Ce qu'elle coûte, et comment c'est tenu. gpui et gpui-component représentent
+# environ 750 crates : à froid, une branche de la matrice dure une dizaine de
+# minutes, et Windows le double. D'où trois décisions :
+#
+#   - une poussée ne lance que macOS, la plateforme de développement, qui donne
+#     le signal utile en quelques minutes ;
+#   - les trois systèmes tournent sur demande, sur les pull requests, et une
+#     fois par semaine — c'est là que sert le filet, pas à chaque virgule ;
+#   - une poussée qui ne touche que de la documentation ne lance rien.
 
 name: CI
 
 on:
   push:
     branches: [main]
+    paths-ignore: ["**/*.md", "LICENSE", ".gitignore"]
   pull_request:
+    paths-ignore: ["**/*.md", "LICENSE", ".gitignore"]
+  workflow_dispatch:
+  schedule:
+    # Lundi matin : le retard de portabilité se voit en début de semaine, pas
+    # au moment de publier.
+    - cron: "0 6 * * 1"
+
+# Une poussée qui en remplace une autre annule celle d'avant : sur une branche
+# où l'on pousse plusieurs fois d'affilée, c'est là qu'est le vrai gain. Jamais
+# sur `main`, pour ne pas perdre un résultat qu'on attend.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -26,7 +50,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        systeme: [macos-latest, ubuntu-latest, windows-latest]
+        # Une poussée ordinaire ne vérifie que macOS ; les trois systèmes sont
+        # pour les pull requests, la demande explicite et le rendez-vous
+        # hebdomadaire.
+        systeme: ${{ fromJSON(github.event_name == 'push' && '["macos-latest"]' || '["macos-latest", "ubuntu-latest", "windows-latest"]') }}
 
     steps:
       - uses: actions/checkout@v4
@@ -54,13 +81,10 @@ jobs:
             cmake \
             clang
 
-      # gpui et gpui-component représentent environ 750 crates : sans cache, un
-      # run part sur une dizaine de minutes de compilation de dépendances.
       - uses: Swatinem/rust-cache@v2
 
-      - name: Compilation
-        run: cargo check --all-targets
-
+      # Pas de `cargo check` séparé : clippy compile tout ce que check aurait
+      # compilé, et le faire deux fois double la partie la plus longue.
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
@@ -70,6 +94,15 @@ jobs:
   demo:
     name: la démo compile
     runs-on: macos-latest
+    # La démo ne bouge que quand les gabarits ou elle-même bougent : la
+    # reconstruire à chaque poussée coûterait 750 crates pour rien.
+    if: >-
+      github.event_name != 'push' ||
+      contains(join(github.event.commits.*.modified, ','), 'demo/') ||
+      contains(join(github.event.commits.*.added, ','), 'demo/') ||
+      contains(join(github.event.commits.*.modified, ','), 'src/scaffold.rs') ||
+      contains(join(github.event.commits.*.modified, ','), 'src/codegen.rs') ||
+      contains(join(github.event.commits.*.modified, ','), 'src/parser.rs')
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

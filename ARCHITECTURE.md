@@ -232,6 +232,14 @@ de se réintroduire sans qu'on le voie. Ce qu'elle ne prouve pas : que
 l'interface est utilisable, aucun test n'ouvrant de fenêtre. maxx n'a été
 essayé à la main que sur macOS.
 
+Elle coûte cher — environ 750 crates par branche, une dizaine de minutes à
+froid, le double sur Windows — donc elle est dosée : une poussée ne vérifie que
+macOS, les trois systèmes tournent sur les pull requests, sur demande
+(`workflow_dispatch`) et une fois par semaine, une poussée qui ne touche que de
+la documentation ne lance rien, et la démo n'est reconstruite que si elle ou
+les gabarits ont bougé. Le filet sert à attraper une dérive, pas à commenter
+chaque virgule.
+
 ## Ce que maxx ajoute à un projet
 
 Quatre choses s'ajoutent à un projet existant, par insertion textuelle et
