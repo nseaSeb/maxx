@@ -25,6 +25,19 @@ pub enum Selection {
     Menu(usize),
     /// One entry of a menu.
     Item(usize, usize),
+    /// One entry inside a submenu: menu, submenu, entry.
+    SubItem(usize, usize, usize),
+}
+
+impl Selection {
+    /// The menu of the bar this selection lives in.
+    pub fn menu(self) -> usize {
+        match self {
+            Selection::Menu(menu) | Selection::Item(menu, _) | Selection::SubItem(menu, _, _) => {
+                menu
+            }
+        }
+    }
 }
 
 /// The menu bar of a project, loaded from its source.
@@ -165,17 +178,54 @@ impl MenuFile {
 
     /// The selected menu, if a menu or one of its entries is selected.
     pub fn selected_menu(&self) -> Option<&MenuDef> {
-        match self.selected? {
-            Selection::Menu(index) | Selection::Item(index, _) => self.menus.get(index),
-        }
+        self.menus.get(self.selected?.menu())
     }
 
     /// The selected entry.
     pub fn selected_item(&self) -> Option<&ItemDef> {
-        let Selection::Item(menu, item) = self.selected? else {
-            return None;
-        };
-        self.menus.get(menu)?.items.get(item)
+        match self.selected? {
+            Selection::Item(menu, item) => self.menus.get(menu)?.items.get(item),
+            Selection::SubItem(menu, sub, item) => self.submenu(menu, sub)?.items.get(item),
+            Selection::Menu(_) => None,
+        }
+    }
+
+    /// The selected entry, to change it.
+    pub fn selected_item_mut(&mut self) -> Option<&mut ItemDef> {
+        let (list, index) = self.list_mut()?;
+        list.get_mut(index)
+    }
+
+    /// The submenu at `sub` in the menu at `menu`.
+    fn submenu(&self, menu: usize, sub: usize) -> Option<&MenuDef> {
+        match self.menus.get(menu)?.items.get(sub)? {
+            ItemDef::Submenu(inner) => Some(inner),
+            _ => None,
+        }
+    }
+
+    /// The same, to change it.
+    fn submenu_mut(&mut self, menu: usize, sub: usize) -> Option<&mut MenuDef> {
+        match self.menus.get_mut(menu)?.items.get_mut(sub)? {
+            ItemDef::Submenu(inner) => Some(inner),
+            _ => None,
+        }
+    }
+
+    /// The list the selection sits in, and where in it.
+    ///
+    /// The one place that knows the shape of a selection: everything that adds,
+    /// removes or moves goes through it rather than matching the variants
+    /// again, which is what kept the submenu case from being forgotten in one
+    /// of them.
+    fn list_mut(&mut self) -> Option<(&mut Vec<ItemDef>, usize)> {
+        match self.selected? {
+            Selection::Menu(_) => None,
+            Selection::Item(menu, item) => Some((&mut self.menus.get_mut(menu)?.items, item)),
+            Selection::SubItem(menu, sub, item) => {
+                Some((&mut self.submenu_mut(menu, sub)?.items, item))
+            }
+        }
     }
 
     /// Adds a menu at the end of the bar.
@@ -189,16 +239,53 @@ impl MenuFile {
         let Some(selection) = self.selected else {
             return;
         };
-        let (menu_index, at) = match selection {
-            Selection::Menu(menu) => (menu, self.menus[menu].items.len()),
-            Selection::Item(menu, item) => (menu, item + 1),
-        };
-        let Some(menu) = self.menus.get_mut(menu_index) else {
+        // Un sous-menu accueille l'entrée à son tour : sélectionner un
+        // sous-menu et ajouter y ajoute, plutôt qu'à côté de lui.
+        if let Selection::Item(menu, index) = selection
+            && matches!(
+                self.menus.get(menu).and_then(|m| m.items.get(index)),
+                Some(ItemDef::Submenu(_))
+            )
+            && let Some(inner) = self.submenu_mut(menu, index)
+        {
+            let at = inner.items.len();
+            inner.items.push(item);
+            self.selected = Some(Selection::SubItem(menu, index, at));
             return;
+        }
+
+        let at = match selection {
+            Selection::Menu(_) => usize::MAX,
+            Selection::Item(_, item) | Selection::SubItem(_, _, item) => item + 1,
         };
-        let at = at.min(menu.items.len());
-        menu.items.insert(at, item);
-        self.selected = Some(Selection::Item(menu_index, at));
+        let (list, insert_at) = match selection {
+            Selection::Menu(menu) => match self.menus.get_mut(menu) {
+                Some(menu) => {
+                    let at = menu.items.len();
+                    (&mut menu.items, at)
+                }
+                None => return,
+            },
+            Selection::Item(menu, _) => match self.menus.get_mut(menu) {
+                Some(menu) => {
+                    let at = at.min(menu.items.len());
+                    (&mut menu.items, at)
+                }
+                None => return,
+            },
+            Selection::SubItem(menu, sub, _) => match self.submenu_mut(menu, sub) {
+                Some(inner) => {
+                    let at = at.min(inner.items.len());
+                    (&mut inner.items, at)
+                }
+                None => return,
+            },
+        };
+        list.insert(insert_at, item);
+        self.selected = Some(match selection {
+            Selection::Menu(menu) | Selection::Item(menu, _) => Selection::Item(menu, insert_at),
+            Selection::SubItem(menu, sub, _) => Selection::SubItem(menu, sub, insert_at),
+        });
     }
 
     /// Moves the selection one place up, or down.
@@ -224,15 +311,18 @@ impl MenuFile {
                 self.selected = Some(Selection::Menu(target));
                 true
             }
-            Selection::Item(menu_index, item) => {
-                let Some(menu) = self.menus.get_mut(menu_index) else {
+            Selection::Item(..) | Selection::SubItem(..) => {
+                let Some((list, item)) = self.list_mut() else {
                     return false;
                 };
-                let Some(target) = step(item, up, menu.items.len()) else {
+                let Some(target) = step(item, up, list.len()) else {
                     return false;
                 };
-                menu.items.swap(item, target);
-                self.selected = Some(Selection::Item(menu_index, target));
+                list.swap(item, target);
+                self.selected = Some(match selection {
+                    Selection::SubItem(menu, sub, _) => Selection::SubItem(menu, sub, target),
+                    _ => Selection::Item(selection.menu(), target),
+                });
                 true
             }
         }
@@ -245,11 +335,11 @@ impl MenuFile {
                 self.menus.remove(index);
                 self.selected = None;
             }
-            Some(Selection::Item(menu, item)) => {
-                if let Some(menu) = self.menus.get_mut(menu)
-                    && item < menu.items.len()
+            Some(Selection::Item(..)) | Some(Selection::SubItem(..)) => {
+                if let Some((list, item)) = self.list_mut()
+                    && item < list.len()
                 {
-                    menu.items.remove(item);
+                    list.remove(item);
                 }
                 self.selected = None;
             }

@@ -105,3 +105,105 @@ fn reordering_survives_being_written_and_read_back() {
     assert_eq!(relu.menus[1].name, "Fichier");
     assert_eq!(relu.menus[1].items.len(), 3);
 }
+
+#[test]
+fn a_submenu_is_read_written_and_read_back() {
+    let source = r#"use gpui::{Menu, MenuItem};
+
+pub fn app_menus() -> Vec<Menu> {
+    // maxx:begin
+    vec![Menu {
+        name: "Fichier".into(),
+        items: vec![
+            MenuItem::action("Nouveau", Nouveau),
+            MenuItem::submenu(Menu {
+                name: "Récents".into(),
+                items: vec![
+                    MenuItem::action("Premier", PremierRecent),
+                    MenuItem::separator(),
+                ],
+            }),
+        ],
+    }]
+    // maxx:end
+}
+"#;
+
+    let menus = MenuFile::from_source(std::path::PathBuf::from("/tmp/menus.rs"), source.into())
+        .expect("la barre doit se relire");
+
+    // Le sous-menu n'est plus un bloc opaque : il a un nom et des entrées.
+    let ItemDef::Submenu(interne) = &menus.menus[0].items[1] else {
+        panic!("le sous-menu doit être reconnu : {:?}", menus.menus[0].items[1]);
+    };
+    assert_eq!(interne.name, "Récents");
+    assert_eq!(interne.items.len(), 2);
+
+    // Et il repasse par le rendu sans y perdre son contenu.
+    let relu =
+        MenuFile::from_source(std::path::PathBuf::from("/tmp/menus.rs"), fichier_de(&menus.menus))
+            .expect("la barre rendue doit se relire");
+    let ItemDef::Submenu(interne) = &relu.menus[0].items[1] else {
+        panic!("le sous-menu doit survivre au rendu");
+    };
+    assert_eq!(interne.name, "Récents");
+    assert_eq!(interne.items[0].label(), "Premier");
+    assert_eq!(interne.items.len(), 2);
+}
+
+#[test]
+fn an_entry_of_a_submenu_moves_inside_it() {
+    let mut menus = barre();
+    // Un sous-menu à la place de la deuxième entrée de Fichier.
+    let mut interne = MenuDef::named("Récents");
+    interne.items.push(ItemDef::Action {
+        label: "Un".into(),
+        action: "Un".into(),
+        os_action: None,
+    });
+    interne.items.push(ItemDef::Action {
+        label: "Deux".into(),
+        action: "Deux".into(),
+        os_action: None,
+    });
+    menus.menus[0].items[1] = ItemDef::Submenu(interne);
+
+    menus.selected = Some(Selection::SubItem(0, 1, 1));
+    assert!(menus.move_selected(true));
+    assert_eq!(menus.selected, Some(Selection::SubItem(0, 1, 0)));
+
+    let ItemDef::Submenu(interne) = &menus.menus[0].items[1] else {
+        panic!("toujours un sous-menu");
+    };
+    assert_eq!(interne.items[0].label(), "Deux");
+    // Rien n'a fui vers le menu qui le contient.
+    assert_eq!(menus.menus[0].items.len(), 3);
+
+    // En tête, monter ne fait pas remonter l'entrée hors du sous-menu.
+    assert!(!menus.move_selected(true));
+    assert_eq!(menus.menus[0].items.len(), 3);
+}
+
+#[test]
+fn adding_to_a_selected_submenu_goes_inside_it() {
+    let mut menus = barre();
+    menus.menus[0].items[1] = ItemDef::Submenu(MenuDef::named("Récents"));
+
+    // Sous-menu sélectionné : l'entrée va dedans, pas à côté.
+    menus.selected = Some(Selection::Item(0, 1));
+    menus.add_item(ItemDef::Separator);
+    assert_eq!(menus.selected, Some(Selection::SubItem(0, 1, 0)));
+    let ItemDef::Submenu(interne) = &menus.menus[0].items[1] else {
+        panic!("toujours un sous-menu");
+    };
+    assert_eq!(interne.items.len(), 1);
+    assert_eq!(menus.menus[0].items.len(), 3);
+
+    // Et supprimer depuis l'intérieur ne retire que l'entrée.
+    menus.remove_selected();
+    let ItemDef::Submenu(interne) = &menus.menus[0].items[1] else {
+        panic!("le sous-menu doit rester");
+    };
+    assert_eq!(interne.items.len(), 0);
+    assert_eq!(menus.menus[0].items.len(), 3);
+}

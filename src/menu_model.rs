@@ -49,6 +49,12 @@ pub enum ItemDef {
         /// The system action it stands for, if any: `Copy`, `Undo`…
         os_action: Option<String>,
     },
+    /// A menu inside a menu.
+    ///
+    /// One level, and one only. macOS allows deeper, but a submenu of a
+    /// submenu is a place nobody finds twice, and stopping here keeps
+    /// [`crate::menufile::Selection`] a plain `Copy` triple instead of a path.
+    Submenu(MenuDef),
     /// An entry maxx did not recognize, kept as source text.
     Opaque(String),
 }
@@ -59,6 +65,7 @@ impl ItemDef {
         match self {
             ItemDef::Separator => "———".into(),
             ItemDef::Action { label, .. } => label.clone(),
+            ItemDef::Submenu(menu) => menu.name.clone(),
             ItemDef::Opaque(_) => "code Rust".into(),
         }
     }
@@ -121,6 +128,15 @@ fn parse_item(expr: &Expr, source: &str) -> ItemDef {
     let mut args = call.args.iter();
     match name.as_str() {
         "separator" => ItemDef::Separator,
+        "submenu" => match args.next() {
+            // Un sous-menu dont le contenu n'est pas un littéral — `submenu(
+            // build())` — reste opaque : il est lisible, pas modifiable.
+            Some(inner) => match parse_menu(inner, source) {
+                MenuDef { opaque: Some(_), .. } => ItemDef::Opaque(text(expr, source)),
+                menu => ItemDef::Submenu(menu),
+            },
+            None => ItemDef::Opaque(text(expr, source)),
+        },
         "action" => match (args.next().and_then(string_of), args.next()) {
             (Some(label), Some(action)) => {
                 ItemDef::Action { label, action: path_text(action, source), os_action: None }
@@ -157,7 +173,7 @@ pub fn render(menus: &[MenuDef]) -> String {
             out.push_str("        items: vec![\n");
             for item in &menu.items {
                 out.push_str("            ");
-                out.push_str(&render_item(item));
+                out.push_str(&render_item(item, 12));
                 out.push_str(",\n");
             }
             out.push_str("        ],\n");
@@ -168,7 +184,14 @@ pub fn render(menus: &[MenuDef]) -> String {
     out
 }
 
-fn render_item(item: &ItemDef) -> String {
+/// Renders one entry, its continuation lines indented from `column`.
+///
+/// The column is passed rather than assumed because a submenu spans several
+/// lines: the caller places the first one, the entry has to place the rest.
+/// `parser::splice` re-indents the whole block afterwards, so what matters here
+/// is only that the lines are consistent with each other.
+fn render_item(item: &ItemDef, column: usize) -> String {
+    let pad = " ".repeat(column);
     match item {
         ItemDef::Separator => "MenuItem::separator()".into(),
         ItemDef::Action { label, action, os_action: None } => {
@@ -176,6 +199,26 @@ fn render_item(item: &ItemDef) -> String {
         }
         ItemDef::Action { label, action, os_action: Some(os) } => {
             format!("MenuItem::os_action(\"{}\", {action}, OsAction::{os})", escape(label))
+        }
+        ItemDef::Submenu(menu) => {
+            if let Some(source) = &menu.opaque {
+                return source.clone();
+            }
+            let mut out = String::from("MenuItem::submenu(Menu {\n");
+            out.push_str(&format!("{pad}    name: \"{}\".into(),\n", escape(&menu.name)));
+            if menu.items.is_empty() {
+                out.push_str(&format!("{pad}    items: vec![],\n"));
+            } else {
+                out.push_str(&format!("{pad}    items: vec![\n"));
+                for item in &menu.items {
+                    out.push_str(&format!("{pad}        "));
+                    out.push_str(&render_item(item, column + 8));
+                    out.push_str(",\n");
+                }
+                out.push_str(&format!("{pad}    ],\n"));
+            }
+            out.push_str(&format!("{pad}}})"));
+            out
         }
         ItemDef::Opaque(source) => source.clone(),
     }

@@ -16,6 +16,7 @@ use gpui_component::scroll::Scrollbar;
 use gpui_component::switch::Switch;
 use gpui_component::{Sizable as _, h_flex, v_flex};
 
+use crate::menu_model::ItemDef;
 use crate::menufile::Selection;
 use crate::model::{Call, Node, Path};
 use crate::registry::{self, Kind, Prop, Spec};
@@ -187,6 +188,25 @@ impl Workspace {
                     )
                     .into_any_element(),
                 );
+                // Un sous-menu montre ses entrées d'un cran de plus : sans
+                // cela, il serait une ligne qu'on peut sélectionner sans
+                // jamais voir ce qu'elle contient.
+                let ItemDef::Submenu(inner) = item else {
+                    continue;
+                };
+                for (sub_index, sub_item) in inner.items.iter().enumerate() {
+                    let target = Selection::SubItem(menu_index, item_index, sub_index);
+                    rows.push(
+                        menu_row(
+                            SharedString::from(sub_item.label()),
+                            2,
+                            selection == Some(target),
+                            target,
+                            cx,
+                        )
+                        .into_any_element(),
+                    );
+                }
             }
         }
 
@@ -230,6 +250,9 @@ impl Workspace {
                             .child(menu_button("sep-add", "Séparateur", cx, |this, cx| {
                                 this.add_menu_item(true, cx)
                             }))
+                            .child(menu_button("submenu-add", "Sous-menu", cx, |this, cx| {
+                                this.add_submenu(cx)
+                            }))
                             .child(menu_button("menu-del", "Supprimer", cx, |this, cx| {
                                 this.remove_menu_selection(cx)
                             })),
@@ -255,7 +278,12 @@ impl Workspace {
         let menus = self.menu_file.as_ref().expect("checked by the caller");
         let fields: &[(MenuField, &str)] = match menus.selected {
             Some(Selection::Menu(_)) => &[(MenuField::Name, "Titre")],
-            Some(Selection::Item(_, _)) => {
+            // Un sous-menu porte un titre, pas une action : lui proposer un
+            // champ Action serait proposer ce qui ne s'écrit pas.
+            Some(_) if matches!(menus.selected_item(), Some(ItemDef::Submenu(_))) => {
+                &[(MenuField::Label, "Titre")]
+            }
+            Some(Selection::Item(..)) | Some(Selection::SubItem(..)) => {
                 &[(MenuField::Label, "Libellé"), (MenuField::Action, "Action")]
             }
             None => &[],

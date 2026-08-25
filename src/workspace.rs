@@ -469,10 +469,18 @@ impl Workspace {
                     fields.push((MenuField::Name, menu.name.clone()));
                 }
             }
-            Some(Selection::Item(_, _)) => {
-                if let Some(ItemDef::Action { label, action, .. }) = menus.selected_item() {
-                    fields.push((MenuField::Label, label.clone()));
-                    fields.push((MenuField::Action, action.clone()));
+            Some(Selection::Item(..)) | Some(Selection::SubItem(..)) => {
+                match menus.selected_item() {
+                    Some(ItemDef::Action { label, action, .. }) => {
+                        fields.push((MenuField::Label, label.clone()));
+                        fields.push((MenuField::Action, action.clone()));
+                    }
+                    // Un sous-menu porte un titre, sous le même champ Libellé
+                    // que l'inspecteur affiche.
+                    Some(ItemDef::Submenu(inner)) => {
+                        fields.push((MenuField::Label, inner.name.clone()));
+                    }
+                    _ => {}
                 }
             }
             None => {}
@@ -505,17 +513,19 @@ impl Workspace {
                     menu.name = value.to_string();
                 }
             }
-            (Selection::Item(menu, item), _) => {
-                if let Some(ItemDef::Action { label, action, .. }) =
-                    menus.menus.get_mut(menu).and_then(|menu| menu.items.get_mut(item))
-                {
-                    match field {
+            (Selection::Item(..) | Selection::SubItem(..), _) => {
+                match menus.selected_item_mut() {
+                    Some(ItemDef::Action { label, action, .. }) => match field {
                         MenuField::Label => *label = value.to_string(),
                         // An action name is a Rust type: refuse what would not
                         // compile rather than write it.
                         MenuField::Action if is_type_name(value) => *action = value.to_string(),
                         _ => {}
+                    },
+                    Some(ItemDef::Submenu(inner)) if field == MenuField::Label => {
+                        inner.name = value.to_string();
                     }
+                    _ => {}
                 }
             }
             _ => {}
@@ -837,6 +847,26 @@ impl Workspace {
                 "déjà en dernier"
             }));
         }
+        cx.notify();
+    }
+
+    /// Adds a submenu to the selected menu.
+    ///
+    /// Only inside a menu of the bar: a submenu of a submenu is a place nobody
+    /// finds twice, and the model stops at one level on purpose.
+    pub fn add_submenu(&mut self, cx: &mut Context<Self>) {
+        self.open_menu_bar(cx);
+        let Some(menus) = self.menu_file.as_mut() else {
+            return;
+        };
+        if !matches!(menus.selected, Some(Selection::Menu(_)) | Some(Selection::Item(..))) {
+            self.message = Some(SharedString::from(
+                "sélectionnez un menu — un sous-menu ne va pas dans un sous-menu",
+            ));
+            cx.notify();
+            return;
+        }
+        menus.add_item(ItemDef::Submenu(crate::menu_model::MenuDef::named("Sous-menu")));
         cx.notify();
     }
 

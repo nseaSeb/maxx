@@ -14,9 +14,15 @@ Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
 
 ## Menus
 
-- **Sous-menus et raccourcis.** L'éditeur gère les menus, les entrées et les
-  séparateurs ; un `MenuItem::submenu(..)` est conservé mais pas modifiable, et
-  le raccourci d'une entrée se déclare encore à la main dans `key_bindings`.
+- **Les sous-menus** sont faits : lus, affichés d'un cran en retrait, créés,
+  renommés, remplis, réordonnés et supprimés. Un seul niveau, et c'est un
+  choix — un sous-menu de sous-menu est un endroit que personne ne retrouve, et
+  s'arrêter là garde la sélection en triplet plutôt qu'en chemin. Un
+  `submenu(build())`, dont le contenu n'est pas un littéral, reste opaque :
+  lisible, pas modifiable.
+- **Le raccourci d'une entrée** se déclare toujours à la main dans
+  `key_bindings`. C'est le dernier morceau de la barre de menus que l'éditeur
+  ne touche pas.
 - **Réordonner** est fait : Monter et Descendre, ⌘⌃↑ et ⌘⌃↓, dans la barre de
   menus comme dans le panneau. Une entrée reste dans son menu et un menu parmi
   les menus — franchir cette limite est ce qu'un glisser-déposer ferait, et
