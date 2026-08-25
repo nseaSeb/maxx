@@ -195,68 +195,194 @@ pub fn documented_defaults() -> String {
     )
 }
 
+/// Skips whitespace and JSONC comments, from `index` onward.
+///
+/// A comment is not JSON, and the scan below has to step over one without
+/// reading a brace, a quote or a colon inside it as structure. Getting this
+/// wrong destroys the file: a lone `"` in a comment leaves the scanner inside
+/// a string it never leaves.
+fn skip_trivia(bytes: &[u8], mut index: usize) -> usize {
+    loop {
+        while index < bytes.len() && bytes[index].is_ascii_whitespace() {
+            index += 1;
+        }
+        if bytes[index..].starts_with(b"//") {
+            while index < bytes.len() && bytes[index] != b'\n' {
+                index += 1;
+            }
+            continue;
+        }
+        if bytes[index..].starts_with(b"/*") {
+            index += 2;
+            while index + 1 < bytes.len() && !(bytes[index] == b'*' && bytes[index + 1] == b'/') {
+                index += 1;
+            }
+            index = (index + 2).min(bytes.len());
+            continue;
+        }
+        return index;
+    }
+}
+
+/// Index just past the string literal whose opening quote is at `index`.
+fn end_of_string(bytes: &[u8], index: usize) -> usize {
+    let mut index = index + 1;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\\' => index += 2,
+            b'"' => return index + 1,
+            _ => index += 1,
+        }
+    }
+    bytes.len()
+}
+
+/// Index just past the JSON value starting at `index`.
+fn end_of_value(bytes: &[u8], index: usize) -> usize {
+    if index >= bytes.len() {
+        return bytes.len();
+    }
+    match bytes[index] {
+        b'"' => end_of_string(bytes, index),
+        open @ (b'[' | b'{') => {
+            let close = if open == b'[' { b']' } else { b'}' };
+            let mut depth = 0usize;
+            let mut index = index;
+            while index < bytes.len() {
+                index = skip_trivia(bytes, index);
+                if index >= bytes.len() {
+                    break;
+                }
+                match bytes[index] {
+                    b'"' => {
+                        index = end_of_string(bytes, index);
+                        continue;
+                    }
+                    byte if byte == open => depth += 1,
+                    byte if byte == close => {
+                        depth -= 1;
+                        if depth == 0 {
+                            return index + 1;
+                        }
+                    }
+                    _ => {}
+                }
+                index += 1;
+            }
+            bytes.len()
+        }
+        // A number, `true`, `false` or `null`: it ends at the first thing that
+        // cannot be part of it — a delimiter, a space, or a comment.
+        _ => {
+            let mut index = index;
+            while index < bytes.len() {
+                let byte = bytes[index];
+                if byte.is_ascii_whitespace()
+                    || matches!(byte, b',' | b'}' | b']')
+                    || bytes[index..].starts_with(b"//")
+                    || bytes[index..].starts_with(b"/*")
+                {
+                    break;
+                }
+                index += 1;
+            }
+            index
+        }
+    }
+}
+
+/// Where a top-level member sits: the span of its value.
+struct Member {
+    value: std::ops::Range<usize>,
+}
+
+/// Walks the members of the flat object at the top of `source`.
+///
+/// Answers the span of `key`'s value when it is there, and where a new member
+/// could be inserted otherwise — right after the opening brace, which is the
+/// one position no trailing comment can spoil.
+fn walk(source: &str, key: &str) -> (Option<Member>, Option<usize>) {
+    let bytes = source.as_bytes();
+    let Some(brace) = source.find('{') else {
+        return (None, None);
+    };
+    let after_brace = brace + 1;
+
+    let mut index = skip_trivia(bytes, after_brace);
+    let needle = format!("\"{key}\"");
+    while index < bytes.len() && bytes[index] != b'}' {
+        if bytes[index] != b'"' {
+            // Not a member start: the document is not what we assume, so stop
+            // rather than write into the middle of something.
+            break;
+        }
+        let name_end = end_of_string(bytes, index);
+        let matched = source[index..name_end] == needle;
+
+        let colon = skip_trivia(bytes, name_end);
+        if colon >= bytes.len() || bytes[colon] != b':' {
+            break;
+        }
+        let value_start = skip_trivia(bytes, colon + 1);
+        let value_end = end_of_value(bytes, value_start);
+        if matched {
+            return (
+                Some(Member {
+                    value: value_start..value_end,
+                }),
+                Some(after_brace),
+            );
+        }
+
+        index = skip_trivia(bytes, value_end);
+        if index < bytes.len() && bytes[index] == b',' {
+            index = skip_trivia(bytes, index + 1);
+        }
+    }
+
+    (None, Some(after_brace))
+}
+
 /// Replaces the value of a top-level `key`, keeping every other byte.
 ///
 /// The same move maxx makes on a `.rs` file: find the span, splice, leave the
-/// rest alone. The document is a flat object, so a scan that knows about
-/// strings, escapes and nesting is enough — no need for a whole parser to
-/// change one boolean, and no way for one to reformat the file behind the
-/// user's back.
+/// rest alone. The document is a flat object, so walking its members — over
+/// strings, escapes, nesting *and* comments — is enough. No parser is involved,
+/// so none can reformat the file behind the user's back.
 ///
 /// Answers `None` when the key is not there, which is the caller's cue to add
-/// it before the closing brace.
+/// it with [`append_key`].
 pub fn splice_key(source: &str, key: &str, value: &str) -> Option<String> {
-    let needle = format!("\"{key}\"");
-    let key_at = source.find(&needle)?;
-    let after_key = key_at + needle.len();
-    let colon = source[after_key..].find(':')? + after_key;
-
-    let bytes = source.as_bytes();
-    let mut index = colon + 1;
-    while index < bytes.len() && bytes[index].is_ascii_whitespace() {
-        index += 1;
-    }
-    let start = index;
-
-    let mut depth = 0usize;
-    let mut in_string = false;
-    let mut escaped = false;
-    while index < bytes.len() {
-        let byte = bytes[index];
-        if in_string {
-            if escaped {
-                escaped = false;
-            } else if byte == b'\\' {
-                escaped = true;
-            } else if byte == b'"' {
-                in_string = false;
-            }
-        } else {
-            match byte {
-                b'"' => in_string = true,
-                b'[' | b'{' => depth += 1,
-                b']' | b'}' if depth > 0 => depth -= 1,
-                // The value ends at the comma or the brace closing the object
-                // it sits in — never at one nested inside it.
-                b',' | b'}' | b']' if depth == 0 => break,
-                _ => {}
-            }
-        }
-        index += 1;
-    }
-
-    let end = start + source[start..index].trim_end().len();
-    Some(format!("{}{value}{}", &source[..start], &source[end..]))
+    let (member, _) = walk(source, key);
+    let member = member?;
+    Some(format!(
+        "{}{value}{}",
+        &source[..member.value.start],
+        &source[member.value.end..]
+    ))
 }
 
-/// Adds `key` just before the closing brace of a flat object.
+/// Adds `key` to a flat object, right after its opening brace.
+///
+/// After the brace and not before the closing one: the last thing inside an
+/// object is very often a comment, and a comma appended there would land
+/// inside it — commented out, leaving two members with nothing between them.
 pub fn append_key(source: &str, key: &str, value: &str) -> String {
-    let Some(brace) = source.rfind('}') else {
+    let (_, insert_at) = walk(source, key);
+    let Some(insert_at) = insert_at else {
         return format!("{{\n  \"{key}\": {value}\n}}\n");
     };
-    let head = source[..brace].trim_end();
-    let separator = if head.ends_with('{') { "" } else { "," };
-    format!("{head}{separator}\n  \"{key}\": {value}\n{}", &source[brace..])
+
+    let bytes = source.as_bytes();
+    let next = skip_trivia(bytes, insert_at);
+    let empty = next >= bytes.len() || bytes[next] == b'}';
+    let separator = if empty { "" } else { "," };
+
+    format!(
+        "{}\n  \"{key}\": {value}{separator}{}",
+        &source[..insert_at],
+        &source[insert_at..]
+    )
 }
 
 /// Writes the preferences into `source`, changing as few bytes as possible.
@@ -284,9 +410,14 @@ fn save_preferences(preferences: &Preferences) -> std::io::Result<()> {
     };
     let source = match std::fs::read_to_string(&path) {
         Ok(source) if source.contains('{') => source,
-        // No file yet, or one with nothing usable in it: start from the
-        // documented defaults, so the user has something to read.
-        _ => documented_defaults(),
+        // Nothing usable in it: start from the documented defaults, so the
+        // user has something to read.
+        Ok(_) => documented_defaults(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => documented_defaults(),
+        // Unreadable for another reason — a permission, a transient failure.
+        // Writing here would replace what the user wrote with the defaults,
+        // which is the one outcome worse than not saving.
+        Err(error) => return Err(error),
     };
     write_atomically(&path, &patch_preferences(&source, preferences))
 }

@@ -385,7 +385,7 @@ pub fn add_menu_bar(root: &Path) -> io::Result<()> {
         // line that opens the closure `run` was given.
         let anchor = lines
             .iter()
-            .position(|line| line.contains("cx.activate("))
+            .position(|line| line.contains(".activate("))
             .or_else(|| {
                 lines
                     .iter()
@@ -399,14 +399,32 @@ pub fn add_menu_bar(root: &Path) -> io::Result<()> {
                  et cx.set_menus(menus::app_menus()) à la main",
             ));
         };
+
+        // The three calls need the name this `main` gave its application. Both
+        // anchors carry it, in different places: `cx.activate(true)` names it
+        // as the receiver, `run(|app| {` as the closure's argument. Assuming
+        // `cx` would hand a project written as `run(|app| {` three lines naming
+        // something that does not exist.
+        let Some(app) = application_binding(&lines[anchor]) else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "src/main.rs : impossible de lire le nom de l'application dans « {} » — \
+                     ajoutez menus::register(…), …bind_keys(menus::key_bindings()) \
+                     et …set_menus(menus::app_menus()) à la main",
+                    lines[anchor].trim()
+                ),
+            ));
+        };
+
         let indent: String = lines[anchor]
             .chars()
             .take_while(|character| character.is_whitespace())
             .collect();
         for (offset, call) in [
-            "menus::register(cx);",
-            "cx.bind_keys(menus::key_bindings());",
-            "cx.set_menus(menus::app_menus());",
+            format!("menus::register({app});"),
+            format!("{app}.bind_keys(menus::key_bindings());"),
+            format!("{app}.set_menus(menus::app_menus());"),
         ]
         .iter()
         .enumerate()
@@ -416,13 +434,53 @@ pub fn add_menu_bar(root: &Path) -> io::Result<()> {
     }
 
     let menus_path = root.join("src/menus.rs");
-    if !menus_path.exists() {
+    let created = !menus_path.exists();
+    if created {
         std::fs::write(&menus_path, menus_rs())?;
     }
 
     let mut out = lines.join("\n");
     out.push('\n');
-    std::fs::write(&main_path, out)
+    if let Err(error) = std::fs::write(&main_path, out) {
+        // A `menus.rs` left behind by a failed wiring would make the next
+        // attempt believe the project already has a menu bar, and skip the
+        // wiring for good.
+        if created {
+            let _ = std::fs::remove_file(&menus_path);
+        }
+        return Err(error);
+    }
+    Ok(())
+}
+
+/// The name `line` gives the application.
+///
+/// Either the receiver of `.activate(`, or the argument of the closure handed
+/// to `run` — `|cx|` as much as `|app: &mut App|`.
+fn application_binding(line: &str) -> Option<String> {
+    if let Some(dot) = line.find(".activate(") {
+        let receiver: String = line[..dot]
+            .chars()
+            .rev()
+            .take_while(|character| character.is_alphanumeric() || *character == '_')
+            .collect();
+        return identifier(&receiver.chars().rev().collect::<String>());
+    }
+
+    let start = line.find('|')?;
+    let rest = &line[start + 1..];
+    let end = rest.find('|')?;
+    identifier(rest[..end].split(':').next()?.trim())
+}
+
+/// `name` when it can be a Rust binding, nothing otherwise.
+fn identifier(name: &str) -> Option<String> {
+    let valid = !name.is_empty()
+        && name
+            .chars()
+            .all(|character| character.is_alphanumeric() || character == '_')
+        && !name.starts_with(|character: char| character.is_ascii_digit());
+    valid.then(|| name.to_string())
 }
 
 /// Unwires the menu bar from `src/main.rs`.

@@ -49,16 +49,79 @@ fn a_missing_key_is_added_rather_than_the_file_rewritten() {
 }
 
 #[test]
-fn a_comment_holding_a_brace_does_not_derail_the_patch() {
-    let source = "{\n  // un } et une \" dans un commentaire\n  \"show_output\": false\n}\n";
+fn a_trailing_comment_on_the_line_survives() {
+    // Le cas que le commentaire *avant* la clé ne teste pas : le balayage
+    // commence après le deux-points, donc c'est ici qu'il peut déraper.
+    let source = "{\n  \"show_output\": false // le panneau du bas\n}\n";
     let preferences = Preferences {
         show_output: true,
         ..Preferences::default()
     };
     let patched = patch_preferences(source, &preferences);
 
-    assert!(patched.contains("// un } et une \" dans un commentaire"), "{patched}");
+    assert!(patched.contains("// le panneau du bas"), "{patched}");
     assert!(patched.contains("\"show_output\": true"), "{patched}");
+}
+
+#[test]
+fn a_comment_that_looks_like_a_member_is_not_one() {
+    // « "show_output" : à revoir » dans un commentaire : une recherche
+    // textuelle y trouve la clé et le deux-points, et écrase le commentaire.
+    let source = "{\n  // \"show_output\" : à revoir\n  \"show_output\": false\n}\n";
+    let preferences = Preferences {
+        show_output: true,
+        ..Preferences::default()
+    };
+    let patched = patch_preferences(source, &preferences);
+
+    assert!(patched.contains("// \"show_output\" : à revoir"), "{patched}");
+    assert!(patched.contains("\"show_output\": true"), "{patched}");
+    let reread: Preferences =
+        serde_json_lenient::from_str_lenient(&patched).expect("le fichier reste lisible");
+    assert!(reread.show_output);
+}
+
+#[test]
+fn an_odd_quote_in_a_comment_does_not_eat_the_closing_brace() {
+    // Un guillemet seul dans un commentaire laissait le balayage « dans une
+    // chaîne » jusqu'à la fin du fichier, accolade finale comprise.
+    let source = "{\n  \"show_output\": false\n  // 5\" de large\n}\n";
+    let preferences = Preferences {
+        show_output: true,
+        ..Preferences::default()
+    };
+    let patched = patch_preferences(source, &preferences);
+
+    assert!(patched.trim_end().ends_with('}'), "{patched}");
+    let reread: Preferences =
+        serde_json_lenient::from_str_lenient(&patched).expect("le fichier reste lisible");
+    assert!(reread.show_output);
+}
+
+#[test]
+fn a_comment_holding_a_brace_does_not_derail_the_patch() {
+    let source = "{\n  \"show_output\": false\n  /* un } et une \" ici */\n}\n";
+    let preferences = Preferences {
+        show_output: true,
+        ..Preferences::default()
+    };
+    let patched = patch_preferences(source, &preferences);
+
+    assert!(patched.contains("/* un } et une \" ici */"), "{patched}");
+    assert!(patched.contains("\"show_output\": true"), "{patched}");
+}
+
+#[test]
+fn a_key_added_next_to_a_trailing_comment_stays_valid_json() {
+    // La virgule ajoutée en fin d'objet atterrissait dans le commentaire, donc
+    // commentée : deux membres sans séparateur.
+    let source = "{\n  \"show_project_panel\": true\n  // TODO : ajouter show_output\n}\n";
+    let patched = patch_preferences(source, &Preferences::default());
+
+    assert!(patched.contains("// TODO : ajouter show_output"), "{patched}");
+    let reread: Preferences =
+        serde_json_lenient::from_str_lenient(&patched).expect("le fichier reste lisible");
+    assert_eq!(reread, Preferences::default());
 }
 
 #[test]
@@ -72,8 +135,15 @@ fn splicing_stops_at_the_end_of_the_value_it_replaces() {
 
 #[test]
 fn appending_a_key_to_an_empty_object_stays_valid() {
-    assert_eq!(append_key("{}", "a", "1"), "{\n  \"a\": 1\n}");
-    assert_eq!(append_key("{\n  \"a\": 1\n}", "b", "2"), "{\n  \"a\": 1,\n  \"b\": 2\n}");
+    assert_eq!(append_key("{}", "a", "1"), "{\n  \"a\": 1}");
+
+    // Ajoutée en tête, pas en queue : c'est la seule position qu'aucun
+    // commentaire de fin d'objet ne peut gâter.
+    let patched = append_key("{\n  \"a\": 1\n}", "b", "2");
+    let value: serde_json_lenient::Value =
+        serde_json_lenient::from_str_lenient(&patched).expect("{patched}");
+    assert_eq!(value["a"], 1);
+    assert_eq!(value["b"], 2);
 }
 
 #[test]
@@ -155,4 +225,36 @@ fn a_project_that_no_longer_exists_leaves_the_list() {
     state.forget_missing_projects();
 
     assert_eq!(state.recent_projects, vec![root]);
+}
+
+#[test]
+fn a_hand_written_file_with_every_trap_at_once_survives() {
+    // Les trois pièges réunis : une clé et un deux-points dans un commentaire,
+    // un guillemet impair dans ce même commentaire, et un commentaire de fin de
+    // ligne juste après une valeur.
+    let source = r#"// Mon fichier à moi.
+{
+  "$schema": "./settings-schema.json",
+
+  // "show_output" : à revoir un jour — 5" de large
+  "show_project_panel": true, // l'explorateur
+  "show_status_bar": false
+}
+"#;
+
+    let preferences = Preferences {
+        show_project_panel: false,
+        show_status_bar: false,
+        show_output: true,
+    };
+    let patched = patch_preferences(source, &preferences);
+
+    assert!(patched.contains("// Mon fichier à moi."), "{patched}");
+    assert!(patched.contains(r#"// "show_output" : à revoir un jour — 5" de large"#), "{patched}");
+    assert!(patched.contains("// l'explorateur"), "{patched}");
+    assert!(patched.contains(r#""$schema": "./settings-schema.json""#), "{patched}");
+
+    let reread: Preferences =
+        serde_json_lenient::from_str_lenient(&patched).expect("le fichier reste lisible : {patched}");
+    assert_eq!(reread, preferences);
 }

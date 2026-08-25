@@ -893,3 +893,28 @@ fn a_main_rs_it_cannot_wire_is_left_alone() {
     let untouched = std::fs::read_to_string(&main_path).unwrap();
     assert!(!untouched.contains("mod menus;"), "{untouched}");
 }
+
+#[test]
+fn the_wiring_follows_the_name_the_closure_gave_the_application() {
+    let root = scratch("maxx_menu_bar_binding_test");
+    scaffold::create_project(&root, "essai").expect("le projet doit être créé");
+    std::fs::remove_file(root.join("src/menus.rs")).unwrap();
+    scaffold::remove_menu_bar(&root).unwrap();
+
+    // Ni cx.activate(…), et une fermeture qui n'appelle pas son application
+    // « cx » : trois lignes parlant de cx ne compileraient pas.
+    let main_path = root.join("src/main.rs");
+    std::fs::write(
+        &main_path,
+        "use gpui::{App, Application};\n\nfn main() {\n    Application::new().run(|app: &mut App| {\n        let _ = app;\n    });\n}\n",
+    )
+    .unwrap();
+
+    scaffold::add_menu_bar(&root).expect("la barre doit être ajoutée");
+
+    let wired = std::fs::read_to_string(&main_path).unwrap();
+    assert!(wired.contains("menus::register(app);"), "{wired}");
+    assert!(wired.contains("app.bind_keys(menus::key_bindings());"), "{wired}");
+    assert!(wired.contains("app.set_menus(menus::app_menus());"), "{wired}");
+    assert!(!wired.contains("(cx)"), "{wired}");
+}

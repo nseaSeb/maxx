@@ -119,9 +119,18 @@ Deux fichiers, comme Zed les sépare, parce que ce ne sont pas deux fois la mêm
 chose.
 
 `settings.json` est à l'utilisateur. Il s'édite à la main autant que par maxx,
-donc **maxx n'y réécrit que la clé qu'il change** : `splice_key` repère la
-tranche d'octets de la valeur et la remplace, exactement comme `parser::splice`
-le fait dans un `.rs`. Commentaires et mise en forme survivent. Un fichier
+donc **maxx n'y réécrit que la clé qu'il change** : `walk` parcourt les membres
+de l'objet et `splice_key` remplace la seule tranche d'octets de la valeur,
+exactement comme `parser::splice` le fait dans un `.rs`. Commentaires et mise en
+forme survivent.
+
+Ce parcours doit connaître les commentaires, pas seulement les chaînes et
+l'imbrication, et ce n'est pas un raffinement : une recherche textuelle de la
+clé la trouve dans un commentaire qui la cite, et un guillemet impair dans un
+commentaire laisse un balayage naïf « dans une chaîne » jusqu'à la fin du
+fichier — accolade fermante comprise. Une clé absente est ajoutée juste après
+l'accolade ouvrante et non avant la fermante : la dernière chose d'un objet est
+souvent un commentaire, et une virgule ajoutée là se retrouve commentée. Un fichier
 absent est écrit avec tous ses défauts et une ligne d'explication par clé —
 c'est cette partie-là des réglages de Zed qui vaut d'être copiée, avant toute
 question de format.

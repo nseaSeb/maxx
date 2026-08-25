@@ -226,9 +226,10 @@ impl Workspace {
         if self.discard_menu_edits(cx) {
             return;
         }
-        // The menu editor is a mode: clicking a tab has to leave it, or the tab
-        // strip stays without effect.
+        // The menu editor and the preferences are modes: clicking a tab has
+        // to leave them, or the tab strip stays without effect.
         self.menu_file = None;
+        self.preferences = false;
         if index < self.views.len() {
             self.active = Some(index);
             self.selected = Some(self.views[index].path.clone());
@@ -272,6 +273,7 @@ impl Workspace {
     pub fn set_project(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         remember_project(&path, cx);
         self.menu_file = None;
+        self.preferences = false;
         self.menu_synced = None;
         let project = Project::open(path);
         window.set_window_title(&project.name);
@@ -296,6 +298,7 @@ impl Workspace {
         self.views.clear();
         self.active = None;
         self.menu_file = None;
+        self.preferences = false;
         self.menu_synced = None;
         self.entries.clear();
         self.expanded.clear();
@@ -309,7 +312,7 @@ impl Workspace {
         crate::settings::update_prefs(cx, |preferences| {
             preferences.show_project_panel = !preferences.show_project_panel;
         });
-        cx.notify();
+        notify_all(cx);
     }
 
     /// Toggles the status bar (View > Status Bar).
@@ -317,7 +320,7 @@ impl Workspace {
         crate::settings::update_prefs(cx, |preferences| {
             preferences.show_status_bar = !preferences.show_status_bar;
         });
-        cx.notify();
+        notify_all(cx);
     }
 
     fn toggle_expanded(&mut self, path: PathBuf, cx: &mut Context<Self>) {
@@ -330,6 +333,8 @@ impl Workspace {
 
     fn select_file(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         self.message = None;
+        // Opening anything leaves the preferences, for the same reason.
+        self.preferences = false;
         if MenuFile::is_menu_file(&path) {
             // Already open and edited: reloading would drop those edits.
             if self
@@ -581,6 +586,7 @@ impl Workspace {
     /// opens it — but nothing in the window said so, and the editor was
     /// unfindable for anyone who had not been told.
     pub fn open_menu_bar(&mut self, cx: &mut Context<Self>) {
+        self.preferences = false;
         let Some(project) = self.project.as_ref() else {
             self.message = Some(SharedString::from("aucun projet ouvert"));
             cx.notify();
@@ -1152,7 +1158,7 @@ impl Workspace {
         crate::settings::update_prefs(cx, |preferences| {
             preferences.show_output = !preferences.show_output;
         });
-        cx.notify();
+        notify_all(cx);
     }
 
     /// Handles a drop on the insertion point `index` of the container at
@@ -2064,17 +2070,21 @@ impl Render for Workspace {
         }
         self.was_active = active;
 
-        // Kept in memory only: writing the file on every frame of a drag would
-        // be absurd. `settings::flush` at quit puts it away.
+        // Only the active window, and only in memory: there is a single saved
+        // geometry, so letting every window stage its own would persist
+        // whichever repainted last. Writing the file on every frame of a drag
+        // would be absurd anyway — `settings::flush` at quit puts it away.
         let bounds = window.bounds();
-        crate::settings::stage_state(cx, |state| {
-            state.window = Some(crate::settings::WindowGeometry {
-                x: bounds.origin.x.into(),
-                y: bounds.origin.y.into(),
-                width: bounds.size.width.into(),
-                height: bounds.size.height.into(),
+        if active {
+            crate::settings::stage_state(cx, |state| {
+                state.window = Some(crate::settings::WindowGeometry {
+                    x: bounds.origin.x.into(),
+                    y: bounds.origin.y.into(),
+                    width: bounds.size.width.into(),
+                    height: bounds.size.height.into(),
+                });
             });
-        });
+        }
 
         self.sync_prop_inputs(window, cx);
         self.sync_menu_inputs(window, cx);
@@ -2140,7 +2150,11 @@ pub fn open_workspace_window(path: Option<PathBuf>, cx: &mut App) {
         .map(|project| project.name.clone())
         .unwrap_or_else(|| "maxx".into());
 
-    let geometry = crate::settings::state(cx).window;
+    // Only the first window takes the saved geometry: handing it to a second
+    // one would place it exactly over the first, pixel for pixel, hiding the
+    // window someone is still using.
+    let first_window = cx.default_global::<Workspaces>().0.is_empty();
+    let geometry = crate::settings::state(cx).window.filter(|_| first_window);
     // Une géométrie enregistrée sur un écran qui n'est plus branché rendrait la
     // fenêtre invisible ; gpui rabat une fenêtre hors champ sur l'écran
     // principal, donc il n'y a rien de plus à faire ici.
@@ -2269,6 +2283,25 @@ fn panel_icon(
         .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tooltip).build(window, cx))
         .child(glyph)
         .on_click(cx.listener(move |this, _, _window, cx| action(this, cx)))
+}
+
+/// Asks every workspace to repaint.
+///
+/// A preference is global, so a window that is not the focused one has to
+/// follow — otherwise it keeps the old layout until something else happens to
+/// make it redraw.
+pub fn notify_all(cx: &mut App) {
+    let workspaces: Vec<WeakEntity<Workspace>> = cx
+        .default_global::<Workspaces>()
+        .0
+        .values()
+        .cloned()
+        .collect();
+    for workspace in workspaces {
+        if let Some(workspace) = workspace.upgrade() {
+            workspace.update(cx, |_, cx| cx.notify());
+        }
+    }
 }
 
 /// Puts `path` at the head of the recent projects and refreshes the menu bar.
