@@ -283,6 +283,18 @@ impl Workspace {
             Some(_) if matches!(menus.selected_item(), Some(ItemDef::Submenu(_))) => {
                 &[(MenuField::Label, "Titre")]
             }
+            Some(_)
+                if matches!(
+                    menus.selected_item(),
+                    Some(ItemDef::Action { os_action: None, .. })
+                ) =>
+            {
+                &[
+                    (MenuField::Label, "Libellé"),
+                    (MenuField::Action, "Action"),
+                    (MenuField::Shortcut, "Raccourci"),
+                ]
+            }
             Some(Selection::Item(..)) | Some(Selection::SubItem(..)) => {
                 &[(MenuField::Label, "Libellé"), (MenuField::Action, "Action")]
             }

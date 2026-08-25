@@ -47,6 +47,8 @@ pub enum MenuField {
     Label,
     /// The action an entry dispatches.
     Action,
+    /// The keystroke bound to an entry's action.
+    Shortcut,
 }
 
 /// Whether a name can be a Rust type, which is what an action is.
@@ -471,9 +473,18 @@ impl Workspace {
             }
             Some(Selection::Item(..)) | Some(Selection::SubItem(..)) => {
                 match menus.selected_item() {
-                    Some(ItemDef::Action { label, action, .. }) => {
+                    Some(ItemDef::Action { label, action, os_action }) => {
                         fields.push((MenuField::Label, label.clone()));
                         fields.push((MenuField::Action, action.clone()));
+                        // Une action système porte le raccourci que le système
+                        // lui donne : en proposer un autre serait mentir.
+                        if os_action.is_none() {
+                            let action = action.clone();
+                            fields.push((
+                                MenuField::Shortcut,
+                                menus.shortcut(&action).unwrap_or_default(),
+                            ));
+                        }
                     }
                     // Un sous-menu porte un titre, sous le même champ Libellé
                     // que l'inspecteur affiche.
@@ -520,6 +531,17 @@ impl Workspace {
                         // An action name is a Rust type: refuse what would not
                         // compile rather than write it.
                         MenuField::Action if is_type_name(value) => *action = value.to_string(),
+                        MenuField::Shortcut => {
+                            // Le raccourci vit hors de la zone gérée, donc il
+                            // s'écrit tout de suite plutôt qu'à ⌘S : rien dans
+                            // le modèle ne le porterait jusque-là.
+                            let action = action.clone();
+                            let keystroke = value.trim().to_string();
+                            let keystroke = (!keystroke.is_empty()).then_some(keystroke);
+                            if let Err(error) = menus.set_shortcut(&action, keystroke.as_deref()) {
+                                self.message = Some(SharedString::from(error));
+                            }
+                        }
                         _ => {}
                     },
                     Some(ItemDef::Submenu(inner)) if field == MenuField::Label => {

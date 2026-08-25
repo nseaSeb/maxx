@@ -9,6 +9,81 @@ use std::path::{Path, PathBuf};
 use crate::menu_model::{ItemDef, MenuDef};
 use crate::parser;
 
+/// Whether `keystroke` has the shape gpui parses.
+///
+/// Checked rather than trusted: a keystroke gpui cannot read makes
+/// `bind_keys` interrupt the process at startup — the generated application
+/// would refuse to open, with a message about a file nobody was editing.
+pub fn is_keystroke(keystroke: &str) -> bool {
+    const MODIFIERS: &[&str] = &["cmd", "ctrl", "alt", "shift", "fn", "secondary"];
+    // Les parties vides ne sont pas filtrées mais refusées : `cmd--n` ressemble
+    // à `cmd-n` une fois filtré, alors que gpui n'en fait rien. Corollaire
+    // assumé : la touche `-` elle-même, dont l'écriture est ambiguë avec le
+    // séparateur, se déclare à la main.
+    let mut parts = keystroke.split('-').peekable();
+    let mut seen_key = false;
+    while let Some(part) = parts.next() {
+        if part.is_empty() {
+            return false;
+        }
+        let last = parts.peek().is_none();
+        if last {
+            // The key itself: a single character, or a named key.
+            seen_key = part.chars().count() == 1
+                || part.chars().all(|c| c.is_ascii_alphanumeric())
+                    && part.chars().next().is_some_and(|c| c.is_ascii_alphabetic());
+        } else if !MODIFIERS.contains(&part) {
+            return false;
+        }
+    }
+    seen_key && !keystroke.starts_with('-') && !keystroke.ends_with('-')
+}
+
+/// Rewrites the `KeyBinding` line of `action` inside `key_bindings`.
+fn set_binding(source: String, action: &str, keystroke: Option<&str>) -> Result<String, String> {
+    let needle = format!(", {action},");
+    let existing = source
+        .lines()
+        .position(|line| line.trim().starts_with("KeyBinding::new(") && line.contains(&needle));
+
+    let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
+
+    match (existing, keystroke) {
+        (Some(index), Some(keystroke)) => {
+            let indent: String = lines[index].chars().take_while(|c| c.is_whitespace()).collect();
+            lines[index] = format!("{indent}KeyBinding::new(\"{keystroke}\", {action}, None),");
+        }
+        (Some(index), None) => {
+            lines.remove(index);
+        }
+        (None, Some(keystroke)) => {
+            // Inserted before the closing bracket of the `vec![` that
+            // `key_bindings` returns — the one anchor the template guarantees.
+            let start = lines
+                .iter()
+                .position(|line| line.contains("fn key_bindings("))
+                .ok_or("key_bindings est introuvable dans ce fichier")?;
+            let open = lines[start..]
+                .iter()
+                .position(|line| line.contains("vec!["))
+                .map(|offset| start + offset)
+                .ok_or("le vec! de key_bindings est introuvable")?;
+            let close = lines[open..]
+                .iter()
+                .position(|line| line.trim() == "]")
+                .map(|offset| open + offset)
+                .ok_or("le vec! de key_bindings n'est pas refermé")?;
+            lines.insert(
+                close,
+                format!("        KeyBinding::new(\"{keystroke}\", {action}, None),"),
+            );
+        }
+        (None, None) => return Ok(lines.join("\n") + "\n"),
+    }
+
+    Ok(lines.join("\n") + "\n")
+}
+
 /// Gathers the actions of a list of entries, submenus included.
 ///
 /// Recursive, and it has to be: an action written inside a submenu is spliced
@@ -176,6 +251,45 @@ impl MenuFile {
         std::fs::write(&self.path, &source).map_err(|error| error.to_string())?;
         self.source = source;
         self.saved = self.menus.clone();
+        Ok(())
+    }
+
+    /// The keystroke bound to `action`, as written in `key_bindings`.
+    ///
+    /// Read from the source rather than held in the model: the shortcut lives
+    /// outside the managed region, in a function the developer also edits by
+    /// hand, and the file is the only place that knows the truth about it.
+    pub fn shortcut(&self, action: &str) -> Option<String> {
+        let needle = format!(", {action},");
+        for line in self.source.lines() {
+            let line = line.trim();
+            if !line.starts_with("KeyBinding::new(") || !line.contains(&needle) {
+                continue;
+            }
+            let start = line.find('"')? + 1;
+            let end = line[start..].find('"')? + start;
+            return Some(line[start..end].to_string());
+        }
+        None
+    }
+
+    /// Binds `action` to `keystroke`, or unbinds it when given nothing.
+    ///
+    /// Written straight to the source, and to `self.source`, because
+    /// `key_bindings` is not part of what `render` produces: a shortcut is not
+    /// a property of the menu entry in gpui, it is a separate list the menu bar
+    /// reads to display the accelerator.
+    pub fn set_shortcut(&mut self, action: &str, keystroke: Option<&str>) -> Result<(), String> {
+        if let Some(keystroke) = keystroke
+            && !is_keystroke(keystroke)
+        {
+            return Err(format!(
+                "« {keystroke} » n'est pas un raccourci gpui — par exemple cmd-shift-n"
+            ));
+        }
+        let source = set_binding(std::mem::take(&mut self.source), action, keystroke)?;
+        std::fs::write(&self.path, &source).map_err(|error| error.to_string())?;
+        self.source = source;
         Ok(())
     }
 

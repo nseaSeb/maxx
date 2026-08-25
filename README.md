@@ -169,6 +169,10 @@ Une application GPUI n'a aucune barre de menus tant qu'elle n'appelle pas
 `src/menus.rs`, avec les gestes que macOS attend : À propos, Masquer, Quitter,
 un menu Édition câblé sur les actions système, et Réduire.
 
+Le champ « Raccourci » écrit dans `key_bindings` et refuse une frappe que gpui
+ne saurait pas lire — une frappe illisible fait refuser l'application au
+démarrage.
+
 Les entrées se réordonnent avec `⌘⌃↑` et `⌘⌃↓`, et un menu peut contenir un
 sous-menu — un seul niveau, ce qui est déjà un de plus que ce que la plupart
 des applications utilisent bien.

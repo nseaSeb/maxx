@@ -20,9 +20,11 @@ Ce qui est connu, décidé, et remis à plus tard. Rien ici n'est un oubli.
   s'arrêter là garde la sélection en triplet plutôt qu'en chemin. Un
   `submenu(build())`, dont le contenu n'est pas un littéral, reste opaque :
   lisible, pas modifiable.
-- **Le raccourci d'une entrée** se déclare toujours à la main dans
-  `key_bindings`. C'est le dernier morceau de la barre de menus que l'éditeur
-  ne touche pas.
+- ~~Le raccourci d'une entrée~~ — fait : champ « Raccourci » dans l'inspecteur,
+  lu et écrit dans `key_bindings`, avec refus d'une frappe que gpui ne saurait
+  pas lire. Reste au clavier : la touche `-` elle-même, dont l'écriture est
+  ambiguë avec le séparateur, et la saisie du raccourci en l'appuyant plutôt
+  qu'en le tapant.
 - **Réordonner** est fait : Monter et Descendre, ⌘⌃↑ et ⌘⌃↓, dans la barre de
   menus comme dans le panneau. Une entrée reste dans son menu et un menu parmi
   les menus — franchir cette limite est ce qu'un glisser-déposer ferait, et

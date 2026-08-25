@@ -262,3 +262,88 @@ fn a_stale_selection_does_not_interrupt_the_process() {
     assert!(!menus.move_selected(false));
     assert_eq!(menus.menus[0].items.len(), 3);
 }
+
+/// Le gabarit d'un fichier de menus, avec sa fonction `key_bindings`.
+fn fichier_complet(bindings: &str) -> String {
+    format!(
+        r#"use gpui::{{App, Menu, MenuItem, actions}};
+
+actions!(app, [Nouveau, Quitter]);
+
+pub fn key_bindings() -> Vec<gpui::KeyBinding> {{
+    use gpui::KeyBinding;
+    vec![
+{bindings}    ]
+}}
+
+pub fn app_menus() -> Vec<Menu> {{
+    // maxx:begin
+    vec![Menu {{
+        name: "Fichier".into(),
+        items: vec![MenuItem::action("Nouveau", Nouveau)],
+    }}]
+    // maxx:end
+}}
+"#
+    )
+}
+
+#[test]
+fn a_shortcut_is_read_added_changed_and_removed() {
+    let path = std::env::temp_dir().join("maxx_raccourci.rs");
+    let source = fichier_complet("        KeyBinding::new(\"cmd-q\", Quitter, None),\n");
+    std::fs::write(&path, &source).unwrap();
+
+    let mut menus = MenuFile::from_source(path.clone(), source).expect("doit se relire");
+
+    // Lu depuis le fichier, et non depuis le modèle : le raccourci vit dehors.
+    assert_eq!(menus.shortcut("Quitter").as_deref(), Some("cmd-q"));
+    assert_eq!(menus.shortcut("Nouveau"), None);
+
+    // Ajouté à une action qui n'en avait pas.
+    menus.set_shortcut("Nouveau", Some("cmd-n")).unwrap();
+    assert_eq!(menus.shortcut("Nouveau").as_deref(), Some("cmd-n"));
+    // Celui d'à côté n'a pas bougé.
+    assert_eq!(menus.shortcut("Quitter").as_deref(), Some("cmd-q"));
+
+    // Changé.
+    menus.set_shortcut("Nouveau", Some("cmd-shift-n")).unwrap();
+    assert_eq!(menus.shortcut("Nouveau").as_deref(), Some("cmd-shift-n"));
+    assert_eq!(
+        menus.source.matches("Nouveau, None").count(),
+        1,
+        "le remplacement ne doit pas dupliquer la ligne"
+    );
+
+    // Retiré.
+    menus.set_shortcut("Nouveau", None).unwrap();
+    assert_eq!(menus.shortcut("Nouveau"), None);
+    assert_eq!(menus.shortcut("Quitter").as_deref(), Some("cmd-q"));
+
+    // Et le fichier sur le disque a suivi à chaque fois.
+    let relu = std::fs::read_to_string(&path).unwrap();
+    assert!(relu.contains("KeyBinding::new(\"cmd-q\", Quitter, None),"), "{relu}");
+    assert!(!relu.contains("Nouveau, None"), "{relu}");
+}
+
+#[test]
+fn a_keystroke_gpui_cannot_read_is_refused() {
+    // Une frappe illisible fait interrompre `bind_keys` au démarrage :
+    // l'application générée refuserait de s'ouvrir. Mieux vaut refuser ici.
+    for mauvais in ["", "cmd-", "-n", "commande-n", "cmd--n"] {
+        assert!(!maxx::menufile::is_keystroke(mauvais), "« {mauvais} » devrait être refusé");
+    }
+    for bon in ["n", "cmd-n", "cmd-shift-n", "ctrl-alt-delete", "cmd-,", "secondary-a"] {
+        assert!(maxx::menufile::is_keystroke(bon), "« {bon} » devrait être accepté");
+    }
+
+    let path = std::env::temp_dir().join("maxx_raccourci_refuse.rs");
+    let source = fichier_complet("");
+    std::fs::write(&path, &source).unwrap();
+    let mut menus = MenuFile::from_source(path, source.clone()).expect("doit se relire");
+
+    let erreur = menus.set_shortcut("Nouveau", Some("commande-n")).expect_err("doit refuser");
+    assert!(erreur.contains("raccourci gpui"), "{erreur}");
+    // Et rien n'a été écrit.
+    assert_eq!(menus.source, source);
+}
