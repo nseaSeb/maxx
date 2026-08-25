@@ -124,7 +124,14 @@ fn cargo_config() -> String {
 [build]
 target-dir = "{}"
 "#,
-        crate::run::shared_target_dir().display()
+        // Une chaîne TOML de base traite `\` comme un échappement, et
+        // `C:\Users\…` n'en contient aucun de valide : le fichier devient
+        // illisible et `cargo` refuse de démarrer avant même de compiler.
+        crate::run::shared_target_dir()
+            .display()
+            .to_string()
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
     )
 }
 
@@ -167,8 +174,17 @@ pub fn remove_module(root: &Path, module: &str) -> io::Result<()> {
             line != declaration && line != format!("pub {declaration}")
         })
         .collect();
-    let mut out = kept.join("\n");
-    out.push('\n');
+
+    // Deleting a file that was never declared must not rewrite `main.rs` at
+    // all: `lines()` and `join` would quietly turn CRLF into LF, which is a
+    // whole-file diff for a change that did not happen.
+    if kept.len() == source.lines().count() {
+        return Ok(());
+    }
+
+    let ending = if source.contains("\r\n") { "\r\n" } else { "\n" };
+    let mut out = kept.join(ending);
+    out.push_str(ending);
     std::fs::write(&main_path, out)
 }
 
@@ -177,13 +193,31 @@ pub fn remove_module(root: &Path, module: &str) -> io::Result<()> {
 /// An inner doc comment or an inner attribute has to stay ahead of every item,
 /// or the crate stops compiling.
 fn header_end(lines: &[String]) -> usize {
-    lines
-        .iter()
-        .position(|line| {
-            let line = line.trim_start();
-            !(line.is_empty() || line.starts_with("//") || line.starts_with("#!["))
-        })
-        .unwrap_or(lines.len())
+    let mut index = 0;
+    let mut in_block = false;
+    while index < lines.len() {
+        let line = lines[index].trim_start();
+        if in_block {
+            if line.contains("*/") {
+                in_block = false;
+            }
+            index += 1;
+            continue;
+        }
+        // `/*! … */` is an inner doc comment too, and just as fatal to jump
+        // over: an item may not precede one.
+        if line.starts_with("/*") {
+            in_block = !line.contains("*/");
+            index += 1;
+            continue;
+        }
+        if line.is_empty() || line.starts_with("//") || line.starts_with("#![") {
+            index += 1;
+            continue;
+        }
+        break;
+    }
+    index
 }
 
 /// The system module of a generated project.
@@ -279,9 +313,16 @@ pub fn write_atomically(path: &Path, body: &str) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let temporary = path.with_extension("tmp");
+    // Le nom, pas l'extension : `reglages.json` et `reglages.toml` écriraient
+    // sinon tous deux dans `reglages.tmp` et s'écraseraient l'un l'autre.
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    let temporary = path.with_file_name(format!("{name}.tmp"));
     std::fs::write(&temporary, body)?;
-    std::fs::rename(&temporary, path)
+    if let Err(erreur) = std::fs::rename(&temporary, path) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(erreur);
+    }
+    Ok(())
 }
 
 /// Déplace `path` vers la corbeille et répond où il a atterri.
@@ -316,31 +357,38 @@ pub fn move_to_trash(path: &Path, application: &str) -> Result<PathBuf, String> 
         index += 1;
     }
 
-    // D'un volume à l'autre, `rename` échoue avec EXDEV : il faut alors un
-    // déplacement qui copie.
+    // D'un volume à l'autre, `rename` échoue avec EXDEV : il faut alors copier
+    // puis effacer. En Rust et non par `mv` ou `cmd /C move` : `move` refuse de
+    // porter un dossier d'un disque à l'autre, ce qui est justement le cas qui
+    // amène ici sous Windows.
     if std::fs::rename(path, &target).is_err() {
-        let moved = std::process::Command::new(if cfg!(target_os = "windows") {
-            "cmd"
+        copier(path, &target).map_err(|erreur| erreur.to_string())?;
+        // Seulement une fois la copie entière : effacer d'abord ferait d'une
+        // copie ratée une suppression.
+        let efface = if path.is_dir() {
+            std::fs::remove_dir_all(path)
         } else {
-            "/bin/mv"
-        });
-        let mut moved = moved;
-        if cfg!(target_os = "windows") {
-            moved.arg("/C").arg("move").arg("/Y");
-        }
-        let ok = moved
-            .arg(path)
-            .arg(&target)
-            .status()
-            .map(|status| status.success())
-            .map_err(|error| error.to_string())?;
-        if !ok {
-            return Err(format!("déplacement refusé : {}", path.display()));
-        }
+            std::fs::remove_file(path)
+        };
+        efface.map_err(|erreur| erreur.to_string())?;
     }
 
     write_trashinfo(&target, path);
     Ok(target)
+}
+
+/// Copie un fichier, ou un dossier et tout ce qu'il contient.
+fn copier(source: &Path, cible: &Path) -> std::io::Result<()> {
+    if !source.is_dir() {
+        std::fs::copy(source, cible)?;
+        return Ok(());
+    }
+    std::fs::create_dir_all(cible)?;
+    for entree in std::fs::read_dir(source)? {
+        let entree = entree?;
+        copier(&entree.path(), &cible.join(entree.file_name()))?;
+    }
+    Ok(())
 }
 
 /// Le dossier où ce système garde les fichiers mis à la corbeille.
@@ -384,11 +432,75 @@ fn write_trashinfo(target: &Path, original: &Path) {
         })
         .unwrap_or_else(|_| original.to_path_buf());
 
-    let body = format!("[Trash Info]\nPath={}\n", absolute.to_string_lossy());
+    // La spécification demande les deux clés, et un chemin encodé : un fichier
+    // nommé `100%.rs` serait sinon mal décodé et restauré ailleurs, ou nulle
+    // part.
+    let body = format!(
+        "[Trash Info]\nPath={}\nDeletionDate={}\n",
+        encoder(&absolute.to_string_lossy()),
+        date_de_suppression()
+    );
     let _ = std::fs::write(
         info.join(format!("{}.trashinfo", name.to_string_lossy())),
         body,
     );
+}
+
+/// Encode un chemin comme la spécification de la corbeille le demande.
+fn encoder(chemin: &str) -> String {
+    let mut sortie = String::with_capacity(chemin.len());
+    for octet in chemin.bytes() {
+        match octet {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
+                sortie.push(octet as char)
+            }
+            _ => sortie.push_str(&format!("%{octet:02X}")),
+        }
+    }
+    sortie
+}
+
+/// L'instant de la suppression, dans la forme attendue.
+///
+/// En UTC là où la spécification demande l'heure locale : `std` n'a pas de
+/// fuseau, et prendre une dépendance pour une ligne d'un fichier que personne
+/// ne lit à la main serait cher payé.
+fn date_de_suppression() -> String {
+    let secondes = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|ecoule| ecoule.as_secs())
+        .unwrap_or(0);
+
+    let jours = (secondes / 86_400) as i64;
+    let heure = secondes % 86_400;
+    let (annee, mois, jour) = date_civile(jours);
+    format!(
+        "{annee:04}-{mois:02}-{jour:02}T{:02}:{:02}:{:02}",
+        heure / 3600,
+        (heure % 3600) / 60,
+        heure % 60
+    )
+}
+
+/// Convertit un nombre de jours depuis 1970-01-01 en date civile.
+///
+/// L'algorithme de Howard Hinnant : il décale l'année pour la faire commencer
+/// en mars, ce qui met le jour bissextile à la fin et évite d'en faire un cas.
+fn date_civile(jours: i64) -> (i64, u32, u32) {
+    let decale = jours + 719_468;
+    let ere = if decale >= 0 { decale } else { decale - 146_096 } / 146_097;
+    let jour_ere = decale - ere * 146_097;
+    let annee_ere = (jour_ere - jour_ere / 1460 + jour_ere / 36_524 - jour_ere / 146_096) / 365;
+    let annee = annee_ere + ere * 400;
+    let jour_annee = jour_ere - (365 * annee_ere + annee_ere / 4 - annee_ere / 100);
+    let mois_decale = (5 * jour_annee + 2) / 153;
+    let jour = (jour_annee - (153 * mois_decale + 2) / 5 + 1) as u32;
+    let mois = if mois_decale < 10 {
+        mois_decale + 3
+    } else {
+        mois_decale - 9
+    } as u32;
+    (if mois <= 2 { annee + 1 } else { annee }, mois, jour)
 }
 "#
     .to_string()

@@ -59,13 +59,15 @@ pub fn shared_target_dir() -> PathBuf {
 
 /// Where this system puts caches.
 ///
-/// The three conventions, in the order they take precedence:
-/// `XDG_CACHE_HOME` when the user set it, `LOCALAPPDATA` on Windows, and
-/// otherwise the home directory — `Library/Caches` on macOS, `.cache`
-/// elsewhere.
+/// In the order they take precedence: `LOCALAPPDATA` on Windows,
+/// `XDG_CACHE_HOME` when the user set it, and otherwise the home directory —
+/// `Library/Caches` on macOS, `.cache` elsewhere. The same order
+/// `settings::directory` follows, so the two never disagree about which
+/// convention wins.
 fn cache_dir() -> PathBuf {
     if cfg!(target_os = "windows")
         && let Ok(local) = std::env::var("LOCALAPPDATA")
+        && !local.is_empty()
     {
         return PathBuf::from(local);
     }
@@ -118,28 +120,41 @@ pub fn open_terminal(terminal: Option<&Terminal>, path: &Path) {
         return;
     }
 
-    // The bundle is a macOS notion, and `open` is a macOS tool: elsewhere the
-    // command on the `PATH` is the only way in, and its absence is why nothing
-    // happened.
-    #[cfg(target_os = "macos")]
-    if let Some(bundle) = terminal.bundle {
-        // `-n` and `--args` are what carry the flag through to a bundle that
-        // has no command line tool of its own.
-        if let Some(flag) = terminal.directory_flag {
-            let opened = Command::new("open")
-                .arg("-na")
-                .arg(bundle)
-                .arg("--args")
-                .arg(format!("{flag}={}", path.display()))
-                .spawn()
-                .is_ok();
-            if opened {
-                return;
-            }
-        }
-        let _ = Command::new("open").arg("-a").arg(bundle).arg(path).spawn();
-    }
+    open_terminal_bundle(terminal, path);
 }
+
+/// Opens a terminal through its macOS application bundle.
+///
+/// A bundle is a macOS notion and `open` a macOS tool: everywhere else the
+/// command on the `PATH` is the only way in, and its absence is the reason
+/// nothing happened. Written as a function with an empty counterpart rather
+/// than a `cfg` block inside the caller, so the caller keeps the same shape on
+/// every system — a `cfg`-ed block at the end of a function turns the line
+/// above it into a tail `return`, which `clippy -D warnings` refuses.
+#[cfg(target_os = "macos")]
+fn open_terminal_bundle(terminal: &Terminal, path: &Path) {
+    let Some(bundle) = terminal.bundle else {
+        return;
+    };
+    // `-n` and `--args` are what carry the flag through to a bundle that has
+    // no command line tool of its own.
+    if let Some(flag) = terminal.directory_flag {
+        let opened = Command::new("open")
+            .arg("-na")
+            .arg(bundle)
+            .arg("--args")
+            .arg(format!("{flag}={}", path.display()))
+            .spawn()
+            .is_ok();
+        if opened {
+            return;
+        }
+    }
+    let _ = Command::new("open").arg("-a").arg(bundle).arg(path).spawn();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn open_terminal_bundle(_terminal: &Terminal, _path: &Path) {}
 
 /// The argument list that opens `path` in `editor`, at `line` when given.
 ///
@@ -170,11 +185,21 @@ pub fn open_editor(editor: &Editor, path: &Path, line: Option<usize>) {
     {
         return;
     }
-    #[cfg(target_os = "macos")]
+    open_editor_bundle(editor, path);
+}
+
+/// Opens a file through the editor's macOS application bundle.
+///
+/// The line number is lost here: `open -a` has nowhere to put it.
+#[cfg(target_os = "macos")]
+fn open_editor_bundle(editor: &Editor, path: &Path) {
     if let Some(bundle) = editor.bundle {
         let _ = Command::new("open").arg("-a").arg(bundle).arg(path).spawn();
     }
 }
+
+#[cfg(not(target_os = "macos"))]
+fn open_editor_bundle(_editor: &Editor, _path: &Path) {}
 
 /// Opens `path` in an editor that draws inside a terminal.
 ///
@@ -212,10 +237,20 @@ pub fn open_editor_in_terminal(
         return;
     }
 
-    #[cfg(target_os = "macos")]
+    open_terminal_editor_bundle(terminal, editor, flag, &arguments);
+}
+
+/// Starts a terminal editor through the terminal's macOS bundle.
+#[cfg(target_os = "macos")]
+fn open_terminal_editor_bundle(
+    terminal: &Terminal,
+    editor: &Editor,
+    flag: &str,
+    arguments: &[String],
+) {
     if let Some(bundle) = terminal.bundle {
         let mut passed = vec![flag.to_string(), editor.command.to_string()];
-        passed.extend(arguments);
+        passed.extend(arguments.iter().cloned());
         let _ = Command::new("open")
             .arg("-na")
             .arg(bundle)
@@ -223,6 +258,15 @@ pub fn open_editor_in_terminal(
             .args(&passed)
             .spawn();
     }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn open_terminal_editor_bundle(
+    _terminal: &Terminal,
+    _editor: &Editor,
+    _flag: &str,
+    _arguments: &[String],
+) {
 }
 
 
@@ -398,6 +442,10 @@ fn trash_dir() -> Result<PathBuf, String> {
 /// Without it the file is in the trash but the desktop does not know where it
 /// came from, and the entry cannot be put back. Elsewhere there is nothing to
 /// write.
+///
+/// The freedesktop specification asks for both keys, and for the path to be
+/// percent-encoded: a file named `100%.rs` would otherwise be decoded wrongly
+/// and restored somewhere else, or nowhere.
 fn write_trashinfo(target: &Path, original: &Path) {
     if cfg!(target_os = "macos") || cfg!(target_os = "windows") {
         return;
@@ -423,12 +471,10 @@ fn write_trashinfo(target: &Path, original: &Path) {
         })
         .unwrap_or_else(|_| original.to_path_buf());
 
-    // The date is the one part maxx cannot fill honestly without a clock it
-    // does not have here; the specification allows it to be approximate, and
-    // every desktop tolerates it missing.
     let body = format!(
-        "[Trash Info]\nPath={}\n",
-        absolute.to_string_lossy()
+        "[Trash Info]\nPath={}\nDeletionDate={}\n",
+        percent_encode(&absolute.to_string_lossy()),
+        deletion_date()
     );
     let _ = std::fs::write(
         info.join(format!("{}.trashinfo", name.to_string_lossy())),
@@ -436,19 +482,98 @@ fn write_trashinfo(target: &Path, original: &Path) {
     );
 }
 
-/// Moves a file the way the system moves files, for the case `rename` refuses.
-fn move_across_volumes(from: &Path, to: &Path) -> Result<bool, String> {
-    let mut command = if cfg!(target_os = "windows") {
-        let mut command = Command::new("cmd");
-        command.arg("/C").arg("move").arg("/Y").arg(from).arg(to);
-        command
+/// Percent-encodes a path the way the trash specification asks.
+///
+/// Everything outside the unreserved set is escaped, except the separator —
+/// which the specification keeps readable.
+fn percent_encode(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for byte in path.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
+                out.push(byte as char)
+            }
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
+}
+
+/// The moment of the deletion, as the specification spells it.
+///
+/// In UTC rather than local time, which is what the specification asks for:
+/// `std` has no timezone, and reaching for a crate to write one line in a file
+/// nobody reads by hand is a poor trade. Every desktop tested reads it.
+fn deletion_date() -> String {
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or(0);
+
+    let days = (seconds / 86_400) as i64;
+    let time = seconds % 86_400;
+    let (year, month, day) = civil_from_days(days);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}",
+        time / 3600,
+        (time % 3600) / 60,
+        time % 60
+    )
+}
+
+/// Turns a count of days since 1970-01-01 into a civil date.
+///
+/// Howard Hinnant's algorithm, the one every date library uses: it shifts the
+/// year to start in March so the leap day lands at the end and needs no case
+/// of its own.
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let shifted = days + 719_468;
+    let era = if shifted >= 0 { shifted } else { shifted - 146_096 } / 146_097;
+    let day_of_era = shifted - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let shifted_month = (5 * day_of_year + 2) / 153;
+    let day = (day_of_year - (153 * shifted_month + 2) / 5 + 1) as u32;
+    let month = if shifted_month < 10 {
+        shifted_month + 3
     } else {
-        let mut command = Command::new("/bin/mv");
-        command.arg(from).arg(to);
-        command
+        shifted_month - 9
+    } as u32;
+    (if month <= 2 { year + 1 } else { year }, month, day)
+}
+
+/// Moves a file or a whole directory, for the case `rename` refuses.
+///
+/// In Rust rather than through `mv` or `cmd /C move`: `move` refuses to carry
+/// a directory from one drive to another, which is exactly the case that
+/// brings us here on Windows, and `Command::arg` escapes for rules `cmd.exe`
+/// does not follow — a path holding `&`, `^` or `%` would break the command
+/// line.
+fn move_across_volumes(from: &Path, to: &Path) -> Result<bool, String> {
+    copy_recursively(from, to).map_err(|error| error.to_string())?;
+    // Only once the copy is whole: removing first would turn a failed copy
+    // into a deletion.
+    let removed = if from.is_dir() {
+        std::fs::remove_dir_all(from)
+    } else {
+        std::fs::remove_file(from)
     };
-    command
-        .status()
-        .map(|status| status.success())
-        .map_err(|error| error.to_string())
+    removed.map_err(|error| error.to_string())?;
+    Ok(true)
+}
+
+/// Copies a file, or a directory and everything under it.
+fn copy_recursively(from: &Path, to: &Path) -> std::io::Result<()> {
+    if !from.is_dir() {
+        std::fs::copy(from, to)?;
+        return Ok(());
+    }
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        copy_recursively(&entry.path(), &to.join(entry.file_name()))?;
+    }
+    Ok(())
 }

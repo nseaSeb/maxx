@@ -166,9 +166,16 @@ fn write_atomically(path: &Path, body: &str) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let temporary = path.with_extension("tmp");
+    // The name, not the extension: `reglages.json` and `reglages.toml` would
+    // otherwise both write to `reglages.tmp` and clobber each other.
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    let temporary = path.with_file_name(format!("{name}.tmp"));
     std::fs::write(&temporary, body)?;
-    std::fs::rename(&temporary, path)
+    if let Err(error) = std::fs::rename(&temporary, path) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(error);
+    }
+    Ok(())
 }
 
 /// The settings file maxx writes when there is none.

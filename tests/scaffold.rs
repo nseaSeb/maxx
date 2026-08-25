@@ -977,3 +977,65 @@ fn only_a_top_level_module_file_has_a_mod_line() {
         None
     );
 }
+
+#[test]
+fn a_block_doc_comment_header_is_not_jumped_over() {
+    let root = scratch("maxx_block_header_test");
+    scaffold::create_project(&root, "essai").expect("le projet doit être créé");
+
+    // `/*! … */` est un commentaire de module interne : aucun item ne peut le
+    // précéder, et une insertion en ligne 1 casse la compilation.
+    let main_path = root.join("src/main.rs");
+    let source = std::fs::read_to_string(&main_path).unwrap();
+    std::fs::write(
+        &main_path,
+        format!("/*!\n Mon application.\n*/\n#![allow(dead_code)]\n\n{source}"),
+    )
+    .unwrap();
+
+    scaffold::add_system_module(&root).expect("le module doit être ajouté");
+
+    let wired = std::fs::read_to_string(&main_path).unwrap();
+    let lines: Vec<&str> = wired.lines().collect();
+    let declaration = lines.iter().position(|line| *line == "mod systeme;").unwrap();
+    let fin_du_bloc = lines.iter().position(|line| *line == "*/").unwrap();
+    let attribut = lines
+        .iter()
+        .position(|line| *line == "#![allow(dead_code)]")
+        .unwrap();
+    assert!(declaration > fin_du_bloc, "{wired}");
+    assert!(declaration > attribut, "{wired}");
+}
+
+#[test]
+fn deleting_an_undeclared_file_leaves_main_rs_untouched() {
+    let root = scratch("maxx_untouched_main_test");
+    scaffold::create_project(&root, "essai").expect("le projet doit être créé");
+
+    // Des fins de ligne Windows : une réécriture inutile les convertirait.
+    let main_path = root.join("src/main.rs");
+    let source = std::fs::read_to_string(&main_path).unwrap().replace('\n', "\r\n");
+    std::fs::write(&main_path, &source).unwrap();
+
+    scaffold::remove_module(&root, "jamais_declare").expect("rien à retirer");
+
+    assert_eq!(std::fs::read_to_string(&main_path).unwrap(), source);
+}
+
+#[test]
+fn the_shared_target_dir_survives_being_written_into_toml() {
+    let root = scratch("maxx_toml_target_test");
+    scaffold::create_project(&root, "essai").expect("le projet doit être créé");
+
+    let config = std::fs::read_to_string(root.join(".cargo/config.toml")).unwrap();
+    let parsed: toml::Value = toml::from_str(&config).unwrap_or_else(|error| {
+        panic!("le fichier de configuration doit rester du TOML : {error}\n{config}")
+    });
+    let target = parsed["build"]["target-dir"].as_str().unwrap();
+    assert!(!target.is_empty());
+    // Ce qui a été échappé pour TOML doit se relire tel quel.
+    assert_eq!(
+        std::path::PathBuf::from(target),
+        maxx::run::shared_target_dir()
+    );
+}

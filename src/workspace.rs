@@ -563,7 +563,11 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Copies the system module into the project and opens it.
+    /// Copies the system module into the project and points the explorer at it.
+    ///
+    /// Pointed at, not opened: `systeme.rs` carries no managed region, so the
+    /// designer has nothing to show for it — it is read and edited in the
+    /// editor, like any other hand-written module.
     ///
     /// What every desktop application ends up writing on its second day —
     /// where its files go, and what "delete" means — and what nobody wants to
@@ -577,7 +581,16 @@ impl Workspace {
         };
         let root = project.root.clone();
         let path = root.join("src/systeme.rs");
-        let existed = path.exists();
+        let main_path = root.join("src/main.rs");
+        let had_file = path.exists();
+        let had_declaration = std::fs::read_to_string(&main_path)
+            .is_ok_and(|source| source.lines().any(|line| line.trim() == "mod systeme;"));
+
+        // Unsaved menu edits come first: this leaves the menu editor, and
+        // dropping them silently would be the worst way to add a file.
+        if self.discard_menu_edits(cx) {
+            return;
+        }
 
         if let Err(error) = crate::scaffold::add_system_module(&root) {
             self.message = Some(SharedString::from(error.to_string()));
@@ -585,13 +598,17 @@ impl Workspace {
             return;
         }
 
-        self.refresh_entries();
+        self.menu_file = None;
+        self.menu_synced = None;
         self.preferences = false;
+        self.refresh_entries();
         self.selected = Some(path);
-        self.message = Some(SharedString::from(if existed {
-            "src/systeme.rs est déjà là"
-        } else {
-            "module système ajouté au projet et déclaré dans main.rs"
+        self.message = Some(SharedString::from(match (had_file, had_declaration) {
+            (true, true) => "src/systeme.rs est déjà là",
+            // The file was there but nothing declared it — which is exactly
+            // the state a half-finished delete leaves behind.
+            (true, false) => "src/systeme.rs était là, il est maintenant déclaré dans main.rs",
+            _ => "module système ajouté au projet et déclaré dans main.rs",
         }));
         cx.notify();
     }

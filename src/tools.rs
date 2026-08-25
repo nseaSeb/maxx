@@ -201,7 +201,26 @@ pub fn on_path(command: &str) -> bool {
     let Ok(path) = std::env::var("PATH") else {
         return false;
     };
-    std::env::split_paths(&path).any(|directory| directory.join(command).is_file())
+
+    // Sur Windows le fichier ne porte pas le nom de la commande : `code` est
+    // `code.cmd`, `nvim` est `nvim.exe`. Chercher le nom nu n'y trouve jamais
+    // rien, et tout paraît absent.
+    let extensions: Vec<String> = if cfg!(target_os = "windows") {
+        let list = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into());
+        std::iter::once(String::new())
+            .chain(list.split(';').filter(|part| !part.is_empty()).map(|part| {
+                part.to_ascii_lowercase()
+            }))
+            .collect()
+    } else {
+        vec![String::new()]
+    };
+
+    std::env::split_paths(&path).any(|directory| {
+        extensions
+            .iter()
+            .any(|extension| directory.join(format!("{command}{extension}")).is_file())
+    })
 }
 
 /// Whether a macOS application bundle of that name is installed.
