@@ -570,8 +570,14 @@ fn the_palette_is_the_menu_bar_flattened() {
     assert_eq!(libellés[1], "Fichier ▸ Ajouter au projet ▸ Les réglages");
 
     // Et le raccourci vient du clavier de maxx, pas d'une seconde table.
+    //
+    // Sur la touche et non sur le modificateur : gpui dessine `cmd` avec le
+    // glyphe du système — ⌘ sur macOS, ⊞ sur Windows, ❖ sur Linux — et
+    // l'affirmer figerait le test sur celui de la machine qui l'a écrit.
     let raccourci = commandes[0].shortcut.as_ref().map(|keys| keys.to_string());
-    assert_eq!(raccourci.as_deref(), Some("⌘S"), "{raccourci:?}");
+    let raccourci = raccourci.expect("⌘S est dans le clavier de maxx");
+    assert!(raccourci.ends_with('S'), "{raccourci}");
+    assert!(raccourci.chars().count() > 1, "et il porte un modificateur : {raccourci}");
     assert!(commandes[1].shortcut.is_none(), "cette entrée n'a pas de raccourci");
 }
 
