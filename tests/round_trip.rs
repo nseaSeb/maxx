@@ -578,3 +578,53 @@ fn a_binding_that_collides_with_nothing_is_kept() {
     maxx::registry::rebind_state_fields(&mut collides, &root);
     assert_eq!(maxx::registry::read(&collides, binding()).as_deref(), Some("field_2"));
 }
+
+/// An image path is an expression, and it has to survive as one.
+///
+/// `Kind::Path` is the only property written as neither a literal nor a
+/// `&self.` binding: it goes out as `PathBuf::from("…")`, comes back through
+/// `syn`, and the inspector has to recognise its own writing on the way in —
+/// otherwise the field shows the expression and the next keystroke overwrites
+/// the whole argument.
+#[test]
+fn an_image_path_is_written_read_back_and_still_editable() {
+    let mut node = maxx::registry::instantiate("image").expect("image is in the catalogue");
+    let spec = maxx::registry::of(&node).expect("img is in the catalogue");
+    let source = &spec.props[0];
+
+    let rendered = maxx::codegen::render(&node, 0);
+    assert_eq!(rendered, "img(PathBuf::from(\"assets/image.png\"))");
+
+    let back = maxx::parser::parse_expr(&rendered).expect("the expression must read back");
+    assert_eq!(maxx::registry::read(&back, source).as_deref(), Some("assets/image.png"));
+    assert!(maxx::registry::editable(&back, source), "the inspector must own this argument");
+
+    maxx::registry::write(&mut node, source, "assets/logo.png");
+    assert_eq!(maxx::codegen::render(&node, 0), "img(PathBuf::from(\"assets/logo.png\"))");
+
+    // The import travels with it: `PathBuf` sits on the base, not on a call,
+    // and nothing else in the tree would bring it in.
+    let mut root = maxx::model::Node::known("v_flex");
+    root.push_child(node);
+    assert!(maxx::registry::imports(&root).contains(&"use std::path::PathBuf;"));
+
+    // An absolute path is refused rather than written: it would resolve on one
+    // machine only.
+    assert!(maxx::registry::validate(source, "/Users/someone/logo.png").is_some());
+    assert!(maxx::registry::validate(source, "assets/logo.png").is_none());
+}
+
+/// A hand-written source expression is shown and never overwritten.
+#[test]
+fn a_computed_image_source_is_left_alone() {
+    let node = maxx::parser::parse_expr("img(self.avatar.clone())").expect("must read back");
+    let spec = maxx::registry::of(&node).expect("img is in the catalogue");
+    let source = &spec.props[0];
+
+    assert!(!maxx::registry::editable(&node, source));
+    assert_eq!(maxx::registry::read(&node, source).as_deref(), Some("self.avatar.clone()"));
+
+    let mut node = node;
+    maxx::registry::write(&mut node, source, "assets/logo.png");
+    assert_eq!(maxx::codegen::render(&node, 0), "img(self.avatar.clone())");
+}

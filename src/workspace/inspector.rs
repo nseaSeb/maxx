@@ -78,7 +78,13 @@ impl Workspace {
         for prop in crate::registry::props(spec) {
             if !matches!(
                 prop.kind,
-                Kind::Text | Kind::Field | Kind::Handler | Kind::Number | Kind::Color | Kind::Ratio
+                Kind::Text
+                    | Kind::Field
+                    | Kind::Handler
+                    | Kind::Number
+                    | Kind::Color
+                    | Kind::Ratio
+                    | Kind::Path
             ) || !crate::registry::editable(&node, prop)
             {
                 continue;
@@ -349,6 +355,46 @@ impl Workspace {
             view.past.push(snapshot);
             view.future.clear();
         }
+    }
+
+    /// Asks for a file and writes it as a path relative to the project.
+    ///
+    /// Relative, or refused: the generated binary reads from the directory
+    /// `cargo run` starts in — the project root — so a file taken from
+    /// somewhere else on the disk would show on this machine and nowhere else.
+    /// Saying so beats writing a path that quietly stops working.
+    pub fn pick_path(&mut self, prop: &'static crate::registry::Prop, cx: &mut Context<Self>) {
+        let Some(root) = self.project().map(|project| project.root.clone()) else {
+            return;
+        };
+        let paths = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some(crate::tr("designer.choose")),
+        });
+
+        cx.spawn(async move |this, cx| {
+            if let Ok(Ok(Some(paths))) = paths.await
+                && let Some(path) = paths.into_iter().next()
+            {
+                this.update(cx, |this, cx| match path.strip_prefix(&root) {
+                    // Written with forward slashes whatever the system: it is
+                    // the one spelling `PathBuf` reads everywhere, and the file
+                    // travels with the project.
+                    Ok(relative) => {
+                        let value = relative.to_string_lossy().replace('\\', "/");
+                        this.edit_prop(prop, &value, cx);
+                    }
+                    Err(_) => {
+                        this.message = Some(crate::tr("error.outside_project"));
+                        cx.notify();
+                    }
+                })
+                .ok();
+            }
+        })
+        .detach();
     }
 
     /// Writes a property of the selected node.

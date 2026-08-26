@@ -367,7 +367,7 @@ fn open_folder(_: &OpenFolder, cx: &mut App) {
         files: false,
         directories: true,
         multiple: false,
-        prompt: Some("Ouvrir".into()),
+        prompt: Some(crate::tr("designer.choose")),
     });
 
     cx.spawn(async move |cx: &mut AsyncApp| {
@@ -383,7 +383,10 @@ fn open_folder(_: &OpenFolder, cx: &mut App) {
 /// Asks for a location, scaffolds a project there and opens it.
 fn new_project(_: &NewProject, cx: &mut App) {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/".into());
-    let path = cx.prompt_for_new_path(std::path::Path::new(&home), Some("mon_app"));
+    let path = cx.prompt_for_new_path(
+        std::path::Path::new(&home),
+        Some(&crate::tr("prefs.default_project_name")),
+    );
 
     cx.spawn(async move |cx: &mut AsyncApp| {
         let Ok(Ok(Some(path))) = path.await else {

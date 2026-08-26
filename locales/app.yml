@@ -23,6 +23,9 @@ component.divider:
 component.group_box:
   en: "Group box"
   fr: "Cadre"
+component.image:
+  en: "Image"
+  fr: "Image"
 component.input:
   en: "Text field"
   fr: "Champ texte"
@@ -74,6 +77,9 @@ designer.add:
 designer.components:
   en: "Components"
   fr: "Composants"
+designer.choose:
+  en: "Choose"
+  fr: "Choisir"
 designer.default:
   en: "default"
   fr: "par défaut"
@@ -209,6 +215,12 @@ error.no_render_impl:
 error.path_without_name:
   en: "path with no file name"
   fr: "chemin sans nom de fichier"
+error.outside_project:
+  en: "a file of the project: this one is elsewhere on the disk"
+  fr: "un fichier du projet : celui-ci est ailleurs sur le disque"
+error.path_relative:
+  en: "a path relative to the project, so it still resolves elsewhere"
+  fr: "un chemin relatif au projet, pour qu'il vaille encore ailleurs"
 error.region_not_expression:
   en: "the managed region is not an expression: %{error}"
   fr: "la zone gérée n'est pas une expression : %{error}"
@@ -590,6 +602,9 @@ prefs.appearance:
 prefs.clear_recent:
   en: "Clear the list"
   fr: "Vider la liste"
+prefs.default_project_name:
+  en: "my_app"
+  fr: "mon_app"
 prefs.editor:
   en: "Editor"
   fr: "Éditeur"
@@ -755,6 +770,9 @@ prop.rounded_full:
 prop.selected:
   en: "Selected"
   fr: "Sélectionné"
+prop.source:
+  en: "Source"
+  fr: "Source"
 prop.text:
   en: "Text"
   fr: "Texte"

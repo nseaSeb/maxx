@@ -44,6 +44,14 @@ pub enum Kind {
     Ratio,
     /// A colour, written as `rgb(0x<value>)`.
     Color,
+    /// A file of the project, written as `PathBuf::from("<value>")`.
+    ///
+    /// A path and not a string: `img("logo.png")` compiles and shows nothing —
+    /// a bare `&str` is looked up in the application's `AssetSource`, which a
+    /// generated project does not declare. A path is read from the disk,
+    /// relative to the directory `cargo run` starts in, which is the project
+    /// root — the one place the canvas and the binary can agree on.
+    Path,
 }
 
 /// One editable property.
@@ -380,6 +388,17 @@ pub const CATALOGUE: &[Spec] = &[
         state: None,
     },
     Spec {
+        id: "image",
+        label: "component.image",
+        base: "img",
+        import: "use gpui::img;",
+        container: false,
+        default_args: &["assets/image.png"],
+        props: &[Prop { label: "prop.source", target: Target::BaseArg(0), kind: Kind::Path }],
+        handler: None,
+        state: None,
+    },
+    Spec {
         id: "spacer",
         label: "component.spacer",
         base: "div",
@@ -438,6 +457,9 @@ pub fn validate(prop: &Prop, value: &str) -> Option<&'static str> {
         Kind::Field | Kind::Handler if !value.is_empty() && !is_identifier(value) => {
             Some("error.identifier")
         }
+        // Relative to the project root, or the image stops being found the day
+        // the project moves — and it never showed on anybody else's machine.
+        Kind::Path if is_absolute(value) => Some("error.path_relative"),
         _ => None,
     }
 }
@@ -525,7 +547,12 @@ pub fn instantiate(id: &str) -> Option<Node> {
         // field, the chain references it.
         vec![Arg::Verbatim("&self.field".into())]
     } else {
-        spec.default_args.iter().map(|value| Arg::Str((*value).into())).collect()
+        match spec.props.first().map(|prop| prop.kind) {
+            // A path is an expression, not a literal: the table holds what the
+            // inspector shows, and the encoder is the same one `write` uses.
+            Some(Kind::Path) => spec.default_args.iter().map(|value| path_arg(value)).collect(),
+            _ => spec.default_args.iter().map(|value| Arg::Str((*value).into())).collect(),
+        }
     };
 
     let mut node = Node::known(spec.base);
@@ -569,6 +596,14 @@ pub fn editable(node: &Node, prop: &Prop) -> bool {
             // handles the shapes maxx knows, and the rest is left alone.
             Some(_) => false,
         },
+        (Target::BaseArg(index), Kind::Path) => match &node.base {
+            Base::Known { args, .. } => match args.get(index) {
+                None => true,
+                Some(Arg::Verbatim(source)) => path_value(source).is_some(),
+                Some(_) => false,
+            },
+            Base::Opaque(_) => false,
+        },
         (Target::BaseArg(index), Kind::Text) => match &node.base {
             Base::Known { args, .. } => match args.get(index) {
                 None | Some(Arg::Str(_)) => true,
@@ -590,6 +625,27 @@ pub fn editable(node: &Node, prop: &Prop) -> bool {
 fn number_value(source: &str) -> Option<String> {
     let inner = source.strip_prefix("px(")?.strip_suffix(')')?;
     Some(inner.trim_end_matches('.').to_string())
+}
+
+/// `PathBuf::from("assets/logo.png")` reads back as `assets/logo.png`.
+///
+/// `None` for anything else, which is what tells [`editable`] that the argument
+/// is a hand-written expression the inspector must not overwrite.
+fn path_value(source: &str) -> Option<String> {
+    let inner = source.strip_prefix("PathBuf::from(\"")?.strip_suffix("\")")?;
+    Some(inner.replace("\\\\", "\\"))
+}
+
+/// The argument a path is written as.
+fn path_arg(value: &str) -> Arg {
+    Arg::Verbatim(format!("PathBuf::from(\"{}\")", crate::model::escape(value)))
+}
+
+/// Whether this path would only resolve on the machine it was typed on.
+fn is_absolute(value: &str) -> bool {
+    value.starts_with('/')
+        || value.starts_with("\\\\")
+        || matches!(value.as_bytes(), [drive, b':', ..] if drive.is_ascii_alphabetic())
 }
 
 /// `rgb(0x1e2127)` reads back as `1e2127`.
@@ -733,6 +789,9 @@ pub fn read(node: &Node, prop: &Prop) -> Option<String> {
                 (Kind::Field, Arg::Verbatim(source)) => {
                     source.trim_start_matches("&self.").to_string()
                 }
+                (Kind::Path, Arg::Verbatim(source)) => {
+                    path_value(source).unwrap_or_else(|| source.clone())
+                }
                 (_, Arg::Str(value)) => value.clone(),
                 (_, other) => other.to_source(),
             }),
@@ -776,16 +835,23 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
             if matches!(prop.kind, Kind::Field) && !is_identifier(value) {
                 return;
             }
+            // A path replaces maxx's own writing and nothing else: exempting
+            // the guard below for the whole kind would let a keystroke
+            // overwrite `img(self.avatar.clone())`.
+            if matches!(prop.kind, Kind::Path) && !editable(node, prop) {
+                return;
+            }
             let Base::Known { args, .. } = &mut node.base else {
                 return;
             };
             if !matches!(args.get(index), None | Some(Arg::Str(_)))
-                && !matches!(prop.kind, Kind::Field)
+                && !matches!(prop.kind, Kind::Field | Kind::Path)
             {
                 return;
             }
             let arg = match prop.kind {
                 Kind::Field => Arg::Verbatim(format!("&self.{value}")),
+                Kind::Path => path_arg(value),
                 _ => Arg::Str(value.to_string()),
             };
             if index < args.len() {
@@ -850,6 +916,16 @@ pub fn imports(root: &Node) -> Vec<&'static str> {
             && !lines.contains(&spec.import)
         {
             lines.push(spec.import);
+        }
+        // A path argument brings `PathBuf` with it, and it sits on the base
+        // rather than on a call: an image is written `img(PathBuf::from(..))`.
+        if let Base::Known { args, .. } = &node.base
+            && args.iter().any(|arg| arg.to_source().starts_with("PathBuf::from("))
+        {
+            let line = "use std::path::PathBuf;";
+            if !lines.contains(&line) {
+                lines.push(line);
+            }
         }
         // The style properties emit `px(..)` and `rgb(..)`, which are functions
         // of `gpui`, not methods of the component.

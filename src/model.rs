@@ -285,7 +285,7 @@ impl Node {
 }
 
 /// Escapes a string for a Rust string literal.
-fn escape(value: &str) -> String {
+pub(crate) fn escape(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for character in value.chars() {
         match character {

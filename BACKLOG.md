@@ -56,6 +56,21 @@ Ce qui reste de ce côté :
   entrées pour que quelque chose s'affiche et ne prétend pas gérer la source
   des données — un jour, peut-être, une propriété « Éléments ».
 
+- ~~L'image~~ — faite, et c'est elle qui a apporté `Kind::Path`. La question
+  n'était pas le composant mais la **source** : `img("logo.png")` compile et
+  n'affiche rien, parce qu'un `&str` est cherché dans l'`AssetSource` qu'un
+  projet généré ne déclare pas. Un chemin, lui, est lu depuis le répertoire
+  courant — celui où `cargo run` démarre, donc la racine du projet, le seul
+  endroit où le canvas et le binaire peuvent tomber d'accord. D'où
+  `PathBuf::from("…")`, un import qui vient de la base et non d'un appel, et
+  un refus des chemins absolus.
+
+  Ce qui reste : **`assets.rs`**, le module qui déclarerait un `AssetSource`
+  et permettrait l'image embarquée, donc un binaire qui se déplace sans son
+  dossier. Et les **propriétés de style sur l'aperçu** : `apply` ne prend
+  qu'un `Div`, donc la largeur et la hauteur posées sur une image sont
+  écrites dans le fichier mais pas montrées sur le canvas.
+
 ## Menus
 
 - **Les sous-menus** sont faits : lus, affichés d'un cran en retrait, créés,

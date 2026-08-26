@@ -7,7 +7,7 @@
 use rust_i18n::t;
 
 use gpui::prelude::*;
-use gpui::{AnyElement, Context, Div, SharedString, div, px};
+use gpui::{AnyElement, Context, Div, SharedString, div, img, px};
 use gpui_component::alert::Alert;
 use gpui_component::button::Button;
 use gpui_component::checkbox::Checkbox;
@@ -420,6 +420,11 @@ impl Workspace {
     /// The drawing surface: the tree rendered with real components.
     fn render_canvas(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let view = self.view().expect("checked by the caller");
+        // What the canvas needs the project for: an image is written as a path
+        // relative to the root, because that is the directory `cargo run`
+        // starts in — resolving it against anything else would draw something
+        // the binary will not.
+        let root = self.project().map(|project| project.root.as_path());
         div().flex().flex_1().p_6().justify_center().overflow_x_hidden().child(
             div()
                 // A capped width rather than a fixed one: the board is 520 px
@@ -433,7 +438,7 @@ impl Workspace {
                 .border_1()
                 .border_color(theme::border())
                 .bg(theme::panel_bg())
-                .child(node_element(&view.root, &[], &view.selected, cx)),
+                .child(node_element(&view.root, &[], &view.selected, root, cx)),
         )
     }
 
@@ -658,7 +663,13 @@ impl Workspace {
                 )
                 .child(binding_toggle(spec, prop, true, cx))
             }
-            Kind::Text | Kind::Field | Kind::Handler | Kind::Number | Kind::Color | Kind::Ratio => {
+            Kind::Text
+            | Kind::Field
+            | Kind::Handler
+            | Kind::Number
+            | Kind::Color
+            | Kind::Ratio
+            | Kind::Path => {
                 match self.prop_input(prop) {
                     Some(state) if matches!(prop.kind, Kind::Handler) => {
                         row.child(div().flex_1().child(Input::new(state).small())).child(
@@ -675,6 +686,21 @@ impl Workspace {
                                 )
                                 .on_click(
                                     cx.listener(move |this, _, _, cx| this.open_handler(prop, cx)),
+                                ),
+                        )
+                    }
+                    Some(state) if matches!(prop.kind, Kind::Path) => {
+                        row.child(div().flex_1().child(Input::new(state).small())).child(
+                            div()
+                                .id(SharedString::from(format!("pick-{}", prop.label)))
+                                .px_2()
+                                .rounded_sm()
+                                .text_xs()
+                                .cursor_pointer()
+                                .hover(|this| this.bg(theme::hover_bg()))
+                                .child(crate::tr("designer.choose"))
+                                .on_click(
+                                    cx.listener(move |this, _, _, cx| this.pick_path(prop, cx)),
                                 ),
                         )
                     }
@@ -1019,6 +1045,7 @@ fn children_with_zones(
     path: &[usize],
     selected: &[usize],
     vertical: bool,
+    root: Option<&std::path::Path>,
     cx: &mut Context<Workspace>,
 ) -> Vec<AnyElement> {
     let mut out = Vec::with_capacity(node.children.len() * 2 + 1);
@@ -1026,7 +1053,7 @@ fn children_with_zones(
     for (index, child) in node.children.iter().enumerate() {
         let mut child_path = path.to_vec();
         child_path.push(index);
-        out.push(node_element(child, &child_path, selected, cx));
+        out.push(node_element(child, &child_path, selected, root, cx));
         out.push(drop_zone(path.to_vec(), index + 1, vertical, cx));
     }
     out
@@ -1168,6 +1195,7 @@ fn node_element(
     node: &Node,
     path: &[usize],
     selected: &[usize],
+    root: Option<&std::path::Path>,
     cx: &mut Context<Workspace>,
 ) -> AnyElement {
     let is_selected = path == selected;
@@ -1190,7 +1218,7 @@ fn node_element(
         .border_color(if is_selected { theme::accent() } else { theme::bg() })
         .rounded_sm()
         .cursor_pointer()
-        .child(preview(node, path, selected, cx))
+        .child(preview(node, path, selected, root, cx))
         .on_click(cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
             // Every node wraps its children in a listener of its own, so
             // without this the click keeps bubbling and each ancestor
@@ -1204,6 +1232,25 @@ fn node_element(
         .into_any_element()
 }
 
+/// The frame an image stands in for: nothing written yet, no project to
+/// resolve the path against, or a file that is not there.
+fn missing_image() -> AnyElement {
+    div()
+        .h(px(60.))
+        .w(px(90.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_sm()
+        .border_1()
+        .border_color(theme::border())
+        .bg(theme::bg())
+        .text_xs()
+        .text_color(theme::text_muted())
+        .child(crate::tr("component.image"))
+        .into_any_element()
+}
+
 /// Whether this click was the second of a double click.
 fn is_double_click(event: &gpui::ClickEvent) -> bool {
     matches!(event, gpui::ClickEvent::Mouse(mouse) if mouse.up.click_count >= 2)
@@ -1214,6 +1261,7 @@ fn preview(
     node: &Node,
     path: &[usize],
     selected: &[usize],
+    root: Option<&std::path::Path>,
     cx: &mut Context<Workspace>,
 ) -> AnyElement {
     let text = |index: usize| -> SharedString {
@@ -1232,10 +1280,30 @@ fn preview(
             let vertical = node.base.path() == Some("v_flex");
             apply(base, &node.calls)
                 .min_h(px(16.))
-                .children(children_with_zones(node, path, selected, vertical, cx))
+                .children(children_with_zones(node, path, selected, vertical, root, cx))
                 .into_any_element()
         }
         Some("Label::new") => Label::new(text(0)).into_any_element(),
+        // Drawn from the disk, at the path the binary will read. Without a
+        // project to resolve it against, or with nothing written yet, a frame
+        // stands in — an image that cannot be found is better admitted than
+        // drawn as a blank the user takes for a layout bug.
+        Some("img") => {
+            let source = registry::of(node)
+                .and_then(|spec| spec.props.first())
+                .and_then(|prop| registry::read(node, prop))
+                .unwrap_or_default();
+            match root.filter(|_| !source.is_empty()) {
+                // The frame is also the fallback: a file that is not there
+                // paints nothing at all otherwise, and an image that silently
+                // does not show reads as a layout bug.
+                Some(root) => img(root.join(&source))
+                    .max_w_full()
+                    .with_fallback(missing_image)
+                    .into_any_element(),
+                None => missing_image(),
+            }
+        }
         Some("Checkbox::new") => Checkbox::new(SharedString::from(format!("preview-{path:?}")))
             .label(call_text(node, "label", &crate::tr("component.checkbox")))
             .checked(call_bool(node, "checked"))
@@ -1246,7 +1314,7 @@ fn preview(
             .into_any_element(),
         Some("GroupBox::new") => GroupBox::new()
             .title(call_text(node, "title", &crate::tr("component.group_box")))
-            .children(children_with_zones(node, path, selected, true, cx))
+            .children(children_with_zones(node, path, selected, true, root, cx))
             .into_any_element(),
         Some("Divider::horizontal") => match node.call("label") {
             Some(_) => Divider::horizontal().label(call_text(node, "label", "")).into_any_element(),
@@ -1258,7 +1326,7 @@ fn preview(
             apply(div(), &node.calls).h(px(20.)).into_any_element()
         }
         Some("div") => apply(div(), &node.calls)
-            .children(children_with_zones(node, path, selected, true, cx))
+            .children(children_with_zones(node, path, selected, true, root, cx))
             .into_any_element(),
         Some("Button::new") => Button::new(SharedString::from(format!("preview-{path:?}")))
             .label(call_text(node, "label", &crate::tr("component.button")))
@@ -1282,11 +1350,11 @@ fn preview(
         // argument: their preview therefore has to carry the drop zones.
         Some("Link::new") => {
             gpui_component::link::Link::new(SharedString::from(format!("preview-{path:?}")))
-                .children(children_with_zones(node, path, selected, false, cx))
+                .children(children_with_zones(node, path, selected, false, root, cx))
                 .into_any_element()
         }
         Some("Tag::new") => gpui_component::tag::Tag::new()
-            .children(children_with_zones(node, path, selected, false, cx))
+            .children(children_with_zones(node, path, selected, false, root, cx))
             .into_any_element(),
         // A live text input on the canvas would swallow the clicks the designer
         // needs, so the preview is a faithful lookalike.

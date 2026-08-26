@@ -70,12 +70,17 @@ maigre : `Fichier ▸ Nouveau projet…` écrit toujours le même squelette.
   vue d'entrée est écrite en dur dans `main_rs()` et la commande de lancement
   est toujours `cargo run`, sans profil ni features. C'est le même fichier qui
   les accueillera.
-- **`assets.rs`, et avec lui le composant image.** `gpui::img` accepte un
-  `&str` — cherché dans l'`AssetSource` de l'application, qu'un projet généré
-  ne déclare pas — ou un chemin, lu depuis le répertoire courant. Le chemin
-  relatif à la racine est ce qui fait tenir le canvas et le binaire ensemble ;
-  l'`AssetSource` est ce qui permet ensuite au binaire de se déplacer sans son
-  dossier. Un `Kind::Path` côté catalogue, un module versionné côté projet.
+- ~~**Le composant image**~~ — fait. `gpui::img` accepte un `&str`, cherché
+  dans l'`AssetSource` que le projet généré ne déclare pas, ou un chemin lu
+  depuis le répertoire courant : c'est le chemin **relatif à la racine** qui
+  fait tenir le canvas et le binaire ensemble, puisque `cargo run` démarre là.
+  D'où `Kind::Path`, écrit `PathBuf::from("…")` — la seule propriété qui n'est
+  ni un littéral ni une liaison `&self.` —, un chemin absolu refusé plutôt
+  qu'écrit, et un bouton *Choisir* qui rend relatif ce que le sélecteur donne.
+
+  Reste **`assets.rs`** : le module qui déclare un `AssetSource`, et avec lui
+  l'image embarquée — un binaire qui se déplace sans son dossier. C'est la
+  seconde moitié, et elle est indépendante.
 - **`window.rs`.** maxx retient la géométrie de sa fenêtre ; toute application
   de bureau la veut, et personne n'a envie de la réécrire.
 
