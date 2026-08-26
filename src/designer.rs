@@ -104,9 +104,9 @@ impl Workspace {
                         .child(
                             resizable_panel()
                                 .size(px(self.inspector_width(cx)))
-                                // En dessous, les champs de l'inspecteur se
-                                // replient sur eux-mêmes ; au-delà, il ne
-                                // reste plus de canvas à dessiner.
+                                // Below this the inspector's fields fold in
+                                // on themselves; beyond it there is no
+                                // canvas left to draw.
                                 .size_range(px(220.)..px(560.))
                                 .child(crate::workspace::fillable(self.render_side_panels(cx))),
                         ),
@@ -233,9 +233,9 @@ impl Workspace {
                     )
                     .into_any_element(),
                 );
-                // Un sous-menu montre ses entrées d'un cran de plus : sans
-                // cela, il serait une ligne qu'on peut sélectionner sans
-                // jamais voir ce qu'elle contient.
+                // A submenu shows its entries one notch further in: without
+                // that, it would be a row that can be selected without ever
+                // seeing what it holds.
                 let ItemDef::Submenu(inner) = item else {
                     continue;
                 };
@@ -258,8 +258,8 @@ impl Workspace {
                     cx,
                 ));
             }
-            // La fin de chaque menu est une cible : sans elle, rien ne peut
-            // être déposé après la dernière entrée.
+            // The end of each menu is a target: without it, nothing can be
+            // dropped after the last entry.
             rows.push(menu_zone(MenuDrop::Item(menu_index, menu.items.len()), cx));
         }
         rows.push(menu_zone(MenuDrop::Menu(menus.menus.len()), cx));
@@ -336,11 +336,11 @@ impl Workspace {
     /// The fields of the selected menu or entry.
     fn render_menu_inspector(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let menus = self.menu_file.as_ref().expect("checked by the caller");
-        // Les libellés sont des clés de traduction, comme ceux du catalogue.
+        // The labels are translation keys, like the catalogue's.
         let fields: &[(MenuField, &str)] = match menus.selected {
             Some(Selection::Menu(_)) => &[(MenuField::Name, "menu.title")],
-            // Un sous-menu porte un titre, pas une action : lui proposer un
-            // champ Action serait proposer ce qui ne s'écrit pas.
+            // A submenu carries a title, not an action: offering it an Action
+            // field would be offering what cannot be written.
             Some(_) if matches!(menus.selected_item(), Some(ItemDef::Submenu(_))) => {
                 &[(MenuField::Label, "menu.title")]
             }
@@ -422,10 +422,10 @@ impl Workspace {
         let view = self.view().expect("checked by the caller");
         div().flex().flex_1().p_6().justify_center().overflow_x_hidden().child(
             div()
-                // Une largeur plafonnée et non figée : la planche fait 520 px
-                // quand il y a la place, et rétrécit plutôt que d'être coupée
-                // quand la fenêtre se resserre. Coupée et centrée, elle
-                // perdait ses deux bords à la fois.
+                // A capped width rather than a fixed one: the board is 520 px
+                // when there is room, and shrinks rather than being cut when
+                // the window narrows. Cut and centred, it lost both of its
+                // edges at once.
                 .w_full()
                 .max_w(px(520.))
                 .p_2()
@@ -444,9 +444,8 @@ impl Workspace {
     fn render_side_panels(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .relative()
-            // Pas de largeur ici : c'est le volet redimensionnable qui la
-            // donne, et une largeur fixe à l'intérieur se battrait avec la
-            // poignée.
+            // No width here: the resizable panel is what gives it, and a fixed
+            // width inside would fight with the handle.
             .size_full()
             .border_l_1()
             .border_color(theme::border())
@@ -478,35 +477,37 @@ impl Workspace {
     /// The node tree, mirroring the canvas selection.
     fn render_tree(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let view = self.view().expect("checked by the caller");
-        let mut rows: Vec<(Path, SharedString, usize, bool)> = Vec::new();
+        let mut rows: Vec<TreeRow> = Vec::new();
         view.root.walk(&mut |path, node| {
-            rows.push((
-                path.to_vec(),
-                node_label(node),
-                path.len(),
-                path == view.selected.as_slice(),
-            ));
+            rows.push(TreeRow {
+                path: path.to_vec(),
+                label: node_label(node),
+                depth: path.len(),
+                selected: path == view.selected.as_slice(),
+                container: registry::of(node).is_some_and(|spec| spec.container),
+                children: node.children.len(),
+            });
         });
+        let top_level = view.root.children.len();
+        let root_takes_children =
+            registry::of(&view.root).is_some_and(|spec| spec.container) || top_level > 0;
 
-        v_flex().child(section_title("designer.structure")).children(rows.into_iter().map(
-            |(path, label, depth, selected)| {
-                let target = path.clone();
-                div()
-                    .id(SharedString::from(format!("tree-{path:?}")))
-                    .flex()
-                    .items_center()
-                    .h(px(20.))
-                    .pr_2()
-                    .pl(px(8. + 12. * depth as f32))
-                    .cursor_pointer()
-                    .when(selected, |this| this.bg(theme::selected_bg()))
-                    .hover(|this| this.bg(theme::hover_bg()))
-                    .child(label)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.select(target.clone(), cx);
-                    }))
-            },
-        ))
+        // A strip before every row, and one at the end for the root: dropping
+        // between two rows is what says *where*, and dropping on a row what
+        // says *inside what* — the two questions a tree has that the canvas,
+        // where the containers are drawn, does not.
+        let mut out: Vec<AnyElement> = Vec::with_capacity(rows.len() * 2 + 1);
+        for row in rows {
+            if let Some((index, parent)) = row.path.split_last() {
+                out.push(tree_zone(parent.to_vec(), *index, cx));
+            }
+            out.push(tree_row(row, cx));
+        }
+        if root_takes_children {
+            out.push(tree_zone(Vec::new(), top_level, cx));
+        }
+
+        v_flex().child(section_title("designer.structure")).children(out)
     }
 
     /// Property editor for the selected node, driven by the catalogue.
@@ -901,6 +902,94 @@ impl Render for DragGhost {
     }
 }
 
+/// One row of the structure tree.
+struct TreeRow {
+    path: Path,
+    label: SharedString,
+    depth: usize,
+    selected: bool,
+    /// Whether the catalogue lets this node hold children.
+    container: bool,
+    children: usize,
+}
+
+/// A gap between two rows of the structure tree, and what it accepts.
+///
+/// Six pixels, like the menu editor's: enough to aim at, and invisible when
+/// nothing is being dragged.
+fn tree_zone(parent: Path, index: usize, cx: &mut Context<Workspace>) -> AnyElement {
+    div()
+        .id(SharedString::from(format!("tree-zone-{parent:?}-{index}")))
+        .flex_none()
+        .h(px(6.))
+        .w_full()
+        .drag_over::<Dragged>(|style, _, _, _| style.bg(theme::accent()))
+        .on_drop(cx.listener(move |this, dragged: &Dragged, _, cx| {
+            this.drop_at(&parent, index, dragged.clone(), cx);
+        }))
+        .into_any_element()
+}
+
+/// One row of the structure tree: selectable, draggable, and a drop target.
+///
+/// The root is the one row that cannot be dragged — it has no parent to be
+/// moved into, and moving it would detach the whole tree.
+fn tree_row(row: TreeRow, cx: &mut Context<Workspace>) -> AnyElement {
+    let TreeRow { path, label, depth, selected, container, children } = row;
+    let clicked = path.clone();
+    let dropped = path.clone();
+    let ghost = label.clone();
+    // A leaf takes the drop beside it, a container inside it. A root that is
+    // neither — a hand-written expression maxx only carries — has nowhere to
+    // put it, and must not colour itself as if it had.
+    let takes_drop = container || !path.is_empty();
+    div()
+        .id(SharedString::from(format!("tree-{path:?}")))
+        .when(!path.is_empty(), move |this| {
+            this.on_drag(Dragged::Node(path.clone()), move |_, _: Point<Pixels>, _, cx| {
+                cx.new(|_| DragGhost { label: ghost.clone() })
+            })
+        })
+        .flex()
+        .items_center()
+        .h(px(20.))
+        .pr_2()
+        .pl(px(8. + 12. * depth as f32))
+        .cursor_pointer()
+        .when(selected, |this| this.bg(theme::selected_bg()))
+        .hover(|this| this.bg(theme::hover_bg()))
+        .when(takes_drop, |this| {
+            this.drag_over::<Dragged>(|style, _, _, _| style.bg(theme::accent())).on_drop(
+                cx.listener(move |this, dragged: &Dragged, _, cx| {
+                    // A node dropped on its own row has not moved. Saying
+                    // nothing is the whole answer: taking a checkpoint here
+                    // would clear the redo stack for a move that never
+                    // happened, and `drop_at` cannot see it — the destination
+                    // it computes is the sibling index just past the source.
+                    if matches!(dragged, Dragged::Node(from) if *from == dropped) {
+                        return;
+                    }
+                    // On a container, the drop goes inside it, after what it
+                    // already holds; on a leaf, right after the row itself.
+                    // Anything else would be asking the user to aim at a strip
+                    // they cannot see.
+                    match dropped.split_last() {
+                        _ if container => this.drop_at(&dropped, children, dragged.clone(), cx),
+                        Some((index, parent)) => {
+                            this.drop_at(parent, index + 1, dragged.clone(), cx)
+                        }
+                        None => {}
+                    }
+                }),
+            )
+        })
+        .child(label)
+        .on_click(cx.listener(move |this, _, _, cx| {
+            this.select(clicked.clone(), cx);
+        }))
+        .into_any_element()
+}
+
 /// A thin strip between two children that accepts a drop.
 ///
 /// Insertion points are their own elements rather than a computation on the
@@ -1189,8 +1278,8 @@ fn preview(
         Some("Progress::new") => gpui_component::progress::Progress::new()
             .value(call_number(node, "value").unwrap_or(0.))
             .into_any_element(),
-        // Deux conteneurs dont le contenu est un enfant du modèle, pas un
-        // argument : leur aperçu doit donc porter les zones de dépôt.
+        // Two containers whose content is a child of the model rather than an
+        // argument: their preview therefore has to carry the drop zones.
         Some("Link::new") => {
             gpui_component::link::Link::new(SharedString::from(format!("preview-{path:?}")))
                 .children(children_with_zones(node, path, selected, false, cx))
