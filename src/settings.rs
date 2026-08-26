@@ -58,14 +58,13 @@ impl Default for Preferences {
             show_output: false,
             editor: crate::tools::AUTOMATIC.into(),
             terminal: crate::tools::AUTOMATIC.into(),
-            // Allumé, et ce n'est pas un excès de zèle. Un éditeur Rust
-            // formate à l'enregistrement — c'est le défaut de Zed comme de
-            // rust-analyzer —, et ce que `codegen` écrit n'est pas ce que
-            // rustfmt écrirait. Sans ce réglage, chaque enregistrement dans
-            // l'éditeur reformate la zone gérée, que maxx réécrit à sa façon à
-            // l'enregistrement suivant : une partie de bras de fer, et un
-            // diff parasite à chaque tour. maxx applique donc lui-même ce que
-            // l'éditeur appliquerait de toute façon.
+            // On, and not out of zeal. A Rust editor formats on save — that is
+            // the default in Zed as in rust-analyzer — and what `codegen` writes
+            // is not what rustfmt would write. Without this setting, every save
+            // in the editor reformats the managed region, which maxx rewrites its
+            // own way on the next save: a tug of war, and one spurious diff per
+            // round. maxx therefore applies itself what the editor would apply
+            // anyway.
             format_on_save: true,
             language: "system".into(),
             theme: "system".into(),

@@ -44,15 +44,15 @@ impl Workspace {
                     Some(ItemDef::Action { label, action, os_action, shortcut }) => {
                         fields.push((MenuField::Label, label.clone()));
                         fields.push((MenuField::Action, action.clone()));
-                        // Une action système porte le raccourci que le système
-                        // lui donne : en proposer un autre serait mentir.
+                        // A system action carries the shortcut the system gives
+                        // it: offering another one would be lying.
                         if os_action.is_none() {
                             fields
                                 .push((MenuField::Shortcut, shortcut.clone().unwrap_or_default()));
                         }
                     }
-                    // Un sous-menu porte un titre, sous le même champ Libellé
-                    // que l'inspecteur affiche.
+                    // A submenu carries a title, under the same Label field the
+                    // inspector shows.
                     Some(ItemDef::Submenu(inner)) => {
                         fields.push((MenuField::Label, inner.name.clone()));
                     }
@@ -96,10 +96,10 @@ impl Workspace {
                         // An action name is a Rust type: refuse what would not
                         // compile rather than write it.
                         MenuField::Action if is_type_name(value) => *action = value.to_string(),
-                        // Retenu dans le modèle et écrit à ⌘S avec le reste.
-                        // Écrit sur-le-champ, il partait sur le disque à chaque
-                        // touche — donc à chaque état intermédiaire de la
-                        // frappe — et survivait à l'entrée qu'il désignait.
+                        // Kept in the model and written at ⌘S with the rest.
+                        // Written on the spot, it went to disk on every key —
+                        // so on every half-typed state — and outlived the entry
+                        // it named.
                         MenuField::Shortcut => {
                             let keystroke = value.trim();
                             *shortcut = match keystroke {
@@ -107,8 +107,8 @@ impl Workspace {
                                 keystroke if crate::menufile::is_keystroke(keystroke) => {
                                     Some(keystroke.to_string())
                                 }
-                                // Ce qui est en cours de frappe n'est pas
-                                // encore lisible : on garde ce qu'on avait.
+                                // What is being typed is not readable yet:
+                                // keep what was there.
                                 _ => shortcut.clone(),
                             };
                         }
@@ -278,8 +278,8 @@ impl Workspace {
             return;
         }
         if menus.move_selected(up) {
-            // Sans cela, le « déjà en dernier » d'un coup bloqué survivait à
-            // tous les déplacements suivants.
+            // Without this, the "already last" of a blocked move outlived every
+            // move that followed.
             self.message = None;
         } else {
             // Already at the end of its list: saying so beats a click that
@@ -309,15 +309,15 @@ impl Workspace {
             return;
         };
         if !menus.move_to(from, to) {
-            // Rien n'a bougé : reposé où il était, ou refusé par le modèle —
-            // un menu n'est pas une entrée, un sous-menu ne va pas dans un
-            // sous-menu, et rien ne va dans un menu illisible.
+            // Nothing moved: put back where it was, or refused by the model —
+            // a menu is not an entry, a submenu does not go inside a submenu,
+            // and nothing goes into an unreadable menu.
             return;
         }
-        // La sélection après le dépôt peut désigner le même rang qu'avant tout
-        // en désignant une autre entrée. `sync_menu_inputs` ne compare que la
-        // sélection : sans cet oubli forcé, les boîtes gardent le texte de
-        // l'entrée précédente, et la frappe suivante l'écrit sur celle-ci.
+        // The selection after the drop can name the same rank as before while
+        // naming a different entry. `sync_menu_inputs` compares the selection
+        // only: without this forced forgetting, the boxes keep the previous
+        // entry's text, and the next keystroke writes it onto this one.
         self.menu_synced = None;
         cx.notify();
     }
@@ -327,10 +327,10 @@ impl Workspace {
         let Some(menus) = self.menu_file.as_mut() else {
             return;
         };
-        // Un sous-menu sélectionné accueillerait l'entrée à l'intérieur de
-        // lui-même, ce que `add_item` fait exprès pour les autres entrées : ici
-        // cela donnerait le sous-menu de sous-menu que le modèle ne sait pas
-        // afficher, et qu'on ne pourrait donc plus ni sélectionner ni retirer.
+        // A selected submenu would take the entry inside itself, which is what
+        // `add_item` does on purpose for the other entries: here it would give
+        // the submenu of a submenu the model cannot show, and which could then
+        // be neither selected nor removed.
         let dans_un_sous_menu = matches!(menus.selected, Some(Selection::SubItem(..)))
             || matches!(menus.selected_item(), Some(ItemDef::Submenu(_)));
         if menus.selected.is_none() || dans_un_sous_menu {

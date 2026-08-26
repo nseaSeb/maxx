@@ -154,10 +154,9 @@ impl Workspace {
         div()
             .flex()
             .flex_col()
-            // Pas de largeur ici : c'est le volet redimensionnable qui la
-            // donne. Une largeur fixe à l'intérieur laissait l'arborescence à
-            // 240 px dans un volet plus large, et la bande vide entre les deux
-            // se voyait.
+            // No width here: the resizable panel is what gives it. A fixed width
+            // inside left the tree at 240 px in a wider panel, and the empty
+            // strip between the two showed.
             .size_full()
             .bg(theme::panel_bg())
             .border_r_1()
@@ -370,7 +369,7 @@ pub fn unregister_view(root: &std::path::Path, module: &str) {
 fn panel_icon(
     id: &'static str,
     glyph: &'static str,
-    // Clé de traduction, pas le texte.
+    // A translation key, not the text.
     tooltip: &'static str,
     cx: &mut Context<Workspace>,
     action: impl Fn(&mut Workspace, &mut Context<Workspace>) + 'static,

@@ -147,7 +147,7 @@ impl View {
         let mut source = std::mem::take(&mut self.source);
         let Some(type_name) = view_type_name(&source) else {
             self.source = source;
-            return Err("aucun « impl Render for » dans ce fichier".into());
+            return Err(t!("error.no_render_impl").into_owned());
         };
         // Both anchors, or neither: initializing a field that was never
         // declared reports success and leaves the project unbuildable.
@@ -155,9 +155,7 @@ impl View {
             (struct_brace(&source, &type_name), self_brace(&source, &type_name))
         else {
             self.source = source;
-            return Err(format!(
-                "« {type_name} » n'a pas la forme attendue — struct et « Self {{ … }} » introuvables"
-            ));
+            return Err(t!("error.view_shape", name = type_name).into_owned());
         };
         if let Some(brace) = struct_brace(&source, &type_name) {
             source = insert_into_block(source, brace, &format!("    {name}: {ty},\n"));

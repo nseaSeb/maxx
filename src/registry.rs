@@ -214,9 +214,9 @@ pub const CATALOGUE: &[Spec] = &[
         container: false,
         default_args: &[],
         props: &[Prop { label: "prop.bound_field", target: Target::BaseArg(0), kind: Kind::Field }],
-        // Le contenu de la liste est dans l'initialiseur, donc dans le code que
-        // vous éditez à la main : maxx pose deux entrées pour que quelque chose
-        // s'affiche, et ne prétend pas gérer la source des données.
+        // The list's contents live in the initializer, so in the code you edit
+        // by hand: maxx puts two entries there so that something shows, and does
+        // not pretend to manage where the data comes from.
         handler: None,
         state: Some(StateSpec {
             ty: "Entity<SelectState<SearchableVec<SharedString>>>",
@@ -323,8 +323,8 @@ pub const CATALOGUE: &[Spec] = &[
         label: "component.link",
         base: "Link::new",
         import: "use gpui_component::link::Link;",
-        // `Link` est un `ParentElement` : son texte est un enfant, pas un
-        // argument. Une étiquette déposée dedans est ce qui l'écrit.
+        // `Link` is a `ParentElement`: its text is a child, not an argument. A
+        // label dropped inside it is what writes it.
         container: true,
         default_args: &["link"],
         props: &[

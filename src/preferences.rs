@@ -113,16 +113,16 @@ fn appearance_page() -> SettingPage {
                         |value, cx| {
                             settings::update_prefs(cx, |prefs| prefs.language = value.to_string());
                             crate::apply_locale(cx);
-                            // Tout se traduit au rendu, sauf la barre de menus
-                            // native : gpui la reçoit une fois et la garde.
+                            // Everything translates at render time but the
+                            // native menu bar: gpui takes it once and keeps it.
                             cx.set_menus(crate::menus::app_menus(cx));
                             crate::workspace::notify_all(cx);
                         },
                     ),
                 )
-                // Tout de suite, sans relancer : les libellés du catalogue et de
-                // l'inspecteur sont des clés résolues au rendu, et la barre de
-                // menus native est le seul morceau à remettre à la main.
+                // Right away, without restarting: the catalogue's and the
+                // inspector's labels are keys resolved at render time, and the
+                // native menu bar is the only piece to put back by hand.
                 .description(crate::tr("prefs.language_desc")),
             ),
         )
@@ -131,7 +131,7 @@ fn appearance_page() -> SettingPage {
 /// The languages offered, each named in itself.
 ///
 /// A language names itself: someone looking for French is looking for
-/// « Français », not for "French" written in a language they do not read.
+/// "Français", not for "French" written in a language they do not read.
 fn language_options() -> Vec<(SharedString, SharedString)> {
     let mut options = vec![(SharedString::from("system"), crate::tr("prefs.language_system"))];
     let mut codes: Vec<&str> = rust_i18n::available_locales!();

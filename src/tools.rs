@@ -204,9 +204,9 @@ pub fn on_path(command: &str) -> bool {
         return false;
     };
 
-    // Sur Windows le fichier ne porte pas le nom de la commande : `code` est
-    // `code.cmd`, `nvim` est `nvim.exe`. Chercher le nom nu n'y trouve jamais
-    // rien, et tout paraît absent.
+    // On Windows the file does not carry the command's name: `code` is
+    // `code.cmd`, `nvim` is `nvim.exe`. Looking for the bare name never finds
+    // anything there, and everything looks missing.
     let extensions: Vec<String> = if cfg!(target_os = "windows") {
         let list = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into());
         std::iter::once(String::new())
@@ -323,7 +323,7 @@ pub fn open_terminal(cx: &App, path: &Path) {
     crate::run::open_terminal(terminal(cx), path);
 }
 
-/// The dropdown entries for the preferences: `(valeur, libellé)`.
+/// The dropdown entries for the preferences: `(value, label)`.
 ///
 /// An editor that is not installed is left out rather than shown greyed: the
 /// list is short, and a choice that cannot work is noise.
@@ -348,7 +348,7 @@ pub fn terminal_options() -> Vec<(String, String)> {
     options
 }
 
-/// "Automatique" plus what it currently resolves to, so the choice is informed.
+/// "Automatic" plus what it currently resolves to, so the choice is informed.
 fn automatic_editor_label() -> String {
     match EDITORS.iter().find(|editor| editor.installed()) {
         Some(editor) => t!("tools.automatic", tool = editor.label).into_owned(),

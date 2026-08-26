@@ -13,7 +13,7 @@ fn main() {
     let version = std::fs::read_to_string(&lock)
         .ok()
         .and_then(|source| locked_version(&source, "gpui"))
-        .unwrap_or_else(|| "inconnue".into());
+        .unwrap_or_else(|| "unknown".into());
 
     println!("cargo::rustc-env=MAXX_GPUI_VERSION={version}");
 }

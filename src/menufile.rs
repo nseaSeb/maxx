@@ -16,10 +16,10 @@ use crate::parser;
 /// would refuse to open, with a message about a file nobody was editing.
 pub fn is_keystroke(keystroke: &str) -> bool {
     const MODIFIERS: &[&str] = &["cmd", "ctrl", "alt", "shift", "fn", "secondary"];
-    // Les parties vides ne sont pas filtrées mais refusées : `cmd--n` ressemble
-    // à `cmd-n` une fois filtré, alors que gpui n'en fait rien. Corollaire
-    // assumé : la touche `-` elle-même, dont l'écriture est ambiguë avec le
-    // séparateur, se déclare à la main.
+    // Empty parts are refused rather than filtered out: `cmd--n` looks like
+    // `cmd-n` once filtered, while gpui makes nothing of it. The accepted
+    // corollary: the `-` key itself, whose spelling is ambiguous with the
+    // separator, is declared by hand.
     let mut parts = keystroke.split('-').peekable();
     let mut seen_key = false;
     while let Some(part) = parts.next() {
@@ -64,9 +64,9 @@ fn set_binding(source: String, action: &str, keystroke: Option<&str>) -> String 
         return lines.join("\n") + "\n";
     };
 
-    // Où l'écrire : à la place de l'ancienne ligne, sinon avant le crochet qui
-    // ferme le `vec!` de `key_bindings` — la seule ancre que le gabarit
-    // garantisse.
+    // Where to write it: in place of the old line, otherwise before the bracket
+    // that closes the `vec!` of `key_bindings` — the only anchor the template
+    // guarantees.
     let at = first.or_else(|| {
         let start = lines.iter().position(|line| line.contains("fn key_bindings("))?;
         let open =
@@ -371,9 +371,9 @@ impl MenuFile {
         for action in self.actions() {
             source = ensure_action(source, &action);
         }
-        // Après `ensure_action`, jamais avant : un raccourci écrit pour une
-        // action que `actions!` ne déclare pas encore laisse un projet qui ne
-        // compile pas.
+        // After `ensure_action`, never before: a shortcut written for an action
+        // that `actions!` does not declare yet leaves a project that does not
+        // compile.
         for (action, keystroke) in self.shortcuts() {
             source = set_binding(source, &action, keystroke.as_deref());
         }
@@ -469,8 +469,8 @@ impl MenuFile {
         let Some(selection) = self.selected else {
             return;
         };
-        // Un sous-menu accueille l'entrée à son tour : sélectionner un
-        // sous-menu et ajouter y ajoute, plutôt qu'à côté de lui.
+        // A submenu takes the entry in its turn: selecting a submenu and adding
+        // adds inside it, rather than beside it.
         if let Selection::Item(menu, index) = selection
             && matches!(
                 self.menus.get(menu).and_then(|m| m.items.get(index)),
@@ -534,9 +534,9 @@ impl MenuFile {
         };
         match selection {
             Selection::Menu(index) => {
-                // La même garde que la branche des entrées, et pour la même
-                // raison : une sélection périmée doit ne rien faire, pas
-                // interrompre le processus.
+                // The same guard as the entries' branch, and for the same
+                // reason: a stale selection has to do nothing, not interrupt
+                // the process.
                 if index >= self.menus.len() {
                     return false;
                 }
@@ -551,9 +551,9 @@ impl MenuFile {
                 let Some((list, item)) = self.list_mut() else {
                     return false;
                 };
-                // Une sélection périmée ne doit pas interrompre le processus :
-                // `remove_selected` s'en garde déjà, et `swap` hors bornes est
-                // une panique là où ne rien faire suffit.
+                // A stale selection must not interrupt the process:
+                // `remove_selected` already guards against it, and `swap` out of
+                // bounds is a panic where doing nothing is enough.
                 if item >= list.len() {
                     return false;
                 }
@@ -601,13 +601,13 @@ impl MenuFile {
             }
             (Selection::Menu(_), _) | (_, Drop::Menu(_)) => false,
             (Selection::Item(..) | Selection::SubItem(..), _) => {
-                // Un sous-menu déposé dans un sous-menu ferait un second
-                // niveau, que ni le modèle ni la sélection ne portent.
+                // A submenu dropped into a submenu would make a second level,
+                // which neither the model nor the selection carries.
                 let submenu = matches!(self.item_at(from), Some(ItemDef::Submenu(_)));
                 if submenu && matches!(to, Drop::SubItem(..)) {
                     return false;
                 }
-                // Et déposé dans lui-même, il se détacherait de la barre.
+                // And dropped into itself, it would detach from the bar.
                 if let (Selection::Item(menu, item), Drop::SubItem(to_menu, to_item, _)) =
                     (from, to)
                     && menu == to_menu
@@ -621,8 +621,8 @@ impl MenuFile {
                 let Some(item) = self.take(from) else {
                     return false;
                 };
-                // `accepts` a vu la liste d'avant ; `put` verra celle d'après,
-                // dans laquelle le retrait a pu déplacer la cible elle-même.
+                // `accepts` saw the list from before; `put` will see the one
+                // after, in which the removal may have moved the target itself.
                 let to = aimed_after_removal(from, to);
                 let at = match to {
                     Drop::Item(_, at) | Drop::SubItem(_, _, at) => {
@@ -635,12 +635,12 @@ impl MenuFile {
                     Drop::Menu(_) => unreachable!("handled above"),
                 };
                 if same_list && at == index {
-                    // Reposé où il était : le remettre, et ne rien signaler.
+                    // Put back where it was: restore it, and report nothing.
                     self.put(to, at, item);
                     return false;
                 }
                 if !self.put(to, at, item.clone()) {
-                    // Plutôt que de le perdre, il retourne d'où il vient.
+                    // Rather than losing it, it goes back where it came from.
                     self.put(to_drop(from), index, item);
                     return false;
                 }

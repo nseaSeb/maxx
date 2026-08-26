@@ -1,22 +1,21 @@
-//! Les traductions : chaque clé citée dans le code doit exister, dans les deux
-//! langues, et aucune clé ne doit traîner sans personne pour l'employer.
+//! The translations: every key the code cites has to exist, in both languages,
+//! and no key should linger with nobody to use it.
 //!
-//! Ce test lit les sources plutôt que d'appeler `t!`. C'est voulu : une clé
-//! absente ne fait pas échouer la compilation, elle s'affiche telle quelle à
-//! l'écran — « message.node_copied » à la place de « nœud copié ». Rien
-//! d'autre que ce test ne l'attraperait avant l'utilisateur.
+//! This test reads the sources rather than calling `t!`. That is deliberate: a
+//! missing key does not fail the compilation, it shows up as it is on screen —
+//! `message.node_copied` in place of "node copied". Nothing but this test would
+//! catch it before the user does.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-fn racine() -> PathBuf {
+fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
-/// Les clés du fichier de traductions, avec les langues que chacune porte.
+/// The keys of the translation file, with the languages each one carries.
 fn catalogue() -> BTreeMap<String, BTreeSet<String>> {
-    let source =
-        std::fs::read_to_string(racine().join("locales/app.yml")).expect("locales/app.yml");
+    let source = std::fs::read_to_string(root().join("locales/app.yml")).expect("locales/app.yml");
     let mut keys: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut current = String::new();
     for line in source.lines() {
@@ -84,7 +83,7 @@ fn keys_used() -> BTreeMap<String, String> {
         let Ok(source) = std::fs::read_to_string(path) else {
             return;
         };
-        let name = path.strip_prefix(racine()).unwrap_or(path).display().to_string();
+        let name = path.strip_prefix(root()).unwrap_or(path).display().to_string();
         let mut rest = source.as_str();
         while let Some(open) = rest.find('"') {
             rest = &rest[open + 1..];
@@ -96,102 +95,131 @@ fn keys_used() -> BTreeMap<String, String> {
             }
         }
     };
-    for directory in ["src", "src/workspace"] {
-        let Ok(entries) = std::fs::read_dir(racine().join(directory)) else {
+    for path in rust_sources() {
+        visit(&path);
+    }
+    used
+}
+
+/// Every Rust source of maxx and of the demo, the build script included.
+///
+/// Walked rather than listed: a guard that knows only the directories that
+/// existed when it was written stops guarding the day a new one appears — which
+/// is exactly how `build.rs` and `demo/` came to carry French nobody saw.
+fn rust_sources() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let build = root().join("build.rs");
+    if build.exists() {
+        out.push(build);
+    }
+    let mut stack = vec![root().join("src"), root().join("demo/src")];
+    while let Some(directory) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
             continue;
         };
         for entry in entries.flatten() {
-            if entry.path().extension().is_some_and(|extension| extension == "rs") {
-                visit(&entry.path());
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                out.push(path);
             }
         }
     }
-    used
+    out.sort();
+    out
 }
 
 #[test]
 fn every_key_the_code_cites_is_translated() {
     let catalogue = catalogue();
-    let mut manquantes = Vec::new();
+    let mut missing = Vec::new();
     for (key, file) in keys_used() {
         match catalogue.get(&key) {
-            None => manquantes.push(format!("{key} (citée dans {file}) : absente")),
+            None => missing.push(format!("{key} (cited in {file}): absent")),
             Some(locales) => {
                 for locale in ["en", "fr"] {
                     if !locales.contains(locale) {
-                        manquantes.push(format!("{key} : pas de {locale}"));
+                        missing.push(format!("{key}: no {locale}"));
                     }
                 }
             }
         }
     }
-    assert!(manquantes.is_empty(), "{}", manquantes.join("\n"));
+    assert!(missing.is_empty(), "{}", missing.join("\n"));
 }
 
-/// Aucune traduction ne reste sans emploi.
+/// No translation is left with nothing to use it.
 ///
-/// Une clé orpheline n'est pas un défaut visible, mais c'est une traduction que
-/// quelqu'un maintiendra pour rien — et le signe, plus souvent, d'un texte
-/// remplacé ailleurs sans que la clé suive.
+/// An orphan key is not a visible defect, but it is a translation somebody will
+/// maintain for nothing — and, more often, the sign of a text replaced elsewhere
+/// without the key following.
 #[test]
 fn no_translation_is_left_unused() {
     let used = keys_used();
-    let orphelines: Vec<String> =
+    let orphans: Vec<String> =
         catalogue().into_keys().filter(|key| !used.contains_key(key)).collect();
-    assert!(orphelines.is_empty(), "clés sans emploi :\n{}", orphelines.join("\n"));
+    assert!(orphans.is_empty(), "unused keys:\n{}", orphans.join("\n"));
 }
 
-/// Les fichiers d'interface ne portent plus de texte français en dur.
+/// The sources no longer carry hard-coded French text.
 ///
-/// C'est la moitié du travail qu'un test peut faire : une chaîne oubliée reste
-/// dans une seule langue quoi que l'utilisateur choisisse, et rien à la
-/// compilation ne s'en émeut. Le pluriel des accents suffit à les trouver — le
-/// français en met partout, l'anglais nulle part.
+/// That is the half of the job a test can do: a forgotten string stays in one
+/// language whatever the user chooses, and nothing at compile time is troubled
+/// by it.
+///
+/// Accents alone are not enough to find them, and that is the lesson this test
+/// was rewritten on: `"rustfmt est introuvable"` and `"chemin sans nom de
+/// fichier"` carry none, and went out to users in French while this test stayed
+/// green. French function words are what actually gives a sentence away.
 #[test]
 fn no_french_text_is_left_in_the_interface() {
-    // Un nom de langue s'écrit dans sa propre langue : « Français » est la
-    // bonne réponse dans les deux locales, pas une chaîne oubliée.
+    // A language names itself in its own language: "Français" is the right
+    // answer in both locales, not a forgotten string.
     const ALLOWED: &[&str] = &["Français"];
 
+    /// Words English does not use, which no interface string can hold by
+    /// accident. Deliberately short: a wrong hit here costs a false failure.
+    const FRENCH: &[&str] = &[
+        "le", "la", "les", "un", "une", "des", "du", "dans", "pour", "qui", "que", "est", "sont",
+        "pas", "sans", "avec", "cette", "ces", "ne", "se", "ce", "au", "aux", "elle", "leur",
+        "doit", "être", "aucun", "rien", "fichier", "dossier", "chemin",
+    ];
+
+    let french = |value: &str| {
+        value.chars().any(|c| "éèêëàâçùûôîïœÉÈÀÇ".contains(c))
+            || value
+                .split(|c: char| !c.is_alphabetic())
+                .any(|word| FRENCH.contains(&word.to_lowercase().as_str()))
+    };
+
     let mut found = Vec::new();
-    for directory in ["src", "src/workspace"] {
-        let Ok(entries) = std::fs::read_dir(racine().join(directory)) else {
+    for path in rust_sources() {
+        let Ok(source) = std::fs::read_to_string(&path) else {
             continue;
         };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().is_none_or(|extension| extension != "rs") {
-                continue;
-            }
-            let Ok(source) = std::fs::read_to_string(&path) else {
-                continue;
-            };
-            let name = path.strip_prefix(racine()).unwrap_or(&path).display().to_string();
-            let mut rest = source.as_str();
-            while let Some(open) = rest.find('"') {
-                rest = &rest[open + 1..];
-                let Some(close) = rest.find('"') else { break };
-                let value = &rest[..close];
-                rest = &rest[close + 1..];
-                if !ALLOWED.contains(&value)
-                    && value.chars().any(|c| "éèêëàâçùûôîïœÉÈÀÇ".contains(c))
-                {
-                    found.push(format!("{name} : {value:?}"));
-                }
+        let name = path.strip_prefix(root()).unwrap_or(&path).display().to_string();
+        let mut rest = source.as_str();
+        while let Some(open) = rest.find('"') {
+            rest = &rest[open + 1..];
+            let Some(close) = rest.find('"') else { break };
+            let value = &rest[..close];
+            rest = &rest[close + 1..];
+            if !ALLOWED.contains(&value) && french(value) {
+                found.push(format!("{name}: {value:?}"));
             }
         }
     }
-    assert!(found.is_empty(), "texte français en dur :\n{}", found.join("\n"));
+    assert!(found.is_empty(), "hard-coded French text:\n{}", found.join("\n"));
 }
 
-/// Une fonction qui prend une clé la traduit, plutôt que de l'afficher.
+/// A helper that takes a key translates it, rather than showing it.
 ///
-/// L'autre moitié, et la plus vicieuse : `section_title` a reçu des clés à la
-/// place de son texte sans que rien ne change de type, et chaque titre de
-/// section a affiché « designer.properties » pendant un lot entier. La
-/// compilation ne bronche pas, `no_french_text_is_left_in_the_interface` non
-/// plus, et la clé est bien dans `app.yml` — seul l'œil sur l'écran l'attrape,
-/// ou ceci.
+/// The other half, and the nastier one: `section_title` was handed keys in place
+/// of its text without anything changing type, and every section title showed
+/// `designer.properties` for a whole batch. The compilation does not flinch,
+/// `no_french_text_is_left_in_the_interface` does not either, and the key really
+/// is in `app.yml` — only an eye on the screen catches it, or this.
 #[test]
 fn a_helper_that_takes_a_key_translates_it() {
     let helpers = [
@@ -201,14 +229,14 @@ fn a_helper_that_takes_a_key_translates_it() {
         ("src/preferences.rs", "fn action_button("),
     ];
     for (file, signature) in helpers {
-        let source = std::fs::read_to_string(racine().join(file)).expect(file);
-        let start = source.find(signature).unwrap_or_else(|| panic!("{file} : {signature}"));
+        let source = std::fs::read_to_string(root().join(file)).expect(file);
+        let start = source.find(signature).unwrap_or_else(|| panic!("{file}: {signature}"));
         let end =
             source[start..].find("\n}\n").map(|offset| start + offset).unwrap_or(source.len());
         let body = &source[start..end];
         assert!(
             body.contains("crate::tr("),
-            "{file} : {signature} prend une clé et ne la traduit pas :\n{body}"
+            "{file}: {signature} takes a key and does not translate it:\n{body}"
         );
     }
 }

@@ -214,7 +214,7 @@ pub fn open_editor_in_terminal(
     };
     let Some(flag) = terminal.command_flag else {
         eprintln!(
-            "{} a besoin d'un terminal capable de lancer une commande ; {} n'en est pas un",
+            "{} needs a terminal able to run a command; {} is not one",
             editor.label, terminal.label
         );
         return;
@@ -305,7 +305,7 @@ fn run(root: PathBuf, subcommand: &str, sender: Sender<Message>) {
     let mut child = match child {
         Ok(child) => child,
         Err(error) => {
-            let _ = sender.send(Message::Line(format!("cargo {subcommand} : {error}")));
+            let _ = sender.send(Message::Line(format!("cargo {subcommand}: {error}")));
             let _ = sender.send(Message::Finished(false));
             return;
         }
@@ -356,7 +356,7 @@ pub fn move_to_trash(path: &Path) -> Result<PathBuf, String> {
 
     let name = path
         .file_name()
-        .ok_or_else(|| "chemin sans nom de fichier".to_string())?
+        .ok_or_else(|| t!("error.path_without_name").into_owned())?
         .to_string_lossy()
         .into_owned();
     let (stem, extension) = match name.rsplit_once('.') {
@@ -566,14 +566,12 @@ pub fn format_rust(path: &Path) -> Result<bool, String> {
         .arg("--edition")
         .arg("2024")
         .arg(path)
-        // Ses diagnostics sont repris dans le message rendu au-dessus ; les
-        // laisser passer ferait ressembler un refus attendu à un incident.
+        // Its diagnostics are carried in the message answered above; letting
+        // them through would make an expected refusal look like an incident.
         .stderr(Stdio::null())
         .status()
         .map_err(|error| match error.kind() {
-            std::io::ErrorKind::NotFound => {
-                "rustfmt est introuvable — `rustup component add rustfmt`".to_string()
-            }
+            std::io::ErrorKind::NotFound => t!("error.rustfmt_missing").into_owned(),
             _ => error.to_string(),
         })?;
 

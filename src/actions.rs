@@ -152,9 +152,9 @@ pub fn register_handlers(cx: &mut App) {
         with_active_workspace(cx, |workspace, _, cx| workspace.add_theme_module(cx));
     });
     cx.on_action(|_: &ToggleTheme, cx: &mut App| {
-        // Depuis le menu, la bascule est un aller-retour entre les deux modes,
-        // et elle quitte « système » : demander explicitement l'un des deux,
-        // c'est ne plus vouloir suivre.
+        // From the menu, the toggle is a round trip between the two modes, and
+        // it leaves `System` behind: asking explicitly for one of the two is no
+        // longer wanting to follow.
         let dark = !crate::theme::is_dark();
         crate::settings::update_prefs(cx, |prefs| {
             prefs.theme = if dark { "dark".into() } else { "light".into() };
@@ -327,8 +327,8 @@ pub fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-ctrl-up", MoveMenuUp, None),
         KeyBinding::new("cmd-ctrl-down", MoveMenuDown, None),
         KeyBinding::new("cmd-k", TogglePalette, None),
-        // Ces trois-là ne valent que dans la palette : `escape`, `up` et `down`
-        // pris globalement seraient repris à tout le reste de l'interface.
+        // These three hold in the palette only: `escape`, `up` and `down` taken
+        // globally would be taken away from the rest of the interface.
         KeyBinding::new("escape", PaletteClose, Some("Palette")),
         KeyBinding::new("up", PaletteUp, Some("Palette")),
         KeyBinding::new("down", PaletteDown, Some("Palette")),

@@ -350,9 +350,9 @@ pub fn open_workspace_window(path: Option<PathBuf>, cx: &mut App) {
     // window someone is still using.
     let first_window = cx.default_global::<Workspaces>().0.is_empty();
     let geometry = crate::settings::state(cx).window.filter(|_| first_window);
-    // Une géométrie enregistrée sur un écran qui n'est plus branché rendrait la
-    // fenêtre invisible ; gpui rabat une fenêtre hors champ sur l'écran
-    // principal, donc il n'y a rien de plus à faire ici.
+    // A geometry saved on a screen that is no longer plugged in would make the
+    // window invisible; gpui folds an off-screen window back onto the main
+    // display, so there is nothing more to do here.
     let bounds = match geometry {
         Some(geometry) => Bounds {
             origin: point(px(geometry.x), px(geometry.y)),

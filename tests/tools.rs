@@ -1,5 +1,5 @@
-//! Le catalogue des éditeurs et des terminaux : c'est une table, donc ce qui
-//! peut clocher est dedans, pas dans un algorithme.
+//! The catalogue of editors and terminals: it is a table, so what can go wrong
+//! is in it, not in an algorithm.
 
 use std::path::Path;
 
@@ -10,29 +10,29 @@ fn editor(id: &str) -> &'static Editor {
     EDITORS
         .iter()
         .find(|editor| editor.id == id)
-        .unwrap_or_else(|| panic!("{id} doit être au catalogue"))
+        .unwrap_or_else(|| panic!("{id} must be in the catalogue"))
 }
 
 #[test]
 fn every_editor_spells_its_line_number_its_own_way() {
-    let path = Path::new("/tmp/vue.rs");
+    let path = Path::new("/tmp/view.rs");
 
-    assert_eq!(editor_arguments(editor("zed"), path, Some(12)), vec!["/tmp/vue.rs:12"]);
-    assert_eq!(editor_arguments(editor("code"), path, Some(12)), vec!["-g", "/tmp/vue.rs:12"]);
-    assert_eq!(editor_arguments(editor("nvim"), path, Some(12)), vec!["+12", "/tmp/vue.rs"]);
+    assert_eq!(editor_arguments(editor("zed"), path, Some(12)), vec!["/tmp/view.rs:12"]);
+    assert_eq!(editor_arguments(editor("code"), path, Some(12)), vec!["-g", "/tmp/view.rs:12"]);
+    assert_eq!(editor_arguments(editor("nvim"), path, Some(12)), vec!["+12", "/tmp/view.rs"]);
     assert_eq!(
         editor_arguments(editor("rustrover"), path, Some(12)),
-        vec!["--line", "12", "/tmp/vue.rs"]
+        vec!["--line", "12", "/tmp/view.rs"]
     );
 }
 
 #[test]
 fn without_a_line_every_editor_takes_the_bare_path() {
-    let path = Path::new("/tmp/vue.rs");
+    let path = Path::new("/tmp/view.rs");
     for candidate in EDITORS {
         assert_eq!(
             editor_arguments(candidate, path, None),
-            vec!["/tmp/vue.rs"],
+            vec!["/tmp/view.rs"],
             "{}",
             candidate.id
         );
@@ -44,10 +44,9 @@ fn the_catalogue_holds_no_duplicate_and_no_hole() {
     for (index, editor) in EDITORS.iter().enumerate() {
         assert!(!editor.id.is_empty());
         assert!(!editor.label.is_empty());
-        // Un éditeur sans commande ni paquet ne peut jamais être détecté.
+        // An editor with neither a command nor a bundle can never be detected.
         assert!(!editor.command.is_empty() || editor.bundle.is_some(), "{}", editor.id);
-        // Un éditeur de terminal n'a pas de paquet à ouvrir : il n'est qu'une
-        // commande.
+        // A terminal editor has no bundle to open: it is only a command.
         if editor.terminal_bound {
             assert!(editor.bundle.is_none(), "{}", editor.id);
             assert!(!editor.command.is_empty(), "{}", editor.id);
@@ -62,7 +61,7 @@ fn the_catalogue_holds_no_duplicate_and_no_hole() {
     for (index, terminal) in TERMINALS.iter().enumerate() {
         assert!(!terminal.id.is_empty());
         assert!(!terminal.command.is_empty() || terminal.bundle.is_some(), "{}", terminal.id);
-        // Lancer une commande suppose une commande à qui la passer.
+        // Running a command supposes a command to hand it to.
         if terminal.command_flag.is_some() {
             assert!(!terminal.command.is_empty(), "{}", terminal.id);
         }
@@ -76,8 +75,8 @@ fn the_catalogue_holds_no_duplicate_and_no_hole() {
 
 #[test]
 fn a_flag_style_editor_never_gets_a_suffix_and_the_reverse() {
-    // La confusion qui casserait tout : `code fichier:12` ouvre un fichier
-    // nommé « fichier:12 », et `zed -g fichier:12` ne comprend pas -g.
+    // The confusion that would break everything: `code file:12` opens a file
+    // named `file:12`, and `zed -g file:12` does not understand -g.
     for editor in EDITORS {
         let arguments = editor_arguments(editor, Path::new("/tmp/a.rs"), Some(3));
         match editor.line {
@@ -106,39 +105,36 @@ fn nothing_is_found_on_an_empty_path() {
 #[test]
 fn rustfmt_reformats_a_file_and_says_so() {
     let path = std::env::temp_dir().join("maxx_format_test.rs");
-    std::fs::write(&path, "fn   principale(){let  x=1;let _=x;}\n").unwrap();
+    std::fs::write(&path, "fn   main(){let  x=1;let _=x;}\n").unwrap();
 
     match maxx::run::format_rust(&path) {
         Ok(change) => {
-            assert!(change, "rustfmt avait de quoi faire sur ce fichier");
-            let apres = std::fs::read_to_string(&path).unwrap();
-            assert!(apres.contains("fn principale() {"), "{apres}");
-            // Deux fois de suite ne change plus rien : rustfmt est idempotent,
-            // et c'est ce qui rend l'aller-retour de maxx stable.
+            assert!(change, "rustfmt had something to do on this file");
+            let after = std::fs::read_to_string(&path).unwrap();
+            assert!(after.contains("fn main() {"), "{after}");
+            // Twice in a row changes nothing more: rustfmt is idempotent, and
+            // that is what makes maxx's round trip stable.
             assert!(!maxx::run::format_rust(&path).unwrap());
         }
-        // rustfmt n'est pas garanti présent partout ; le test dit ce qu'il
-        // vérifie plutôt que d'échouer pour une raison étrangère.
-        Err(erreur) => assert!(erreur.contains("introuvable"), "{erreur}"),
+        // rustfmt is not guaranteed to be there; the test says what it checks
+        // rather than failing for an unrelated reason.
+        Err(error) => assert!(!maxx::tools::on_path("rustfmt"), "{error}"),
     }
 }
 
 #[test]
 fn a_file_that_is_not_rust_is_refused_rather_than_mangled() {
-    let path = std::env::temp_dir().join("maxx_format_invalide.rs");
-    std::fs::write(&path, "ceci n'est pas du Rust {{{\n").unwrap();
+    let path = std::env::temp_dir().join("maxx_format_invalid.rs");
+    std::fs::write(&path, "this is not Rust {{{\n").unwrap();
 
-    // Le texte du message n'est pas ce qu'on vérifie : il est traduit, donc
-    // dépend de la langue, et l'affirmer ici lierait le comportement à sa
-    // formulation. Ce qui compte est qu'il y ait un refus et qu'il nomme le
-    // fichier.
-    if let Err(erreur) = maxx::run::format_rust(&path) {
-        assert!(!erreur.is_empty());
-        assert!(
-            erreur.contains("maxx_format_invalide.rs") || erreur.contains("rustfmt"),
-            "{erreur}"
-        );
+    // The text of the message is not what is checked: it is translated, so it
+    // depends on the language, and asserting it here would tie the behaviour to
+    // its wording. What matters is that there is a refusal and that it names the
+    // file.
+    if let Err(error) = maxx::run::format_rust(&path) {
+        assert!(!error.is_empty());
+        assert!(error.contains("maxx_format_invalid.rs") || error.contains("rustfmt"), "{error}");
     }
-    // Et surtout : le fichier n'a pas été abîmé.
-    assert!(std::fs::read_to_string(&path).unwrap().contains("ceci n'est pas du Rust"));
+    // And above all: the file has not been mangled.
+    assert!(std::fs::read_to_string(&path).unwrap().contains("this is not Rust"));
 }

@@ -1,6 +1,6 @@
-//! Les modules que maxx copie dans un projet sont des copies, donc une dette :
-//! un défaut corrigé ici doit pouvoir atteindre les projets qui portent
-//! l'ancienne version. `maxx.toml` est ce qui rend ça possible.
+//! The modules maxx copies into a project are copies, therefore a debt: a defect
+//! fixed here has to be able to reach the projects carrying the older version.
+//! `maxx.toml` is what makes that possible.
 
 use std::path::PathBuf;
 
@@ -15,13 +15,13 @@ fn scratch(name: &str) -> PathBuf {
     path
 }
 
-/// L'empreinte de chaque gabarit, telle qu'elle est à sa version courante.
+/// The fingerprint of each template, as it stands at its current version.
 ///
-/// Ce tableau est un garde-fou, pas une donnée : modifier un gabarit fait
-/// échouer ce test, ce qui oblige à décider si la version doit monter. Sans
-/// lui, une correction n'atteindrait jamais les projets déjà écrits — et
-/// personne ne s'en apercevrait.
-const EMPREINTES: &[(&str, u32, &str)] = &[
+/// This table is a guard rail, not data: changing a template makes this test
+/// fail, which forces a decision about whether the version should go up. Without
+/// it, a fix would never reach the projects already written — and nobody would
+/// notice.
+const FINGERPRINTS: &[(&str, u32, &str)] = &[
     ("system", 1, "c2efcda0672f77c9"),
     ("settings", 1, "f3e4f7d28ee2ba66"),
     ("theme", 1, "d4768642faff2027"),
@@ -29,42 +29,42 @@ const EMPREINTES: &[(&str, u32, &str)] = &[
 
 #[test]
 fn changing_a_template_forces_a_decision_about_its_version() {
-    for (module, version, empreinte) in EMPREINTES {
-        let body = scaffold::module_body(module).expect("le gabarit doit exister");
+    for (module, version, print) in FINGERPRINTS {
+        let body = scaffold::module_body(module).expect("the template must exist");
         assert_eq!(
             scaffold::module_version(module),
             Some(*version),
-            "{module} : la version a changé sans que ce tableau suive"
+            "{module}: the version changed without this table following"
         );
         assert_eq!(
             fingerprint(&body),
-            *empreinte,
-            "{module} : le gabarit a changé. Si la correction doit atteindre les \
-             projets qui en portent une copie, montez sa version dans \
-             scaffold::MODULES, puis reportez l'empreinte ici."
+            *print,
+            "{module}: the template changed. If the fix has to reach the projects \
+             carrying a copy of it, raise its version in scaffold::MODULES, then \
+             report the fingerprint here."
         );
     }
     assert_eq!(
-        EMPREINTES.len(),
+        FINGERPRINTS.len(),
         scaffold::MODULES.len(),
-        "un module a été ajouté sans son empreinte"
+        "a module was added without its fingerprint"
     );
 }
 
 #[test]
 fn adding_a_module_records_what_the_project_took() {
     let root = scratch("maxx_modules_record");
-    scaffold::create_project(&root, "essai").expect("le projet doit être créé");
-    scaffold::add_system_module(&root).expect("le module doit être ajouté");
+    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::add_system_module(&root).expect("the module must be added");
 
     let file = projectfile::load(&root);
-    let recorded = file.modules.get("system").expect("maxx.toml doit le noter");
+    let recorded = file.modules.get("system").expect("maxx.toml must note it");
     assert_eq!(recorded.version, scaffold::module_version("system").unwrap());
 
     let body = std::fs::read_to_string(root.join("src/system.rs")).unwrap();
     assert_eq!(recorded.fingerprint, fingerprint(&body));
 
-    // Et le fichier reste lisible à la main.
+    // And the file stays readable by hand.
     let source = std::fs::read_to_string(projectfile::path(&root)).unwrap();
     assert!(source.starts_with("# Written by maxx"), "{source}");
 }
@@ -72,89 +72,91 @@ fn adding_a_module_records_what_the_project_took() {
 #[test]
 fn an_old_copy_is_offered_an_update_and_a_touched_one_is_not() {
     let root = scratch("maxx_modules_update");
-    scaffold::create_project(&root, "essai").expect("le projet doit être créé");
-    scaffold::add_system_module(&root).expect("le module doit être ajouté");
+    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::add_system_module(&root).expect("the module must be added");
 
-    // Rien à faire tant que le projet est à jour.
+    // Nothing to do as long as the project is up to date.
     assert!(scaffold::outdated_modules(&root).is_empty());
 
-    // Un projet écrit par un maxx plus ancien : version en retard, fichier
-    // conforme à ce que cette version-là écrivait.
+    // A project written by an older maxx: version behind, file matching what
+    // that version used to write.
     let path = root.join("src/system.rs");
-    let ancien = "// une version plus ancienne\n";
-    std::fs::write(&path, ancien).unwrap();
-    projectfile::record(&root, "system", 0, ancien).unwrap();
+    let older = "// an older version\n";
+    std::fs::write(&path, older).unwrap();
+    projectfile::record(&root, "system", 0, older).unwrap();
 
     assert_eq!(scaffold::outdated_modules(&root), vec!["system".to_string()]);
-    scaffold::update_module(&root, "system").expect("la mise à jour doit passer");
+    scaffold::update_module(&root, "system").expect("the update must go through");
 
     let body = std::fs::read_to_string(&path).unwrap();
     assert_eq!(body, scaffold::module_body("system").unwrap());
     assert!(scaffold::outdated_modules(&root).is_empty());
-    // L'empreinte notée suit le nouveau contenu.
+    // The recorded fingerprint follows the new content.
     assert_eq!(projectfile::load(&root).modules["system"].fingerprint, fingerprint(&body));
 }
 
 #[test]
 fn a_module_the_developer_edited_is_left_alone() {
     let root = scratch("maxx_modules_touched");
-    scaffold::create_project(&root, "essai").expect("le projet doit être créé");
-    scaffold::add_system_module(&root).expect("le module doit être ajouté");
+    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::add_system_module(&root).expect("the module must be added");
 
     let path = root.join("src/system.rs");
-    let ancien = "// une version plus ancienne\n";
-    std::fs::write(&path, ancien).unwrap();
-    projectfile::record(&root, "system", 0, ancien).unwrap();
+    let older = "// an older version\n";
+    std::fs::write(&path, older).unwrap();
+    projectfile::record(&root, "system", 0, older).unwrap();
 
-    // Le développeur y touche.
-    let modifie = format!("{ancien}// et ma ligne à moi\n");
-    std::fs::write(&path, &modifie).unwrap();
+    // The developer touches it.
+    let edited = format!("{older}// and a line of my own\n");
+    std::fs::write(&path, &edited).unwrap();
 
-    // Il n'est plus proposé…
-    assert!(scaffold::outdated_modules(&root).is_empty(), "un fichier modifié n'est plus à maxx");
-    // …et forcer la mise à jour est refusé, sans rien écraser.
-    let erreur = scaffold::update_module(&root, "system").expect_err("doit être refusé");
-    assert!(erreur.to_string().contains("has been modified"), "{erreur}");
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), modifie);
+    // It is no longer offered…
+    assert!(scaffold::outdated_modules(&root).is_empty(), "an edited file is no longer maxx's");
+    // …and forcing the update is refused, without overwriting anything.
+    let error = scaffold::update_module(&root, "system").expect_err("must be refused");
+    assert!(error.to_string().contains("has been modified"), "{error}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), edited);
 }
 
 #[test]
 fn line_endings_alone_do_not_count_as_an_edit() {
-    // Un fichier passé par un outil qui convertit les fins de ligne n'a pas été
-    // modifié pour autant : le refuser à la mise à jour serait un faux positif.
+    // A file passed through a tool that converts line endings has not been
+    // modified for all that: refusing it an update would be a false positive.
     assert_eq!(fingerprint("a\nb\n"), fingerprint("a\r\nb\r\n"));
     assert_ne!(fingerprint("a\nb\n"), fingerprint("a\nb\nc\n"));
 }
 
-/// Un module déjà là sous son ancien nom n'est pas recopié sous le nouveau.
+/// A module already there under its old name is not copied again under the new
+/// one.
 ///
-/// `systeme.rs` et `system.rs` sont le même module à deux époques. Les écrire
-/// tous les deux laisserait le projet compiler avec deux copies presque
-/// identiques, et personne pour dire laquelle son code appelle.
+/// `systeme.rs` and `system.rs` are the same module at two points in time.
+/// Writing both would leave the project compiling with two almost identical
+/// copies, and nobody to say which one its code calls.
 #[test]
 fn a_module_already_there_under_its_old_name_is_not_copied_again() {
-    let root = scratch("maxx_ancien_nom");
-    scaffold::create_project(&root, "essai").unwrap();
-    std::fs::write(root.join("src/systeme.rs"), "// ma copie d'avant\n").unwrap();
+    let root = scratch("maxx_old_name");
+    scaffold::create_project(&root, "trial").unwrap();
+    std::fs::write(root.join("src/systeme.rs"), "// my earlier copy\n").unwrap();
 
-    let erreur = scaffold::add_system_module(&root).expect_err("doit être refusé");
-    assert!(erreur.to_string().contains("src/systeme.rs"), "{erreur}");
-    assert!(!root.join("src/system.rs").exists(), "et rien n'est écrit à côté");
+    let error = scaffold::add_system_module(&root).expect_err("must be refused");
+    assert!(error.to_string().contains("src/systeme.rs"), "{error}");
+    assert!(!root.join("src/system.rs").exists(), "and nothing is written beside it");
 
-    std::fs::write(root.join("src/reglages.rs"), "// et celle-ci aussi\n").unwrap();
-    let erreur = scaffold::add_settings_module(&root).expect_err("doit être refusé");
-    assert!(erreur.to_string().contains("src/reglages.rs"), "{erreur}");
+    std::fs::write(root.join("src/reglages.rs"), "// and this one too\n").unwrap();
+    let error = scaffold::add_settings_module(&root).expect_err("must be refused");
+    assert!(error.to_string().contains("src/reglages.rs"), "{error}");
     assert!(!root.join("src/settings.rs").exists());
 }
 
-/// Un `maxx.toml` écrit avant le passage à l'anglais se relit encore.
+/// A `maxx.toml` written before the move to English still reads.
 ///
-/// La clé s'appelait `empreinte`. Sans l'alias, `Module` échoue à se
-/// désérialiser, `load` répond un fichier vide, et le premier `record` écrit ce
-/// vide par-dessus — les autres modules perdent leur version et leur empreinte.
+/// The key was called `empreinte`. Without the alias, `Module` fails to
+/// deserialise, `load` answers an empty file, and the first `record` writes that
+/// emptiness over it — the other modules lose their version and their
+/// fingerprint.
 #[test]
 fn a_project_file_written_before_the_rename_still_reads() {
-    let root = scratch("maxx_ancien_toml");
+    let root = scratch("maxx_old_toml");
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(
         projectfile::path(&root),
@@ -163,7 +165,7 @@ fn a_project_file_written_before_the_rename_still_reads() {
     .unwrap();
 
     let file = projectfile::load(&root);
-    let recorded = file.modules.get("systeme").expect("le module doit être relu");
+    let recorded = file.modules.get("systeme").expect("the module must be read back");
     assert_eq!(recorded.version, 1);
     assert_eq!(recorded.fingerprint, "9f760f0126a35c23");
 }

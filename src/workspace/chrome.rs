@@ -300,10 +300,10 @@ impl Render for Workspace {
         let show_panel = visible.show_project_panel && self.project.is_some();
         let panel_width = crate::settings::state(cx).panel_width.unwrap_or(240.);
 
-        // La poignée déplace la découpe dans l'entité de gpui-component ; c'est
-        // ici qu'on la relit pour la retenir. En mémoire seulement, comme la
-        // géométrie de la fenêtre : un fichier par image de glissement serait
-        // absurde, et `settings::flush` l'écrit à l'extinction.
+        // The handle moves the split inside gpui-component's entity; this is
+        // where it is read back to be remembered. In memory only, like the
+        // window geometry: a file per frame of a drag would be absurd, and
+        // `settings::flush` writes it at quit.
         if show_panel && let Some(largeur) = self.panel_split.read(cx).sizes().first().copied() {
             let largeur = f32::from(largeur);
             if largeur > 0. {
@@ -320,8 +320,8 @@ impl Render for Workspace {
             .text_sm()
             .child(self.render_titlebar())
             .child(
-                // Sans le panneau, pas de poignée : un groupe redimensionnable
-                // à un seul volet coûterait un état pour rien.
+                // No panel, no handle: a resizable group with a single pane
+                // would cost a state for nothing.
                 div()
                     .flex()
                     .flex_1()
@@ -334,9 +334,9 @@ impl Render for Workspace {
                                 .child(
                                     resizable_panel()
                                         .size(px(panel_width))
-                                        // En dessous, l'arborescence devient
-                                        // illisible ; au-delà, elle mange le
-                                        // canvas.
+                                        // Below this the tree becomes
+                                        // unreadable; beyond it, it eats
+                                        // the canvas.
                                         .size_range(px(160.)..px(520.))
                                         .child(fillable(self.render_project_panel(cx))),
                                 )
@@ -374,8 +374,8 @@ impl Workspace {
         let matching = self.matching_commands(cx);
         let selected = self.command_index();
 
-        // Ramassées plutôt que paresseuses : la fermeture porterait `cx`, dont
-        // la palette a encore besoin pour ses propres écouteurs.
+        // Gathered rather than lazy: the closure would carry `cx`, which the
+        // palette still needs for its own listeners.
         let rows: Vec<_> = matching
             .into_iter()
             .enumerate()
@@ -413,8 +413,8 @@ impl Workspace {
                 .size_full()
                 .flex()
                 .justify_center()
-                // Un clic à côté referme, comme partout ailleurs. Sans cela, la
-                // seule sortie serait `escape`, qui ne se devine pas.
+                // A click beside it closes, as everywhere else. Without that,
+                // the only way out would be `escape`, which is not guessable.
                 .on_mouse_down_out(cx.listener(|this, _, _, cx| this.close_palette(cx)))
                 .child(
                     v_flex()

@@ -136,11 +136,11 @@ fn parse_item(expr: &Expr, source: &str) -> ItemDef {
     match name.as_str() {
         "separator" => ItemDef::Separator,
         "submenu" => match args.next() {
-            // Un sous-menu dont le contenu n'est pas un littéral — `submenu(
-            // build())` — reste opaque : il est lisible, pas modifiable. Un
-            // sous-menu qui en contient un autre aussi : l'arbre ne descend
-            // qu'à deux niveaux, et une entrée qu'on ne peut ni voir ni
-            // atteindre vaut mieux conservée telle quelle qu'affichée à moitié.
+            // A submenu whose content is not a literal — `submenu(build())` —
+            // stays opaque: it is readable, not editable. So does a submenu
+            // holding another one: the tree only goes two levels down, and an
+            // entry that can be neither seen nor reached is better kept as it
+            // is than shown by halves.
             Some(inner) => match parse_menu(inner, source) {
                 MenuDef { opaque: Some(_), .. } => ItemDef::Opaque(text(expr, source)),
                 menu if menu.items.iter().any(|item| matches!(item, ItemDef::Submenu(_))) => {
@@ -259,7 +259,7 @@ fn path_ends_with(path: &syn::Path, name: &str) -> bool {
 }
 
 fn string_of(expr: &Expr) -> Option<String> {
-    // `"Fichier".into()` as well as `"Fichier"`.
+    // `"File".into()` as well as `"File"`.
     if let Expr::MethodCall(call) = expr {
         return string_of(&call.receiver);
     }

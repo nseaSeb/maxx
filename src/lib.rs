@@ -121,7 +121,7 @@ pub fn run() {
         cx.bind_keys(actions::key_bindings());
         cx.set_menus(menus::app_menus(cx));
 
-        // `maxx <chemin>` ouvre directement un projet, comme `zed <chemin>`.
+        // `maxx <path>` opens a project straight away, the way `zed <path>` does.
         let path =
             std::env::args().nth(1).map(std::path::PathBuf::from).filter(|path| path.is_dir());
         workspace::open_workspace_window(path, cx);

@@ -27,7 +27,7 @@ impl Workspace {
         module: &str,
         add: fn(&std::path::Path) -> std::io::Result<()>,
         added: &'static str,
-        // `added` est une clé de traduction, comme partout ailleurs.
+        // `added` is a translation key, as everywhere else.
         cx: &mut Context<Self>,
     ) {
         let Some(project) = self.project.as_ref() else {

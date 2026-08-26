@@ -1,35 +1,35 @@
-//! Le lecteur de code : ce qui peut clocher est dans la table des extensions
-//! et dans les deux refus, pas dans le rendu.
+//! The code reader: what can go wrong is in the extension table and in the two
+//! refusals, not in the rendering.
 
 use std::path::Path;
 
 use maxx::workspace::{CodeFile, language_for};
 
 #[test]
-fn chaque_extension_nomme_sa_grammaire() {
+fn every_extension_names_its_grammar() {
     assert_eq!(language_for(Path::new("/p/src/main.rs")), "rust");
     assert_eq!(language_for(Path::new("/p/Cargo.toml")), "toml");
     assert_eq!(language_for(Path::new("/p/Cargo.lock")), "toml");
     assert_eq!(language_for(Path::new("/p/README.md")), "markdown");
     assert_eq!(language_for(Path::new("/p/settings.json")), "json");
     assert_eq!(language_for(Path::new("/p/locales/app.yml")), "yaml");
-    // La casse de l'extension ne dit rien du contenu.
+    // The case of the extension says nothing about the content.
     assert_eq!(language_for(Path::new("/p/LISEZMOI.MD")), "markdown");
 }
 
 #[test]
-fn ce_qui_na_pas_dextension_connue_reste_du_texte() {
-    // Pas de grammaire approchante : coloriser un LICENCE en Markdown lui
-    // inventerait une structure qu'il n'a pas.
+fn an_unknown_extension_stays_plain_text() {
+    // No approximate grammar: colourising a LICENCE as Markdown would invent a
+    // structure it does not have.
     assert_eq!(language_for(Path::new("/p/LICENSE")), "text");
     assert_eq!(language_for(Path::new("/p/.gitignore")), "text");
     assert_eq!(language_for(Path::new("/p/notes.txt")), "text");
 }
 
 #[test]
-fn un_fichier_du_depot_se_lit() {
+fn a_file_of_the_repository_reads() {
     let Ok(file) = CodeFile::load(Path::new("Cargo.toml")) else {
-        panic!("Cargo.toml doit se lire");
+        panic!("Cargo.toml must read");
     };
     assert_eq!(file.language, "toml");
     assert!(file.text.contains("name = \"maxx\""));
@@ -38,32 +38,34 @@ fn un_fichier_du_depot_se_lit() {
 }
 
 #[test]
-fn un_fichier_binaire_est_refuse() {
-    // La capture d'écran du README : le refus doit venir du décodage UTF-8, pas
-    // d'une liste d'extensions à tenir à jour.
+fn a_binary_file_is_refused() {
+    // The README's screenshot: the refusal has to come from the UTF-8 decoding,
+    // not from a list of extensions to keep up to date.
     let Err(error) = CodeFile::load(Path::new("docs/maxx.png")) else {
-        panic!("un PNG n'est pas du texte");
+        panic!("a PNG is not text");
     };
     assert!(!error.is_empty());
 }
 
 #[test]
-fn un_dossier_est_refuse_avec_sa_propre_raison() {
-    // Le clic droit s'attrape aussi sur un dossier, et « ce fichier n'est pas
-    // du texte » y serait une réponse fausse.
-    let Err(raison) = CodeFile::load(Path::new("src")) else {
-        panic!("un dossier n'a pas de code");
+fn a_directory_is_refused_with_its_own_reason() {
+    // A right click lands on a directory too, and "this file is not text" would
+    // be a wrong answer there.
+    let Err(reason) = CodeFile::load(Path::new("src")) else {
+        panic!("a directory has no code");
     };
-    assert!(raison.contains("dossier") || raison.contains("folder"), "raison : {raison}");
+    // The message is translated, so both wordings are accepted: what matters is
+    // that the refusal names a folder rather than a decoding failure.
+    assert!(reason.contains("dossier") || reason.contains("folder"), "reason: {reason}");
 }
 
 #[test]
-fn un_fichier_absent_est_refuse_lui_aussi() {
-    assert!(CodeFile::load(Path::new("docs/rien-du-tout.rs")).is_err());
+fn a_missing_file_is_refused_too() {
+    assert!(CodeFile::load(Path::new("docs/nothing-at-all.rs")).is_err());
 }
 
-/// Le plus petit fichier portant une région gérée.
-fn fichier_avec(expression: &str) -> String {
+/// The smallest file carrying a managed region.
+fn file_holding(expression: &str) -> String {
     format!(
         "use gpui::*;\n\n\
          impl Render for Home {{\n\
@@ -77,26 +79,26 @@ fn fichier_avec(expression: &str) -> String {
 }
 
 #[test]
-fn le_code_montre_est_celui_que_save_ecrirait() {
-    // La garantie de la bascule canvas / code : `render_source` et `save` sont
-    // le même texte, parce que le second appelle le premier. Un jour où l'un
-    // gagnerait une étape que l'autre n'a pas, ce test tombe.
-    let dossier = std::env::temp_dir().join("maxx-test-lecteur");
-    std::fs::create_dir_all(&dossier).expect("le dossier de test doit se créer");
-    let chemin = dossier.join("home.rs");
-    std::fs::write(&chemin, fichier_avec("v_flex().gap_2()")).expect("le fichier doit s'écrire");
+fn the_code_shown_is_the_one_save_would_write() {
+    // The guarantee behind the canvas / code toggle: `render_source` and `save`
+    // are the same text, because the second calls the first. The day one of them
+    // gains a step the other does not have, this test falls.
+    let directory = std::env::temp_dir().join("maxx-test-reader");
+    std::fs::create_dir_all(&directory).expect("the test directory must be created");
+    let path = directory.join("home.rs");
+    std::fs::write(&path, file_holding("v_flex().gap_2()")).expect("the file must be written");
 
-    let Ok(mut vue) = maxx::view::View::load(&chemin) else {
-        panic!("la vue doit se charger");
+    let Ok(mut view) = maxx::view::View::load(&path) else {
+        panic!("the view must load");
     };
-    let Ok(montre) = vue.render_source() else {
-        panic!("le rendu doit aboutir");
+    let Ok(shown) = view.render_source() else {
+        panic!("the rendering must succeed");
     };
-    // Rien n'est écrit par le rendu : le disque n'a pas bougé.
-    assert_eq!(std::fs::read_to_string(&chemin).unwrap(), fichier_avec("v_flex().gap_2()"));
+    // The rendering writes nothing: the disk has not moved.
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), file_holding("v_flex().gap_2()"));
 
-    vue.save().expect("l'enregistrement doit aboutir");
-    assert_eq!(std::fs::read_to_string(&chemin).unwrap(), montre);
+    view.save().expect("the save must succeed");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), shown);
 
-    std::fs::remove_dir_all(&dossier).ok();
+    std::fs::remove_dir_all(&directory).ok();
 }

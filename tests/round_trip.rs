@@ -71,7 +71,7 @@ fn unknown_method_is_kept() {
 
 #[test]
 fn unparsable_expression_degrades_to_opaque() {
-    let source = "if self.busy { spinner() } else { Label::new(\"prêt\") }";
+    let source = "if self.busy { spinner() } else { Label::new(\"ready\") }";
     let file = file_with(source);
     let (node, _) = parser::parse(&file).expect("the region should parse");
 
@@ -124,7 +124,7 @@ fn splicing_preserves_everything_outside_the_markers() {
     let file = "\
 use gpui::*;
 
-/// Un commentaire écrit à la main, qui doit survivre.
+/// A hand-written comment, which has to survive.
 impl Render for Home {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // maxx:begin
@@ -132,14 +132,14 @@ impl Render for Home {
         // maxx:end
     }
 
-    /// Une méthode ajoutée à la main.
-    fn valider(&mut self) {}
+    /// A hand-added method.
+    fn validate(&mut self) {}
 }
 ";
     let spliced = parser::splice(file, "h_flex().gap_2()").expect("markers are present");
 
-    assert!(spliced.contains("Un commentaire écrit à la main"));
-    assert!(spliced.contains("Une méthode ajoutée à la main"));
+    assert!(spliced.contains("A hand-written comment"));
+    assert!(spliced.contains("A hand-added method"));
     assert!(spliced.contains("        h_flex().gap_2()\n"));
     assert!(!spliced.contains("v_flex()"));
 
@@ -159,7 +159,7 @@ fn a_file_without_markers_is_refused_not_rewritten() {
 fn a_multiline_opaque_expression_does_not_drift() {
     // The bug this guards: the opaque slice kept its file indentation, and
     // `splice` added the region indent again on every save.
-    let expr = "if self.busy {\n    spinner()\n} else {\n    Label::new(\"prêt\")\n}";
+    let expr = "if self.busy {\n    spinner()\n} else {\n    Label::new(\"ready\")\n}";
     let mut file = file_with(expr);
 
     for _ in 0..3 {
@@ -173,10 +173,7 @@ fn a_multiline_opaque_expression_does_not_drift() {
         .lines()
         .find(|line| line.contains("spinner()"))
         .expect("the expression is still there");
-    assert_eq!(
-        saved, "            spinner()",
-        "l'indentation ne doit pas croître à chaque enregistrement"
-    );
+    assert_eq!(saved, "            spinner()", "the indentation must not grow on every save");
 }
 
 #[test]
@@ -202,12 +199,9 @@ fn a_hand_written_argument_is_not_overwritten_by_the_inspector() {
     let id_prop =
         spec.props.iter().find(|prop| prop.label == "prop.id").expect("Button has an id property");
 
-    assert!(
-        !maxx::registry::editable(&node, id_prop),
-        "un argument écrit à la main n'est pas éditable"
-    );
+    assert!(!maxx::registry::editable(&node, id_prop), "a hand-written argument is not editable");
     maxx::registry::write(&mut node, id_prop, "ok");
-    assert_eq!(maxx::codegen::render(&node, 0), source, "l'expression d'origine doit être intacte");
+    assert_eq!(maxx::codegen::render(&node, 0), source, "the original expression must be intact");
 }
 
 #[test]
@@ -216,17 +210,17 @@ fn an_invalid_field_name_is_refused() {
     let spec = maxx::registry::of(&node).expect("Input is in the catalogue");
     let prop = &spec.props[0];
 
-    for refused in ["", "mon champ", "2champ", "champ-x"] {
+    for refused in ["", "my field", "2field", "champ-x"] {
         maxx::registry::write(&mut node, prop, refused);
         assert_eq!(
             maxx::codegen::render(&node, 0),
             "Input::new(&self.field)",
-            "« {refused} » ne doit pas être écrit dans le source"
+            "`{refused}` must not be written into the source"
         );
     }
 
-    maxx::registry::write(&mut node, prop, "adresse");
-    assert_eq!(maxx::codegen::render(&node, 0), "Input::new(&self.adresse)");
+    maxx::registry::write(&mut node, prop, "address");
+    assert_eq!(maxx::codegen::render(&node, 0), "Input::new(&self.address)");
 }
 
 #[test]
@@ -299,33 +293,30 @@ fn the_selection_survives_an_undo() {
 
     let before = root.clone();
     root.remove(&[1]).unwrap();
-    assert!(root.at(&[1]).is_none(), "le nœud a bien disparu");
+    assert!(root.at(&[1]).is_none(), "the node has indeed gone");
 
     root = before;
-    assert!(
-        root.at(&[1]).is_some(),
-        "et il est de retour après l'annulation, donc la sélection tient"
-    );
+    assert!(root.at(&[1]).is_some(), "and it is back after the undo, so the selection holds");
 }
 
 #[test]
 fn interleaved_children_keep_their_place() {
     // Lifting every child to the end of the chain moved a header below a list.
-    let source = "v_flex().child(entete()).children(self.lignes()).child(pied())";
+    let source = "v_flex().child(header()).children(self.rows()).child(footer())";
     assert_eq!(reparse(source), source);
 
-    let conditional = "v_flex().child(a()).when(self.gros, |d| d.child(b())).child(c())";
+    let conditional = "v_flex().child(a()).when(self.large, |d| d.child(b())).child(c())";
     assert_eq!(reparse(conditional), conditional);
 }
 
 #[test]
 fn a_brace_in_a_comment_does_not_end_a_block() {
-    let source = "impl Home {\n    /// Ferme le panneau } et remet tout à zéro.\n    pub fn r(&mut self) {}\n}\n";
+    let source = "impl Home {\n    /// Closes the panel } and resets everything.\n    pub fn r(&mut self) {}\n}\n";
     let open = source.find('{').unwrap();
     let close = maxx::parser::matching_brace(source, open).unwrap();
-    assert_eq!(&source[close..], "}\n", "le bloc se ferme à la bonne accolade");
+    assert_eq!(&source[close..], "}\n", "the block closes on the right brace");
 
-    let with_string = "fn f() { let s = \"} pas une accolade\"; }\n";
+    let with_string = "fn f() { let s = \"} not a brace\"; }\n";
     let open = with_string.find('{').unwrap();
     let close = maxx::parser::matching_brace(with_string, open).unwrap();
     assert_eq!(&with_string[close..], "}\n");
@@ -334,11 +325,11 @@ fn a_brace_in_a_comment_does_not_end_a_block() {
 #[test]
 fn a_multiline_string_is_not_reindented() {
     let file = file_with("v_flex()");
-    let block = "div().child(\n    \"ligne un\nligne deux\",\n)";
+    let block = "div().child(\n    \"line one\nline two\",\n)";
     let spliced = parser::splice(&file, block).expect("markers are present");
     assert!(
-        spliced.contains("\nligne deux\","),
-        "les espaces ne doivent pas entrer dans la chaîne :\n{spliced}"
+        spliced.contains("\nline two\","),
+        "the spaces must not get into the string:\n{spliced}"
     );
 }
 
@@ -351,13 +342,10 @@ fn a_length_must_be_a_rust_literal() {
 
     for refused in [".5", "inf", "NaN", "-inf", "12px", "1.2.3"] {
         maxx::registry::write(&mut node, width, refused);
-        assert!(
-            maxx::registry::validate(width, refused).is_some(),
-            "« {refused} » doit être signalé"
-        );
+        assert!(maxx::registry::validate(width, refused).is_some(), "`{refused}` must be reported");
         assert!(
             !maxx::codegen::render(&node, 0).contains("px("),
-            "« {refused} » ne doit pas atteindre le fichier"
+            "`{refused}` must not reach the file"
         );
     }
 
@@ -377,7 +365,7 @@ fn a_hand_written_method_argument_is_protected() {
 
     assert!(
         !maxx::registry::editable(&node, label),
-        "une expression écrite à la main ne s'édite pas en texte libre"
+        "a hand-written expression is not edited as free text"
     );
 }
 
@@ -391,8 +379,8 @@ fn a_multiline_string_survives_a_full_save_cycle() {
          \x20   fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {\n\
          \x20       // maxx:begin\n\
          \x20       div().child(\n\
-         \"ligne un\n\
-         \x20 ligne deux\",\n\
+         \"line one\n\
+         \x20 line two\",\n\
          \x20       )\n\
          \x20       // maxx:end\n\
          \x20   }\n\
@@ -407,11 +395,11 @@ fn a_multiline_string_survives_a_full_save_cycle() {
         seen.push(file.clone());
     }
 
-    assert_eq!(seen[0], seen[1], "le fichier ne doit plus bouger");
+    assert_eq!(seen[0], seen[1], "the file must not move any more");
     assert_eq!(seen[1], seen[2]);
     assert!(
-        seen[0].contains("\n  ligne deux\""),
-        "l'indentation de la chaîne doit rester intacte :\n{}",
+        seen[0].contains("\n  line two\""),
+        "the string's indentation must stay intact:\n{}",
         seen[0]
     );
 }
@@ -421,44 +409,44 @@ fn a_lifetime_is_not_a_char_literal() {
     let source = "impl Foo {\n    fn f<'a>() { let c = 'x'; }\n    fn g() {}\n}\n";
     let open = source.find('{').unwrap();
     let close = maxx::parser::matching_brace(source, open).unwrap();
-    assert_eq!(&source[close..], "}\n", "le bloc doit se fermer sur l'accolade de l'impl");
+    assert_eq!(&source[close..], "}\n", "the block must close on the impl's brace");
 }
 
-/// Chaque entrée du catalogue s'écrit, se relit, et retombe sur elle-même.
+/// Every catalogue entry writes, reads back, and lands on itself again.
 ///
-/// Le catalogue est une table, donc y ajouter une ligne ne coûte rien — et
-/// c'est justement pour ça qu'une ligne fausse passe inaperçue : un `import`
-/// qui ne correspond pas à la `base`, ou une propriété dont la cible n'existe
-/// pas sur le composant, ne se voit qu'à la compilation du projet généré.
+/// The catalogue is a table, so adding a line to it costs nothing — and that
+/// is exactly why a wrong line goes unnoticed: an `import` that does not match
+/// the `base`, or a property whose target does not exist on the component,
+/// only shows when the generated project is compiled.
 #[test]
 fn every_catalogue_entry_writes_and_reads_back() {
     for spec in maxx::registry::CATALOGUE {
         let node = maxx::registry::instantiate(spec.id)
-            .unwrap_or_else(|| panic!("{} doit s'instancier", spec.id));
+            .unwrap_or_else(|| panic!("{} must instantiate", spec.id));
         assert_eq!(
             node.base.path(),
             Some(spec.base),
-            "{} : la base écrite n'est pas celle de la table",
+            "{}: the base written is not the table's",
             spec.id
         );
         assert_eq!(
             maxx::registry::of(&node).map(|found| found.id),
             Some(spec.id),
-            "{} : le nœud écrit ne se retrouve pas dans le catalogue",
+            "{}: the node written is not found in the catalogue",
             spec.id
         );
         assert!(
             spec.import.starts_with("use ") && spec.import.ends_with(';'),
-            "{} : l'import n'est pas une ligne `use` complète",
+            "{}: the import is not a complete `use` line",
             spec.id
         );
     }
 }
 
-/// Un nombre nu s'écrit sans `px`, contrairement à une longueur.
+/// A bare number is written without `px`, unlike a length.
 ///
-/// `Progress::value` prend un `f32` : lui donner `px(50.)` ne compilerait pas
-/// dans le projet généré, et l'erreur n'apparaîtrait qu'à ce moment-là.
+/// `Progress::value` takes an `f32`: handing it `px(50.)` would not compile
+/// in the generated project, and the error would only appear then.
 #[test]
 fn a_plain_number_is_written_without_px() {
     let mut node = maxx::registry::instantiate("progress").unwrap();
@@ -478,17 +466,17 @@ fn a_plain_number_is_written_without_px() {
     maxx::registry::write(&mut node, value, "12.5");
     assert_eq!(node.call("value").unwrap().args[0].to_source(), "12.5");
 
-    // Vidé, l'appel disparaît plutôt que de s'écrire à zéro.
+    // Emptied, the call disappears rather than being written as zero.
     maxx::registry::write(&mut node, value, "");
     assert!(node.call("value").is_none());
 }
 
-/// Un sous-arbre copié se relit depuis le texte que le presse-papier porte.
+/// A copied subtree reads back from the text the clipboard carries.
 ///
-/// Le presse-papier ne porte pas un format à maxx mais du Rust : ce qui est
-/// copié ici se colle dans Zed, et ce qui s'y écrit se colle ici. Les deux
-/// bouts du voyage passent donc par `codegen::render` et `parser::parse_expr`,
-/// et ce test est ce qui les tient d'accord.
+/// The clipboard carries no format of maxx's own but Rust: what is copied
+/// here pastes into Zed, and what is written there pastes here. Both ends of
+/// the trip therefore go through `codegen::render` and `parser::parse_expr`,
+/// and this test is what keeps them agreeing.
 #[test]
 fn a_subtree_survives_the_clipboard() {
     let mut column = maxx::registry::instantiate("column").unwrap();
@@ -500,21 +488,21 @@ fn a_subtree_survives_the_clipboard() {
     column.push_child(maxx::registry::instantiate("input").unwrap());
 
     let source = maxx::codegen::render(&column, 0);
-    let back = maxx::parser::parse_expr(&source).expect("le texte copié doit se relire");
-    assert_eq!(back, column, "le tour par le texte ne doit rien changer");
+    let back = maxx::parser::parse_expr(&source).expect("the copied text must read back");
+    assert_eq!(back, column, "the trip through text must change nothing");
 }
 
-/// Ce qui n'est pas une expression gpui ne devient pas un nœud opaque.
+/// What is not a gpui expression does not become an opaque node.
 #[test]
 fn clipboard_prose_is_not_an_expression() {
-    let node = maxx::parser::parse_expr("bonjour, ceci n'est pas du Rust");
-    assert!(node.is_err(), "du texte quelconque doit être refusé, pas adopté");
+    let node = maxx::parser::parse_expr("hello, this is not Rust");
+    assert!(node.is_err(), "arbitrary text must be refused, not adopted");
 }
 
-/// Un champ d'état copié est relié à un champ neuf, pas à celui de l'original.
+/// A copied state field is bound to a new field, not to the original's.
 ///
-/// Deux `Input` sur `&self.field` compilent et se recopient l'un l'autre à
-/// l'exécution : le défaut ne se voit qu'en lançant le projet.
+/// Two `Input`s on `&self.field` compile and copy each other at run time:
+/// the defect only shows when the project is run.
 #[test]
 fn a_copied_input_gets_a_field_of_its_own() {
     let mut root = maxx::registry::instantiate("column").unwrap();
@@ -527,9 +515,9 @@ fn a_copied_input_gets_a_field_of_its_own() {
     let first = maxx::registry::read(&root.children[0], binding()).unwrap();
     let second = maxx::registry::read(&root.children[1], binding()).unwrap();
     assert_eq!(first, "field");
-    assert_eq!(second, "field_2", "le second champ ne peut pas être le premier");
+    assert_eq!(second, "field_2", "the second field cannot be the first");
 
-    // Et un sous-arbre qui en porte deux les distingue aussi entre eux.
+    // And a subtree carrying two of them tells those apart too.
     let mut pair = maxx::registry::instantiate("column").unwrap();
     pair.push_child(maxx::registry::instantiate("input").unwrap());
     pair.push_child(maxx::registry::instantiate("input").unwrap());
@@ -539,54 +527,54 @@ fn a_copied_input_gets_a_field_of_its_own() {
     assert_eq!(names, vec!["field_3", "field_4"]);
 }
 
-/// La propriété « Champ lié » du champ texte.
+/// The text input's "Bound field" property.
 fn binding() -> &'static maxx::registry::Prop {
     let spec = maxx::registry::by_id("input").unwrap();
     spec.props.iter().find(|prop| prop.label == "prop.bound_field").unwrap()
 }
 
-/// La recherche du catalogue répond au libellé, à l'identifiant, et aux accents.
+/// The catalogue search answers the label, the identifier, and the accents.
 ///
-/// Sur la fonction pure et non sur `matches_query` : celle-ci traduit le
-/// libellé, donc son résultat dépend de la langue, et la langue est un global
-/// que les tests d'un même binaire partagent en parallèle.
+/// On the pure function rather than on `matches_query`: that one translates
+/// the label, so its result depends on the language, and the language is a
+/// global the tests of one binary share in parallel.
 #[test]
 fn the_palette_search_forgives_the_accents() {
     let matches = maxx::designer::label_matches;
 
-    // Une recherche vide ne cache rien.
+    // An empty search hides nothing.
     assert!(matches("Étiquette", "label", ""));
 
-    // Le libellé, quelle que soit la casse et les accents : personne ne tape
-    // « Étiquette » avec son accent dans une boîte de recherche.
+    // The label, whatever the case and the accents: nobody types
+    // "Étiquette" with its accent in a search box.
     assert!(matches("Étiquette", "label", "Étiquette"));
     assert!(matches("Étiquette", "label", "etiquette"));
     assert!(matches("Séparateur", "divider", "separateur"));
 
-    // L'identifiant aussi : c'est ce que tape qui a lu le code généré.
+    // The identifier too: it is what someone who has read the generated code types.
     assert!(matches("Étiquette", "label", "label"));
     assert!(!matches("Étiquette", "label", "bouton"));
 
-    // Et le libellé anglais répond au mot anglais.
+    // And the English label answers the English word.
     assert!(matches("Progress bar", "progress", "progress"));
 }
 
-/// Une liaison écrite à la main et qui ne heurte rien est gardée telle quelle.
+/// A hand-written binding that collides with nothing is kept as it is.
 ///
-/// C'est la contrepartie de la promesse du presse-papier : ce qui s'écrit dans
-/// Zed revient ici. Renommer `&self.search` en `&self.field` déclarerait un
-/// second champ pour celui qu'il a déjà.
+/// It is the counterpart of the clipboard's promise: what is written in Zed
+/// comes back here. Renaming `&self.search` to `&self.field` would declare a
+/// second field for the one it already has.
 #[test]
 fn a_binding_that_collides_with_nothing_is_kept() {
     let mut root = maxx::registry::instantiate("column").unwrap();
     root.push_child(maxx::registry::instantiate("input").unwrap());
 
-    let mut pasted = maxx::parser::parse_expr("Input::new(&self.search)").expect("doit se relire");
+    let mut pasted = maxx::parser::parse_expr("Input::new(&self.search)").expect("must read back");
     maxx::registry::rebind_state_fields(&mut pasted, &root);
     assert_eq!(maxx::registry::read(&pasted, binding()).as_deref(), Some("search"));
 
-    // Et celle qui heurte est renommée, elle.
-    let mut collides = maxx::parser::parse_expr("Input::new(&self.field)").expect("doit se relire");
+    // And the one that collides is renamed.
+    let mut collides = maxx::parser::parse_expr("Input::new(&self.field)").expect("must read back");
     maxx::registry::rebind_state_fields(&mut collides, &root);
     assert_eq!(maxx::registry::read(&collides, binding()).as_deref(), Some("field_2"));
 }

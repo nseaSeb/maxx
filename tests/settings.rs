@@ -1,6 +1,6 @@
-//! Les réglages doivent survivre à un aller-retour sur disque, à un fichier
-//! absent, vide ou abîmé — et surtout, l'écriture d'une clé ne doit rien
-//! changer d'autre dans le fichier.
+//! The settings have to survive a round trip through the disk, a missing, empty
+//! or damaged file — and above all, writing one key must change nothing else in
+//! the file.
 
 use std::path::PathBuf;
 
@@ -8,11 +8,11 @@ use maxx::settings::{Preferences, State, append_key, patch_preferences, splice_k
 
 #[test]
 fn writing_a_key_leaves_every_other_byte_alone() {
-    let source = r#"// Mes réglages à moi.
+    let source = r#"// My own settings.
 {
   "$schema": "./settings-schema.json",
 
-  // J'y tiens, à ce commentaire.
+  // I am fond of this comment.
   "show_project_panel": true,
 
   "show_status_bar": true,
@@ -28,11 +28,11 @@ fn writing_a_key_leaves_every_other_byte_alone() {
     let preferences = Preferences { show_project_panel: false, ..Preferences::default() };
     let patched = patch_preferences(source, &preferences);
 
-    assert!(patched.contains("// Mes réglages à moi."));
-    assert!(patched.contains("// J'y tiens, à ce commentaire."));
+    assert!(patched.contains("// My own settings."));
+    assert!(patched.contains("// I am fond of this comment."));
     assert!(patched.contains("\"$schema\": \"./settings-schema.json\""));
     assert!(patched.contains("\"show_project_panel\": false"));
-    // Les deux autres n'ont pas bougé de valeur, donc pas de reformatage.
+    // The other two did not change value, so no reformatting.
     assert!(patched.contains("\"show_status_bar\": true"));
     assert!(patched.contains("\"show_output\": false"));
     assert_eq!(patched.lines().count(), source.lines().count());
@@ -45,90 +45,90 @@ fn a_missing_key_is_added_rather_than_the_file_rewritten() {
 
     assert!(patched.contains("\"show_project_panel\": true"), "{patched}");
     assert!(patched.contains("\"show_status_bar\": true"), "{patched}");
-    // La valeur présente a été mise à jour sur place, pas dupliquée.
+    // The key that was there was updated in place, not duplicated.
     assert_eq!(patched.matches("\"show_output\"").count(), 1, "{patched}");
     assert!(patched.contains("\"show_output\": false"), "{patched}");
 }
 
 #[test]
 fn a_trailing_comment_on_the_line_survives() {
-    // Le cas que le commentaire *avant* la clé ne teste pas : le balayage
-    // commence après le deux-points, donc c'est ici qu'il peut déraper.
-    let source = "{\n  \"show_output\": false // le panneau du bas\n}\n";
+    // The case a comment *before* the key does not test: the walk starts after
+    // the colon, so this is where it can go wrong.
+    let source = "{\n  \"show_output\": false // the bottom panel\n}\n";
     let preferences = Preferences { show_output: true, ..Preferences::default() };
     let patched = patch_preferences(source, &preferences);
 
-    assert!(patched.contains("// le panneau du bas"), "{patched}");
+    assert!(patched.contains("// the bottom panel"), "{patched}");
     assert!(patched.contains("\"show_output\": true"), "{patched}");
 }
 
 #[test]
 fn a_comment_that_looks_like_a_member_is_not_one() {
-    // « "show_output" : à revoir » dans un commentaire : une recherche
-    // textuelle y trouve la clé et le deux-points, et écrase le commentaire.
-    let source = "{\n  // \"show_output\" : à revoir\n  \"show_output\": false\n}\n";
+    // `"show_output" : to be revisited` inside a comment: a textual search finds
+    // the key and the colon there, and overwrites the comment.
+    let source = "{\n  // \"show_output\" : to be revisited\n  \"show_output\": false\n}\n";
     let preferences = Preferences { show_output: true, ..Preferences::default() };
     let patched = patch_preferences(source, &preferences);
 
-    assert!(patched.contains("// \"show_output\" : à revoir"), "{patched}");
+    assert!(patched.contains("// \"show_output\" : to be revisited"), "{patched}");
     assert!(patched.contains("\"show_output\": true"), "{patched}");
     let reread: Preferences =
-        serde_json_lenient::from_str_lenient(&patched).expect("le fichier reste lisible");
+        serde_json_lenient::from_str_lenient(&patched).expect("the file stays readable");
     assert!(reread.show_output);
 }
 
 #[test]
 fn an_odd_quote_in_a_comment_does_not_eat_the_closing_brace() {
-    // Un guillemet seul dans un commentaire laissait le balayage « dans une
-    // chaîne » jusqu'à la fin du fichier, accolade finale comprise.
-    let source = "{\n  \"show_output\": false\n  // 5\" de large\n}\n";
+    // A lone quote in a comment used to leave the walk "inside a string" until
+    // the end of the file, closing brace included.
+    let source = "{\n  \"show_output\": false\n  // 5\" wide\n}\n";
     let preferences = Preferences { show_output: true, ..Preferences::default() };
     let patched = patch_preferences(source, &preferences);
 
     assert!(patched.trim_end().ends_with('}'), "{patched}");
     let reread: Preferences =
-        serde_json_lenient::from_str_lenient(&patched).expect("le fichier reste lisible");
+        serde_json_lenient::from_str_lenient(&patched).expect("the file stays readable");
     assert!(reread.show_output);
 }
 
 #[test]
 fn a_comment_holding_a_brace_does_not_derail_the_patch() {
-    let source = "{\n  \"show_output\": false\n  /* un } et une \" ici */\n}\n";
+    let source = "{\n  \"show_output\": false\n  /* a } and a \" here */\n}\n";
     let preferences = Preferences { show_output: true, ..Preferences::default() };
     let patched = patch_preferences(source, &preferences);
 
-    assert!(patched.contains("/* un } et une \" ici */"), "{patched}");
+    assert!(patched.contains("/* a } and a \" here */"), "{patched}");
     assert!(patched.contains("\"show_output\": true"), "{patched}");
 }
 
 #[test]
 fn a_key_added_next_to_a_trailing_comment_stays_valid_json() {
-    // La virgule ajoutée en fin d'objet atterrissait dans le commentaire, donc
-    // commentée : deux membres sans séparateur.
-    let source = "{\n  \"show_project_panel\": true\n  // TODO : ajouter show_output\n}\n";
+    // The comma added at the end of the object used to land inside the comment,
+    // so commented out: two members with no separator.
+    let source = "{\n  \"show_project_panel\": true\n  // TODO: add show_output\n}\n";
     let patched = patch_preferences(source, &Preferences::default());
 
-    assert!(patched.contains("// TODO : ajouter show_output"), "{patched}");
+    assert!(patched.contains("// TODO: add show_output"), "{patched}");
     let reread: Preferences =
-        serde_json_lenient::from_str_lenient(&patched).expect("le fichier reste lisible");
+        serde_json_lenient::from_str_lenient(&patched).expect("the file stays readable");
     assert_eq!(reread, Preferences::default());
 }
 
 #[test]
 fn splicing_stops_at_the_end_of_the_value_it_replaces() {
     let source = "{\n  \"a\": [1, {\"b\": 2}],\n  \"c\": 3\n}";
-    let patched = splice_key(source, "a", "[]").expect("la clé est là");
+    let patched = splice_key(source, "a", "[]").expect("the key is there");
     assert_eq!(patched, "{\n  \"a\": [],\n  \"c\": 3\n}");
 
-    assert!(splice_key(source, "absente", "1").is_none());
+    assert!(splice_key(source, "missing", "1").is_none());
 }
 
 #[test]
 fn appending_a_key_to_an_empty_object_stays_valid() {
     assert_eq!(append_key("{}", "a", "1"), "{\n  \"a\": 1}");
 
-    // Ajoutée en tête, pas en queue : c'est la seule position qu'aucun
-    // commentaire de fin d'objet ne peut gâter.
+    // Added at the head, not at the tail: it is the only position no comment at
+    // the end of the object can spoil.
     let patched = append_key("{\n  \"a\": 1\n}", "b", "2");
     let value: serde_json_lenient::Value =
         serde_json_lenient::from_str_lenient(&patched).expect("{patched}");
@@ -142,19 +142,19 @@ fn the_documented_defaults_are_readable_and_hold_the_defaults() {
     assert!(source.contains("// maxx settings."), "{source}");
 
     let preferences: Preferences =
-        serde_json_lenient::from_str_lenient(&source).expect("les commentaires sont tolérés");
+        serde_json_lenient::from_str_lenient(&source).expect("the comments are tolerated");
     assert_eq!(preferences, Preferences::default());
 }
 
 #[test]
 fn a_damaged_file_falls_back_to_the_defaults() {
     let path = std::env::temp_dir().join("maxx_settings_damaged.json");
-    std::fs::write(&path, "ceci n'est pas du JSON = = =\n").unwrap();
+    std::fs::write(&path, "this is not JSON = = =\n").unwrap();
 
     let preferences: Preferences = maxx::settings::read_json(&path);
     assert_eq!(preferences, Preferences::default());
-    // Le fichier abîmé reste sur le disque : l'écraser perdrait ce que
-    // l'utilisateur était en train d'y écrire.
+    // The damaged file stays on the disk: overwriting it would lose whatever the
+    // user was in the middle of writing.
     assert!(path.exists());
 }
 
@@ -165,34 +165,34 @@ fn a_partial_file_keeps_the_defaults_for_what_it_omits() {
 
     let preferences: Preferences = maxx::settings::read_json(&path);
     assert!(preferences.show_output);
-    assert!(preferences.show_project_panel, "défaut perdu");
-    assert!(preferences.show_status_bar, "défaut perdu");
+    assert!(preferences.show_project_panel, "default lost");
+    assert!(preferences.show_status_bar, "default lost");
 }
 
 #[test]
 fn the_recent_list_moves_deduplicates_and_stops_at_ten() {
     let mut state = State::default();
 
-    assert!(state.remember_project(&PathBuf::from("/tmp/un")));
-    assert!(state.remember_project(&PathBuf::from("/tmp/deux")));
-    assert_eq!(state.recent_projects, vec![PathBuf::from("/tmp/deux"), PathBuf::from("/tmp/un")]);
+    assert!(state.remember_project(&PathBuf::from("/tmp/one")));
+    assert!(state.remember_project(&PathBuf::from("/tmp/two")));
+    assert_eq!(state.recent_projects, vec![PathBuf::from("/tmp/two"), PathBuf::from("/tmp/one")]);
 
-    // Rouvrir celui qui est déjà en tête ne change rien — donc ni fichier
-    // réécrit, ni barre de menus reconstruite.
-    assert!(!state.remember_project(&PathBuf::from("/tmp/deux")));
+    // Reopening the one already at the head changes nothing — so neither a file
+    // rewritten nor a menu bar rebuilt.
+    assert!(!state.remember_project(&PathBuf::from("/tmp/two")));
 
-    // Rouvrir un ancien le remonte, sans le dupliquer.
-    assert!(state.remember_project(&PathBuf::from("/tmp/un")));
-    assert_eq!(state.recent_projects, vec![PathBuf::from("/tmp/un"), PathBuf::from("/tmp/deux")]);
+    // Reopening an older one brings it back up, without duplicating it.
+    assert!(state.remember_project(&PathBuf::from("/tmp/one")));
+    assert_eq!(state.recent_projects, vec![PathBuf::from("/tmp/one"), PathBuf::from("/tmp/two")]);
 
     for index in 0..15 {
-        state.remember_project(&PathBuf::from(format!("/tmp/projet_{index}")));
+        state.remember_project(&PathBuf::from(format!("/tmp/project_{index}")));
     }
     assert_eq!(state.recent_projects.len(), 10);
     assert_eq!(
         state.recent_projects[0],
-        PathBuf::from("/tmp/projet_14"),
-        "le plus récent doit être en tête"
+        PathBuf::from("/tmp/project_14"),
+        "the most recent has to be at the head"
     );
 }
 
@@ -203,7 +203,7 @@ fn a_project_that_no_longer_exists_leaves_the_list() {
     std::fs::create_dir_all(&root).unwrap();
 
     let mut state =
-        State { recent_projects: vec![root.clone(), root.join("parti")], ..State::default() };
+        State { recent_projects: vec![root.clone(), root.join("gone")], ..State::default() };
     state.forget_missing_projects();
 
     assert_eq!(state.recent_projects, vec![root]);
@@ -211,15 +211,14 @@ fn a_project_that_no_longer_exists_leaves_the_list() {
 
 #[test]
 fn a_hand_written_file_with_every_trap_at_once_survives() {
-    // Les trois pièges réunis : une clé et un deux-points dans un commentaire,
-    // un guillemet impair dans ce même commentaire, et un commentaire de fin de
-    // ligne juste après une valeur.
-    let source = r#"// Mon fichier à moi.
+    // The three traps at once: a key and a colon inside a comment, an odd quote
+    // in that same comment, and an end-of-line comment right after a value.
+    let source = r#"// My own file.
 {
   "$schema": "./settings-schema.json",
 
-  // "show_output" : à revoir un jour — 5" de large
-  "show_project_panel": true, // l'explorateur
+  // "show_output" : to be revisited one day — 5" wide
+  "show_project_panel": true, // the explorer
   "show_status_bar": false
 }
 "#;
@@ -232,26 +231,29 @@ fn a_hand_written_file_with_every_trap_at_once_survives() {
     };
     let patched = patch_preferences(source, &preferences);
 
-    assert!(patched.contains("// Mon fichier à moi."), "{patched}");
-    assert!(patched.contains(r#"// "show_output" : à revoir un jour — 5" de large"#), "{patched}");
-    assert!(patched.contains("// l'explorateur"), "{patched}");
+    assert!(patched.contains("// My own file."), "{patched}");
+    assert!(
+        patched.contains(r#"// "show_output" : to be revisited one day — 5" wide"#),
+        "{patched}"
+    );
+    assert!(patched.contains("// the explorer"), "{patched}");
     assert!(patched.contains(r#""$schema": "./settings-schema.json""#), "{patched}");
 
-    let reread: Preferences = serde_json_lenient::from_str_lenient(&patched)
-        .expect("le fichier reste lisible : {patched}");
+    let reread: Preferences =
+        serde_json_lenient::from_str_lenient(&patched).expect("the file stays readable: {patched}");
     assert_eq!(reread, preferences);
 }
 
 #[test]
 fn a_brace_in_the_header_comment_does_not_anchor_the_walk() {
-    // Un utilisateur qui écrit « // éditeur : {code, zed} » au-dessus de
-    // l'accolade ouvrante faisait ancrer tout le parcours dans le commentaire.
-    let source = "// éditeur : {code, zed}\n{\n  \"show_output\": false\n}\n";
+    // A user writing `// editor: {code, zed}` above the opening brace used to
+    // anchor the whole walk inside the comment.
+    let source = "// editor: {code, zed}\n{\n  \"show_output\": false\n}\n";
     let preferences = Preferences { show_output: true, ..Preferences::default() };
     let patched = patch_preferences(source, &preferences);
 
-    assert!(patched.starts_with("// éditeur : {code, zed}\n{"), "{patched}");
-    let reread: Preferences = serde_json_lenient::from_str_lenient(&patched)
-        .expect("le fichier reste lisible : {patched}");
+    assert!(patched.starts_with("// editor: {code, zed}\n{"), "{patched}");
+    let reread: Preferences =
+        serde_json_lenient::from_str_lenient(&patched).expect("the file stays readable: {patched}");
     assert!(reread.show_output);
 }

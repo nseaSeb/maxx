@@ -11,8 +11,8 @@ fn main() {
     Application::new().run(|cx: &mut App| {
         gpui_component::init(cx);
         cx.activate(true);
-        // Sans cela l'application s'ouvre en clair quoi que dise le système,
-        // et c'est la première chose que tout le monde remarque.
+        // Without this the application opens in light mode whatever the system
+        // says, and that is the first thing everybody notices.
         theme::follow_system(None, cx);
         menus::register(cx);
         cx.bind_keys(menus::key_bindings());

@@ -203,6 +203,12 @@ error.not_a_file:
 error.number:
   en: "a number, for example 50 or 12.5"
   fr: "un nombre, par exemple 50 ou 12.5"
+error.no_render_impl:
+  en: "no “impl Render for” in this file"
+  fr: "aucun « impl Render for » dans ce fichier"
+error.path_without_name:
+  en: "path with no file name"
+  fr: "chemin sans nom de fichier"
 error.region_not_expression:
   en: "the managed region is not an expression: %{error}"
   fr: "la zone gérée n'est pas une expression : %{error}"
@@ -212,9 +218,15 @@ error.region_not_menus:
 error.rustfmt:
   en: "rustfmt refused %{name} — the file does not read as Rust"
   fr: "rustfmt a refusé %{name} — le fichier ne se lit pas comme du Rust"
+error.rustfmt_missing:
+  en: "rustfmt is not installed — `rustup component add rustfmt`"
+  fr: "rustfmt est introuvable — `rustup component add rustfmt`"
 error.trash_refused:
   en: "move to the trash refused: %{error}"
   fr: "déplacement vers la corbeille refusé : %{error}"
+error.view_shape:
+  en: "“%{name}” does not have the expected shape — struct and “Self { … }” not found"
+  fr: "« %{name} » n'a pas la forme attendue — struct et « Self { … } » introuvables"
 explorer.delete:
   en: "Delete"
   fr: "Supprimer"
