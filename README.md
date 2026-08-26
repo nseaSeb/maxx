@@ -10,6 +10,22 @@ project.
 
 ![The maxx workshop: project explorer on the left, canvas in the middle, structure and properties on the right](docs/maxx.png)
 
+## maxx uses Zed, and recommends it
+
+[GPUI](https://gpui.rs) is not maxx's work: it comes from [Zed](https://zed.dev),
+where it was written to draw a code editor at the speed of the screen, and it is
+given away under Apache-2.0 along with everything that makes it run. maxx exists
+because that framework exists.
+
+Zed is a remarkable editor, and maxx is a modest companion to it — not a
+replacement for anything. It sets up a desktop project on the same GUI Zed is
+built with, then steps aside: what it writes is ordinary Rust, which opens in Zed
+like any other project and is edited there, `⌘⌥Z` away, whenever maxx has nothing
+left to add. If you write GPUI, use Zed.
+
+Thanks to the Zed team, and to the gpui-component authors who built the
+component catalogue maxx draws from.
+
 ## The principle
 
 **The `.rs` file is the truth.** maxx has no screen format of its own; it writes
