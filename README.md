@@ -189,6 +189,12 @@ move.
 a dependency on maxx: what is copied is yours.
 
 - **The menu bar** — `src/menus.rs`, editable afterwards in maxx.
+- **The images** — `src/assets.rs` and a `build.rs`: the project carries what it
+  draws inside its own binary, so a picture shows for a binary someone
+  double-clicked and not only under `cargo run` from the project root. Added on
+  its own the first time you save a view that draws one.
+- **The window** — `src/window.rs`, which remembers where the window was and
+  brings the system module with it.
 - **The system module** — `src/system.rs`.
 - **The settings** — `src/settings.rs`, which brings the system module with it.
 - **The palette** — `src/theme.rs`, light and dark from the start.

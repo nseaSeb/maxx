@@ -263,6 +263,9 @@ menu.add_menu_bar:
 menu.add_separator:
   en: "Add a separator"
   fr: "Ajouter un séparateur"
+menu.add_assets:
+  en: "The images"
+  fr: "Les images"
 menu.add_settings:
   en: "The settings"
   fr: "Les réglages"
@@ -275,6 +278,9 @@ menu.add_theme:
 menu.add_to_project:
   en: "Add to project"
   fr: "Ajouter au projet"
+menu.add_window:
+  en: "The window"
+  fr: "La fenêtre"
 menu.adopt_view:
   en: "Adopt this view"
   fr: "Adopter cette vue"
@@ -566,6 +572,12 @@ message.select_menu_not_submenu:
 message.select_rs_file:
   en: "select a .rs file in the explorer"
   fr: "sélectionnez un fichier .rs dans l'explorateur"
+message.assets_added:
+  en: "images added to the project: src/assets.rs, build.rs, and the source handed to the application"
+  fr: "images ajoutées au projet : src/assets.rs, build.rs, et la source remise à l'application"
+message.assets_added_for_image:
+  en: "view saved, and the images module added: without it the picture shows under cargo run alone"
+  fr: "vue enregistrée, et le module des images ajouté : sans lui l'image ne s'affiche que sous cargo run"
 message.settings_added:
   en: "settings added to the project, with the system module and their two crates"
   fr: "réglages ajoutés au projet, avec le module système et leurs deux crates"
@@ -575,6 +587,9 @@ message.system_added:
 message.theme_added:
   en: "palette added to the project and declared in main.rs"
   fr: "palette ajoutée au projet et déclarée dans main.rs"
+message.window_added:
+  en: "window module added, with the system module, and wired into main.rs"
+  fr: "module de la fenêtre ajouté, avec le module système, et câblé dans main.rs"
 message.trashed:
   en: "%{name} moved to the trash"
   fr: "%{name} déplacé vers la corbeille"

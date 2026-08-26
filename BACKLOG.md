@@ -32,6 +32,28 @@ Ce qui reste de ce côté :
 - **Une palette par projet.** Aujourd'hui les valeurs du gabarit sont les mêmes
   pour tout le monde ; c'est un point de départ, pas une identité.
 
+## Les modules copiés
+
+- **Le `rustfmt` du projet défait l'empreinte.** maxx enregistre dans
+  `maxx.toml` l'empreinte du gabarit tel qu'il l'a écrit ; le projet généré,
+  lui, est mis en forme au `rustfmt` par défaut, qui éclate ce que le gabarit
+  garde sur une ligne. Vérifié sur `demo/` : après un `cargo fmt`,
+  `src/system.rs` et `src/theme.rs` ne correspondent plus à leur empreinte —
+  la table des rôles de la palette passe de dix lignes à quarante — et
+  `outdated_modules` les tient donc pour édités par le développeur, ce qui
+  désactive en silence l'offre de mise à jour. `src/window.rs` et
+  `src/assets.rs` y échappent, mais par chance : ils sont écrits dans une forme
+  que le `rustfmt` par défaut ne touche pas.
+
+  Trois issues, aucune gratuite : écrire tous les gabarits en forme
+  `rustfmt` par défaut — et perdre la table des rôles, qui est précisément ce
+  que `use_small_heuristics = "Max"` protège dans maxx ; comparer sur une forme
+  normalisée plutôt que sur les octets ; ou enregistrer l'empreinte de ce qui
+  est sur le disque après l'écriture plutôt que celle du gabarit. La troisième
+  est la plus petite et la plus honnête — l'empreinte dit « ce que maxx a posé
+  ici », pas « ce que le gabarit contient » — mais elle demande de relire le
+  fichier après la mise en forme, donc de savoir quand elle a eu lieu.
+
 ## Composants
 
 - ~~Élargir le catalogue~~ — fait, cinq entrées de plus : bouton radio, lien,

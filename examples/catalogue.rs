@@ -13,8 +13,6 @@
 //! Nothing is run: `main` builds elements and drops them. It is the compiler
 //! that answers the question.
 
-use std::path::PathBuf;
-
 use gpui::prelude::*;
 use gpui::{FontWeight, ObjectFit, div, img, px, rgb};
 use gpui_component::Disableable;
@@ -80,7 +78,7 @@ fn main() {
     let _ = div().id("scroll").overflow_x_scroll().w_full();
 
     // The image, its size and its fill mode.
-    let _ = img(PathBuf::from("assets/images/image.png"))
+    let _ = img("assets/images/image.png")
         .max_w_full()
         .w_full()
         .size_full()

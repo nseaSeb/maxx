@@ -60,13 +60,18 @@ pub enum Kind {
     Ratio,
     /// A colour, written as `rgb(0x<value>)`.
     Color,
-    /// A file of the project, written as `PathBuf::from("<value>")`.
+    /// A file of the project, written as `"<value>"`, relative to the root.
     ///
-    /// A path and not a string: `img("logo.png")` compiles and shows nothing —
-    /// a bare `&str` is looked up in the application's `AssetSource`, which a
-    /// generated project does not declare. A path is read from the disk,
-    /// relative to the directory `cargo run` starts in, which is the project
-    /// root — the one place the canvas and the binary can agree on.
+    /// A bare string, because that is the spelling gpui looks up in the
+    /// application's `AssetSource` — and the assets module is what declares
+    /// one. A `PathBuf` never consults it: it is read from the disk relative to
+    /// the directory the process started in, which is the project root under
+    /// `cargo run` and anything at all for a binary someone double-clicked.
+    ///
+    /// Older projects hold `PathBuf::from("…")`, which still reads back, and
+    /// which [`write`] keeps rather than converts: the two spellings do not
+    /// mean the same thing, and changing one under the developer is not
+    /// maxx's to do.
     Path,
 }
 
@@ -768,10 +773,9 @@ pub fn instantiate(id: &str) -> Option<Node> {
                     _ => None,
                 });
                 match kind {
-                    // A path is an expression, not a literal: the table holds
-                    // what the inspector shows, and the encoder is the same one
-                    // `write` uses.
-                    Some(Kind::Path) => path_arg(value),
+                    // The encoder is the one `write` uses, so a fresh node and
+                    // an edited one hold the same shape.
+                    Some(Kind::Path) => path_arg(None, value),
                     _ => Arg::Str((*value).into()),
                 }
             })
@@ -824,7 +828,10 @@ pub fn editable(node: &Node, prop: &Prop) -> bool {
         },
         (Target::BaseArg(index), Kind::Path) => match &node.base {
             Base::Known { args, .. } => match args.get(index) {
-                None => true,
+                // Nothing yet, maxx's own string, or the older `PathBuf::from`
+                // spelling — anything else is an expression someone wrote,
+                // `img(self.avatar.clone())` among them.
+                None | Some(Arg::Str(_)) => true,
                 Some(Arg::Verbatim(source)) => path_value(source).is_some(),
                 Some(_) => false,
             },
@@ -857,6 +864,9 @@ fn number_value(source: &str) -> Option<String> {
 ///
 /// `None` for anything else, which is what tells [`editable`] that the argument
 /// is a hand-written expression the inspector must not overwrite.
+///
+/// Only older projects hold this shape — maxx writes a bare string now — but
+/// they hold it for good, so it has to keep reading back.
 fn path_value(source: &str) -> Option<String> {
     let inner = source.strip_prefix("PathBuf::from(\"")?.strip_suffix("\")")?;
     // The exact inverse of [`crate::model::escape`], sequence for sequence.
@@ -881,9 +891,21 @@ fn path_value(source: &str) -> Option<String> {
     Some(out)
 }
 
-/// The argument a path is written as.
-fn path_arg(value: &str) -> Arg {
-    Arg::Verbatim(format!("PathBuf::from(\"{}\")", crate::model::escape(value)))
+/// The argument a path is written as, in the form the node already had.
+///
+/// A string for anything maxx writes today, because that is what reaches the
+/// `AssetSource`; `PathBuf::from("…")` for a node that already held one, since
+/// the two spellings do not mean the same thing at runtime and flipping an
+/// existing one would change what the project does — and leave the file with a
+/// `use std::path::PathBuf;` nothing uses, which [`imports`] adds and never
+/// prunes.
+fn path_arg(existing: Option<&Arg>, value: &str) -> Arg {
+    match existing {
+        Some(Arg::Verbatim(source)) if path_value(source).is_some() => {
+            Arg::Verbatim(format!("PathBuf::from(\"{}\")", crate::model::escape(value)))
+        }
+        _ => Arg::Str(value.to_string()),
+    }
 }
 
 /// Whether this path would only resolve on the machine it was typed on.
@@ -1031,6 +1053,29 @@ pub fn unique_input_field(root: &Node) -> String {
     next_field(&state_fields(root))
 }
 
+/// Whether the tree draws a file of the project as an asset.
+///
+/// The string spelling, and not the `PathBuf` one: a path is read from the disk
+/// and needs nothing, an asset is looked up in a source the project has to
+/// declare. This is what tells the workspace the assets module is now owed.
+pub fn uses_an_asset(root: &Node) -> bool {
+    let mut found = false;
+    root.walk(&mut |_, node| {
+        let Some(spec) = of(node) else {
+            return;
+        };
+        for prop in spec.props {
+            if let (Target::BaseArg(index), Kind::Path) = (prop.target, prop.kind)
+                && let Base::Known { args, .. } = &node.base
+                && matches!(args.get(index), Some(Arg::Str(_)))
+            {
+                found = true;
+            }
+        }
+    });
+    found
+}
+
 /// Reads the current value of a property, as text for the inspector.
 pub fn read(node: &Node, prop: &Prop) -> Option<String> {
     match prop.target {
@@ -1108,7 +1153,7 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
             }
             let arg = match prop.kind {
                 Kind::Field => Arg::Verbatim(format!("&self.{value}")),
-                Kind::Path => path_arg(value),
+                Kind::Path => path_arg(args.get(index), value),
                 _ => Arg::Str(value.to_string()),
             };
             if index < args.len() {

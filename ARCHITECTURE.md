@@ -275,13 +275,24 @@ garde.
 
 ## Ce que maxx ajoute à un projet
 
-Quatre choses s'ajoutent à un projet existant, par insertion textuelle et
-jamais par réécriture depuis le gabarit : une vue, la barre de menus, le module
-système, les réglages. Ce dernier tire le module système avec lui et déclare
-deux crates dans le `Cargo.toml` du projet — insérées dans la section des
-dépendances, pas à la fin du fichier, pour qu'un bloc `[profile]` reste après
-elles. Le projet peut être antérieur à maxx et faire autre chose au
-démarrage — il doit le garder.
+Six choses s'ajoutent à un projet existant, par insertion textuelle et jamais
+par réécriture depuis le gabarit : une vue, la barre de menus, le module
+système, les réglages, les images, la fenêtre. Les réglages et la fenêtre
+tirent le module système avec eux et déclarent deux crates dans le
+`Cargo.toml` du projet — insérées dans la section des dépendances, pas à la fin
+du fichier, pour qu'un bloc `[profile]` reste après elles. Le projet peut être
+antérieur à maxx et faire autre chose au démarrage — il doit le garder.
+
+Les images et la fenêtre sont les deux premiers modules que `main.rs` **appelle**
+et pas seulement déclare : `.with_assets(assets::Assets)` sur
+`Application::new()`, `window::bounds(bounds)` et `window::remember(&window, cx)`
+autour de l'ouverture. D'où la forme du câblage — une reliaison qui masque
+plutôt qu'un argument, une instruction plutôt qu'un appel imbriqué : chaque
+ligne écrite doit être une ligne dont le retrait laisse un fichier qui compile,
+parce que supprimer le module retire la ligne. Le module des images porte en
+plus un `build.rs`, qui n'est pas suivi dans `maxx.toml` : le contrat entre les
+deux — `assets.rs` dans `OUT_DIR`, le symbole `ASSETS` — est écrit dans
+l'en-tête de chacun.
 
 Le module système mérite sa règle : il ne contient que ce qui diffère d'un
 système à l'autre **et** que gpui ne fournit pas déjà. Le presse-papier,
@@ -292,8 +303,10 @@ toute application de bureau finit par écrire, et que personne ne veut écrire
 une troisième fois.
 
 Symétrie nécessaire : supprimer `src/<module>.rs` depuis l'explorateur retire
-sa ligne `mod` de `main.rs`. Sans quoi supprimer un fichier casse la
-compilation, ce qui est l'inverse du but.
+sa ligne `mod` de `main.rs`, et avec elle le câblage que le module s'était
+donné — la table `scaffold::WIRING` dit, par module, les instructions entières
+à retirer et les fragments à ôter de la ligne qui les porte. Sans quoi
+supprimer un fichier casse la compilation, ce qui est l'inverse du but.
 
 **Une copie est une dette**, et il faut la nommer : le module système et les
 réglages reprennent du code que maxx a écrit pour lui-même. Un défaut trouvé

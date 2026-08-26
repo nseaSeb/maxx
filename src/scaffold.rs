@@ -214,7 +214,8 @@ target-dir = "{}"
 /// holds the fingerprint of each one and fails when a template moves without
 /// its version following — the guard against a fix that never reaches the
 /// projects carrying the old copy.
-pub const MODULES: &[(&str, u32)] = &[("system", 1), ("settings", 1), ("theme", 1)];
+pub const MODULES: &[(&str, u32)] =
+    &[("system", 1), ("settings", 1), ("theme", 1), ("assets", 1), ("window", 1)];
 
 /// The name each module carried before it was renamed to English.
 ///
@@ -250,6 +251,8 @@ pub fn module_body(module: &str) -> Option<String> {
         "system" => Some(system_rs()),
         "settings" => Some(settings_rs()),
         "theme" => Some(theme_rs()),
+        "assets" => Some(assets_rs()),
+        "window" => Some(window_rs()),
         _ => None,
     }
 }
@@ -307,6 +310,16 @@ pub fn update_module(root: &Path, module: &str) -> io::Result<()> {
     }
 
     std::fs::write(&path, &body)?;
+    // The build script is the other half of the assets module, and `maxx.toml`
+    // does not track it: a new `assets.rs` on top of a stale `build.rs` is a
+    // project that stops compiling. Rewritten only while it is still maxx's
+    // own — a script the developer has taken over is theirs.
+    if module == "assets" {
+        let build_path = root.join("build.rs");
+        if std::fs::read_to_string(&build_path).is_ok_and(|body| body.contains(BUILD_MARKER)) {
+            std::fs::write(&build_path, assets_build_rs())?;
+        }
+    }
     crate::projectfile::record(root, module, version, &body)
 }
 
@@ -333,9 +346,7 @@ pub fn add_system_module(root: &Path) -> io::Result<()> {
         crate::projectfile::record(root, "system", module_version("system").unwrap_or(1), &body)?;
     }
 
-    let mut out = lines.join("\n");
-    out.push('\n');
-    std::fs::write(&main_path, out)
+    std::fs::write(&main_path, joined(&lines, &source))
 }
 
 /// Drops `mod <module>;` from `src/main.rs`.
@@ -347,25 +358,70 @@ pub fn remove_module(root: &Path, module: &str) -> io::Result<()> {
     let main_path = root.join("src/main.rs");
     let source = std::fs::read_to_string(&main_path)?;
     let declaration = format!("mod {module};");
-    let kept: Vec<&str> = source
-        .lines()
-        .filter(|line| {
-            let line = line.trim();
-            line != declaration && line != format!("pub {declaration}")
-        })
-        .collect();
+    let wiring = WIRING.iter().find(|(name, _, _)| *name == module);
+    let (statements, fragments) = wiring.map_or((&[][..], &[][..]), |(_, s, f)| (*s, *f));
+
+    let mut changed = false;
+    let mut kept: Vec<String> = Vec::new();
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed == declaration
+            || trimmed == format!("pub {declaration}")
+            || statements.iter().any(|call| trimmed.contains(call))
+        {
+            changed = true;
+            continue;
+        }
+        let mut line = line.to_string();
+        let mut cut = false;
+        for fragment in fragments {
+            if line.contains(fragment) {
+                line = line.replace(fragment, "");
+                changed = true;
+                cut = true;
+            }
+        }
+        // A fragment rustfmt had given a line of its own leaves an empty one
+        // behind, in the middle of a call chain.
+        if cut && line.trim().is_empty() {
+            continue;
+        }
+        kept.push(line);
+    }
 
     // Deleting a file that was never declared must not rewrite `main.rs` at
     // all: `lines()` and `join` would quietly turn CRLF into LF, which is a
     // whole-file diff for a change that did not happen.
-    if kept.len() == source.lines().count() {
+    if !changed {
         return Ok(());
     }
 
+    std::fs::write(&main_path, joined(&kept, &source))
+}
+
+/// What maxx wrote into `main.rs` to reach a module: the whole statements that
+/// go when the module goes, and the fragments that are only cut out of the line
+/// carrying them.
+///
+/// Whole lines wherever the wiring allows it, and that is why it has the shape
+/// it has: a call written as an argument to another one would leave a hole where
+/// a value is expected. Deleting a module has to leave a file that still
+/// compiles — `system`, `settings` and `theme` are only declared, these two are
+/// called.
+const WIRING: &[(&str, &[&str], &[&str])] =
+    &[("assets", &[], &[WITH_ASSETS]), ("window", &["window::bounds(", "window::remember("], &[])];
+
+/// `lines` joined the way `source` ends its own.
+///
+/// `str::lines` drops the `\r` of a CRLF file, so joining with `\n` would turn
+/// every line of a `main.rs` into a change nobody asked for — a whole-file diff
+/// for two inserted lines, and now on an ordinary view save, since the assets
+/// module adds itself.
+fn joined(lines: &[String], source: &str) -> String {
     let ending = if source.contains("\r\n") { "\r\n" } else { "\n" };
-    let mut out = kept.join(ending);
+    let mut out = lines.join(ending);
     out.push_str(ending);
-    std::fs::write(&main_path, out)
+    out
 }
 
 /// The first line an item may be inserted before.
@@ -724,9 +780,7 @@ pub fn add_settings_module(root: &Path) -> io::Result<()> {
         )?;
     }
 
-    let mut out = lines.join("\n");
-    out.push('\n');
-    std::fs::write(&main_path, out)
+    std::fs::write(&main_path, joined(&lines, &source))
 }
 
 /// Declares crates in the project's `Cargo.toml`, under `[dependencies]`.
@@ -738,19 +792,19 @@ fn add_dependencies(root: &Path, crates: &[(&str, &str)]) -> io::Result<()> {
     let source = std::fs::read_to_string(&path)?;
     let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
 
-    let Some(section) = lines.iter().position(|line| line.trim() == "[dependencies]") else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Cargo.toml: no [dependencies] section",
-        ));
-    };
+    let section = dependencies_section(&source)?;
     // The end of the section, not the end of the file: a `[profile]` block
-    // after it must stay after it.
-    let end = lines[section + 1..]
+    // after it must stay after it. And before the blank line that separates the
+    // two — inserting after it glues the new crates to the next header and
+    // leaves the gap in the middle of the list.
+    let mut end = lines[section + 1..]
         .iter()
         .position(|line| line.trim_start().starts_with('['))
         .map(|offset| section + 1 + offset)
         .unwrap_or(lines.len());
+    while end > section + 1 && lines[end - 1].trim().is_empty() {
+        end -= 1;
+    }
 
     let mut inserted = 0;
     for (name, requirement) in crates {
@@ -771,6 +825,17 @@ fn add_dependencies(root: &Path, crates: &[(&str, &str)]) -> io::Result<()> {
     let mut out = lines.join(ending);
     out.push_str(ending);
     std::fs::write(&path, out)
+}
+
+/// The line `[dependencies]` sits on, or the refusal to say so.
+///
+/// Looked up on its own so a caller can ask before it writes anything: a module
+/// that declares crates has to know it can, or it leaves the project with half
+/// of itself added.
+fn dependencies_section(source: &str) -> io::Result<usize> {
+    source.lines().position(|line| line.trim() == "[dependencies]").ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidData, "Cargo.toml: no [dependencies] section")
+    })
 }
 
 /// The settings module of a generated project.
@@ -1120,9 +1185,7 @@ pub fn add_theme_module(root: &Path) -> io::Result<()> {
         crate::projectfile::record(root, "theme", module_version("theme").unwrap_or(1), &body)?;
     }
 
-    let mut out = lines.join("\n");
-    out.push('\n');
-    std::fs::write(&main_path, out)
+    std::fs::write(&main_path, joined(&lines, &source))
 }
 
 /// The palette of a generated project.
@@ -1517,9 +1580,7 @@ pub fn add_menu_bar(root: &Path) -> io::Result<()> {
         std::fs::write(&menus_path, menus_rs())?;
     }
 
-    let mut out = lines.join("\n");
-    out.push('\n');
-    if let Err(error) = std::fs::write(&main_path, out) {
+    if let Err(error) = std::fs::write(&main_path, joined(&lines, &source)) {
         // A `menus.rs` left behind by a failed wiring would make the next
         // attempt believe the project already has a menu bar, and skip the
         // wiring for good.
@@ -1592,8 +1653,549 @@ pub fn remove_menu_bar(root: &Path) -> io::Result<()> {
     // with the name the project gave its application, which is `cx` in the
     // template and anything at all in a hand-written `main.rs`. Filtering
     // literal `cx` lines would leave a call to a module that no longer exists.
-    let kept: Vec<&str> = source.lines().filter(|line| !is_menu_wiring(line.trim())).collect();
-    let mut out = kept.join("\n");
-    out.push('\n');
-    std::fs::write(&main_path, out)
+    let kept: Vec<String> =
+        source.lines().filter(|line| !is_menu_wiring(line.trim())).map(str::to_string).collect();
+    std::fs::write(&main_path, joined(&kept, &source))
+}
+
+/// Adds the assets module to an existing project, with its build script, and
+/// hands it to the application.
+///
+/// Two files, and both are needed: `src/assets.rs` declares the `AssetSource`,
+/// `build.rs` is what embeds the files it serves. The wiring is a single call
+/// on `Application::new()`, so removing the module leaves a line that still
+/// compiles.
+pub fn add_assets_module(root: &Path) -> io::Result<()> {
+    if let Some(error) = legacy_copy(root, "assets") {
+        return Err(error);
+    }
+
+    // A build script the developer wrote is theirs: appending to it would put
+    // maxx in the middle of a file it does not understand.
+    let build_path = root.join("build.rs");
+    let ours = std::fs::read_to_string(&build_path).is_ok_and(|body| body.contains(BUILD_MARKER));
+    if build_path.exists() && !ours {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "build.rs is already yours — copy the body of maxx's own build script into \
+             its main by hand, or move yours aside and add the module again",
+        ));
+    }
+
+    // `main.rs` is patched first, and nothing is written until it is known to
+    // work: the two files left behind by a failed wiring would make the next
+    // attempt believe the project already carries the module.
+    let main_path = root.join("src/main.rs");
+    let source = std::fs::read_to_string(&main_path)?;
+    let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
+
+    if !lines.iter().any(|line| line.trim() == "mod assets;") {
+        lines.insert(header_end(&lines), "mod assets;".into());
+    }
+
+    if !source.contains(WITH_ASSETS) {
+        let Some(anchor) = lines.iter().position(|line| line.contains(APPLICATION_NEW)) else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "src/main.rs: no {APPLICATION_NEW} — add {WITH_ASSETS} to whatever \
+                     builds the application by hand"
+                ),
+            ));
+        };
+        lines[anchor] =
+            lines[anchor].replacen(APPLICATION_NEW, &format!("{APPLICATION_NEW}{WITH_ASSETS}"), 1);
+    }
+
+    let path = root.join("src/assets.rs");
+    let body = assets_rs();
+    let wrote_module = !path.exists();
+    if wrote_module {
+        std::fs::write(&path, &body)?;
+    }
+    let wrote_build = !build_path.exists();
+    if wrote_build {
+        std::fs::write(&build_path, assets_build_rs())?;
+    }
+
+    if let Err(error) = std::fs::write(&main_path, joined(&lines, &source)) {
+        if wrote_module {
+            let _ = std::fs::remove_file(&path);
+        }
+        if wrote_build {
+            let _ = std::fs::remove_file(&build_path);
+        }
+        return Err(error);
+    }
+    if wrote_module {
+        crate::projectfile::record(root, "assets", module_version("assets").unwrap_or(1), &body)?;
+    }
+    Ok(())
+}
+
+/// What tells maxx's build script apart from one the developer wrote.
+const BUILD_MARKER: &str = "maxx:assets";
+
+/// The call the assets module hangs on, and the one it is added to.
+const APPLICATION_NEW: &str = "Application::new()";
+const WITH_ASSETS: &str = ".with_assets(assets::Assets)";
+
+/// The assets module of a generated project.
+fn assets_rs() -> String {
+    r##"//! The project's own files, served to gpui.
+//!
+//! `img("assets/images/logo.png")` asks gpui for an *asset*, and gpui asks the
+//! `AssetSource` the application was built with. Without one, nothing is drawn
+//! and a single line goes to the log — so this module is what makes the
+//! pictures appear.
+//!
+//! It answers from two places, in this order:
+//!
+//! 1. What `build.rs` embedded in the binary: everything under `assets/` and
+//!    `icons/` at build time is compiled into the executable, so the
+//!    application carries its pictures wherever it goes. A binary someone
+//!    double-clicks has no idea where the project directory is.
+//! 2. Failing that, the file on disk, read from the directory the process
+//!    started in. That is what picks up a picture added since the last build,
+//!    and what serves the ones kept outside `assets/`.
+//!
+//! The price is plain, and it is worth saying out loud: the binary grows by
+//! the size of what is embedded.
+//!
+//! The contract with `build.rs` — change one, change the other: the build
+//! script writes `assets.rs` into `OUT_DIR`, declaring `ASSETS`, a table of
+//! project-relative path and bytes.
+//!
+//! `icons/` is walked for `gpui_component`, whose `IconName` asks for
+//! `icons/*.svg` as assets: dropping that folder at the root of the project is
+//! all it takes for the icons to appear.
+
+#![allow(dead_code)]
+
+use std::borrow::Cow;
+
+use gpui::{AssetSource, Result, SharedString};
+
+// Written by build.rs: `pub static ASSETS: &[(&str, &[u8])]`.
+include!(concat!(env!("OUT_DIR"), "/assets.rs"));
+
+/// Hand it over at startup: `Application::new().with_assets(assets::Assets)`.
+pub struct Assets;
+
+impl AssetSource for Assets {
+    fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
+        for (key, bytes) in ASSETS {
+            if *key == path {
+                return Ok(Some(Cow::Borrowed(*bytes)));
+            }
+        }
+        match std::fs::read(path) {
+            Ok(bytes) => Ok(Some(Cow::Owned(bytes))),
+            // Missing is not an error: gpui logs what it cannot load and draws
+            // the fallback, and one absent picture is no reason to stop.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    fn list(&self, path: &str) -> Result<Vec<SharedString>> {
+        let mut names: Vec<SharedString> = ASSETS
+            .iter()
+            // On a segment boundary: `list("icons")` has no business answering
+            // for a sibling `icons_extra/`.
+            .filter(|(key, _)| key.strip_prefix(path).is_some_and(|rest| rest.starts_with('/')))
+            .map(|(key, _)| SharedString::from(*key))
+            .collect();
+
+        if let Ok(entries) = std::fs::read_dir(path) {
+            for entry in entries.flatten() {
+                let name = entry.path().to_string_lossy().replace('\\', "/");
+                if !names.iter().any(|known| known.as_ref() == name) {
+                    names.push(SharedString::from(name));
+                }
+            }
+        }
+        Ok(names)
+    }
+}
+"##
+    .to_string()
+}
+
+/// The build script that goes with the assets module.
+fn assets_build_rs() -> String {
+    r##"//! Embeds the project's own files into the binary. maxx:assets
+//!
+//! Walks the directories of `ROOTS` and writes `assets.rs` into `OUT_DIR`,
+//! which `src/assets.rs` includes. The contract between the two is this file's
+//! output: `pub static ASSETS: &[(&str, &[u8])]`, keyed by the path relative
+//! to the project root — the very string the code hands to `img(…)`.
+//!
+//! Written by maxx, yours from here. Add a directory to `ROOTS` and it travels
+//! inside the binary too.
+
+use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
+
+/// The directories whose contents travel inside the binary.
+const ROOTS: &[&str] = &["assets", "icons"];
+
+fn main() {
+    let mut table = String::from(
+        "// Written by build.rs. Do not edit.\npub static ASSETS: &[(&str, &[u8])] = &[\n",
+    );
+    for root in ROOTS {
+        println!("cargo::rerun-if-changed={root}");
+        collect(Path::new(root), &mut table);
+    }
+    table.push_str("];\n");
+
+    let out = PathBuf::from(std::env::var("OUT_DIR").expect("cargo sets OUT_DIR"));
+    std::fs::write(out.join("assets.rs"), table).expect("the asset table must be written");
+}
+
+/// Adds every file under `directory` to the table, recursively.
+///
+/// A directory that is not there is not a failure: a project keeps its
+/// pictures where it likes, and `icons/` is only there once someone wants the
+/// gpui-component icons.
+fn collect(directory: &Path, table: &mut String) {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = path.file_name().and_then(|name| name.to_str()).unwrap_or(".");
+        // Dotfiles belong to the system, not to the project: `.DS_Store` inside
+        // the binary is bytes nobody asked for.
+        if name.starts_with('.') {
+            continue;
+        }
+        if path.is_dir() {
+            collect(&path, table);
+            continue;
+        }
+        // Forward slashes, whatever the system: the key has to match the string
+        // written in the source, and that one is written once.
+        let key = path.to_string_lossy().replace('\\', "/");
+        println!("cargo::rerun-if-changed={key}");
+        // `{key:?}` twice, and not once: a quote or a backslash in a file name
+        // has to be escaped in the key and in the path just the same.
+        let _ = writeln!(
+            table,
+            "    ({key:?}, include_bytes!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/\", {key:?}))),"
+        );
+    }
+}
+"##
+    .to_string()
+}
+
+/// Adds the window module to an existing project and wires it into `main.rs`.
+///
+/// Pulls the system module in with it: knowing where this system puts an
+/// application's files is exactly what `system.rs` answers. And declares
+/// `serde` and `serde_json_lenient`, both already compiled in the tree through
+/// gpui, so the build does not grow.
+///
+/// Wired by textual insertion, like `add_menu_bar`: the project may predate the
+/// module entirely, and rewriting its `main.rs` from the template would throw
+/// away whatever it does at startup. Each inserted line is a whole statement,
+/// so removing the module leaves a `main.rs` that still compiles.
+pub fn add_window_module(root: &Path) -> io::Result<()> {
+    if let Some(error) = legacy_copy(root, "window") {
+        return Err(error);
+    }
+    let main_path = root.join("src/main.rs");
+    // Everything is checked before anything at all is written: pulling the
+    // system module in and then refusing would leave the project half-changed
+    // for a module that was never added — and `maxx.toml` would record it.
+    wire_window(&std::fs::read_to_string(&main_path)?)?;
+    dependencies_section(&std::fs::read_to_string(root.join("Cargo.toml"))?)?;
+
+    add_system_module(root)?;
+    add_dependencies(
+        root,
+        &[
+            ("serde", "{ version = \"1\", features = [\"derive\"] }"),
+            ("serde_json_lenient", "\"0.2\""),
+        ],
+    )?;
+
+    // Read again: `add_system_module` has just inserted a line of its own.
+    let source = std::fs::read_to_string(&main_path)?;
+    let lines = wire_window(&source)?;
+
+    let path = root.join("src/window.rs");
+    let body = window_rs();
+    let created = !path.exists();
+    if created {
+        std::fs::write(&path, &body)?;
+    }
+
+    if let Err(error) = std::fs::write(&main_path, joined(&lines, &source)) {
+        if created {
+            let _ = std::fs::remove_file(&path);
+        }
+        return Err(error);
+    }
+    if created {
+        crate::projectfile::record(root, "window", module_version("window").unwrap_or(1), &body)?;
+    }
+    Ok(())
+}
+
+/// `src/main.rs`, line by line, with the window module declared and called.
+///
+/// Each inserted line is a whole statement — a shadowing rebind before the
+/// window opens, a call inside it — so that removing the module later leaves a
+/// file that still compiles. A call written as an argument to another one would
+/// leave a hole where a value is expected.
+fn wire_window(source: &str) -> io::Result<Vec<String>> {
+    let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
+
+    if !lines.iter().any(|line| line.trim() == "mod window;") {
+        lines.insert(header_end(&lines), "mod window;".into());
+    }
+
+    if !source.contains("window::bounds(") {
+        // The line that computes the bounds, and the name it gives them.
+        let anchor = lines.iter().position(|line| {
+            let line = line.trim_start();
+            line.starts_with("let ") && line.contains("= Bounds::centered(")
+        });
+        let binding = anchor.and_then(|index| bounds_binding(&lines[index]));
+        // The end of the statement, and not the line the anchor is on: rustfmt
+        // wraps a long `Bounds::centered(…)` over several lines, and inserting
+        // after the first of them drops a statement into an argument list — a
+        // `main.rs` that no longer parses, written and reported as a success.
+        let end = anchor.and_then(|index| {
+            lines[index..]
+                .iter()
+                .position(|line| line.trim_end().ends_with(';'))
+                .map(|offset| index + offset)
+        });
+        let (Some(anchor), Some(end), Some(binding)) = (anchor, end, binding) else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "src/main.rs: no `let … = Bounds::centered(…);` — add \
+                 `let bounds = window::bounds(bounds);` before the window opens \
+                 and `window::remember(&window, cx);` inside it, by hand",
+            ));
+        };
+        let indent: String =
+            lines[anchor].chars().take_while(|character| character.is_whitespace()).collect();
+        lines.insert(end + 1, format!("{indent}let {binding} = window::bounds({binding});"));
+    }
+
+    if !source.contains("window::remember(") {
+        // The closure `open_window` was given: its two arguments are the window
+        // and the application, whatever this `main.rs` calls them.
+        let opened = lines.iter().position(|line| line.contains(".open_window("));
+        let closure = opened.and_then(|start| closure_of_call(&lines, start));
+        let arguments = closure.and_then(|index| closure_arguments(&lines[index]));
+        let (Some(index), Some((window, app))) = (closure, arguments) else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "src/main.rs: cannot find the closure open_window was given — add \
+                 `window::remember(&window, cx);` as its first line, by hand",
+            ));
+        };
+        let indent: String =
+            lines[index].chars().take_while(|character| character.is_whitespace()).collect();
+        lines.insert(index + 1, format!("{indent}    window::remember(&{window}, {app});"));
+    }
+
+    Ok(lines)
+}
+
+/// The line opening the closure the call on `start` was given.
+///
+/// Bounded to that call, by counting its parentheses: scanning to the end of the
+/// file found the next closure anywhere — a `cx.observe_new(|view, window, cx| {`
+/// twenty lines further down — and the call was written into it. And the search
+/// starts on the line of the call itself, because a short `open_window` puts its
+/// closure there.
+fn closure_of_call(lines: &[String], start: usize) -> Option<usize> {
+    let open = lines[start].find(".open_window(")? + ".open_window(".len();
+    let mut depth = 1i32;
+    for (offset, line) in lines[start..].iter().enumerate() {
+        if closure_arguments(line).is_some() {
+            return Some(start + offset);
+        }
+        let text = if offset == 0 { &line[open..] } else { &line[..] };
+        for character in text.chars() {
+            match character {
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                _ => {}
+            }
+        }
+        if depth <= 0 {
+            return None;
+        }
+    }
+    None
+}
+
+/// The name `line` gives the bounds it computes.
+fn bounds_binding(line: &str) -> Option<String> {
+    let rest = line.trim_start().strip_prefix("let ")?;
+    let name = rest.split('=').next()?.trim();
+    // `let mut bounds = …` names them too, and the shadowing rebind must carry
+    // the `mut` no further than the name.
+    let name = name.strip_prefix("mut ").unwrap_or(name);
+    identifier(name)
+}
+
+/// The window and the application, as the closure opened on `line` names them.
+///
+/// `|window, cx| {` as much as `|w: &mut Window, app: &mut App| {`, and wherever
+/// on the line it sits: rustfmt writes a short call and its closure together.
+/// Anything that is not exactly two named arguments answers `None`, which is
+/// what keeps a `while a || b {` from being taken for a closure.
+fn closure_arguments(line: &str) -> Option<(String, String)> {
+    let line = line.trim_end();
+    if !line.ends_with('{') {
+        return None;
+    }
+    let close = line.rfind('|')?;
+    let open = line[..close].rfind('|')?;
+    let mut names = line[open + 1..close].split(',').map(|argument| {
+        let name = argument.split(':').next().unwrap_or_default().trim();
+        identifier(name.strip_prefix("mut ").unwrap_or(name))
+    });
+    let window = names.next()??;
+    let app = names.next()??;
+    if names.next().is_some() {
+        return None;
+    }
+    Some((window, app))
+}
+
+/// The window module of a generated project.
+fn window_rs() -> String {
+    r##"//! Where the window was when the application last closed.
+//!
+//! Written by maxx, yours from here.
+//!
+//! Two files rather than one: `settings.json` is the user's — annotated,
+//! rewritten one key at a time — and this one is the machine's. A window's
+//! geometry moves every time it is dragged and nobody edits it by hand, so it
+//! has no business in the file the user is invited to open.
+//!
+//! `bounds` is called before the window opens, `remember` from inside it. The
+//! saved geometry goes to the *first* window only: a second one given the same
+//! bounds lands pixel for pixel on the first, hiding the window someone is
+//! still using.
+//!
+//! A geometry saved on a screen that is no longer plugged in needs no check
+//! here — gpui folds an off-screen window back onto the main display.
+
+#![allow(dead_code)]
+
+use std::path::PathBuf;
+
+use gpui::{App, Bounds, Pixels, Window, point, px, size};
+use serde::{Deserialize, Serialize};
+
+/// The application's folder name, under the configuration directory.
+const APPLICATION: &str = env!("CARGO_PKG_NAME");
+
+/// A window's place on the desktop, in pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Geometry {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+/// What this machine remembers. Add your fields here.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct State {
+    pub window: Option<Geometry>,
+}
+
+/// Where the file lives.
+pub fn path() -> Option<PathBuf> {
+    crate::system::config_dir(APPLICATION).map(|folder| folder.join("state.json"))
+}
+
+/// Reads what was remembered. A file that is missing or damaged is no worse
+/// than no file at all.
+pub fn load() -> State {
+    let Some(path) = path() else {
+        return State::default();
+    };
+    let Ok(source) = std::fs::read_to_string(&path) else {
+        return State::default();
+    };
+    serde_json_lenient::from_str_lenient(&source).unwrap_or_default()
+}
+
+/// Writes the state whole.
+///
+/// Whole, and not one key at a time like the settings: nobody hand-edits this
+/// file, so there are no comments to keep.
+pub fn save(state: &State) -> std::io::Result<()> {
+    let Some(path) = path() else {
+        return Ok(());
+    };
+    let Ok(body) = serde_json_lenient::to_string_pretty(state) else {
+        return Ok(());
+    };
+    crate::system::write_atomically(&path, &body)
+}
+
+/// The bounds to open with: the remembered ones, or `fallback`.
+pub fn bounds(fallback: Bounds<Pixels>) -> Bounds<Pixels> {
+    match load().window {
+        Some(geometry) => Bounds {
+            origin: point(px(geometry.x), px(geometry.y)),
+            size: size(px(geometry.width), px(geometry.height)),
+        },
+        None => fallback,
+    }
+}
+
+/// Saves the geometry when the window closes, and when the application quits.
+///
+/// Both, because they are two different exits: the close button and `cmd-w` go
+/// through the first, `cmd-q` through the second. Neither costs anything per
+/// frame — the geometry is read once, at the moment it stops changing.
+pub fn remember(window: &Window, cx: &mut App) {
+    window.on_window_should_close(cx, |window, _cx| {
+        write(window);
+        true
+    });
+
+    let handle = window.window_handle();
+    cx.on_app_quit(move |cx: &mut App| {
+        // The windows are still there: gpui runs the quit observers before it
+        // drops them.
+        let _ = handle.update(cx, |_, window, _| write(window));
+        async {}
+    })
+    .detach();
+}
+
+/// Writes this window's geometry now.
+pub fn write(window: &Window) {
+    // `window_bounds()` and not `bounds()`: of a full-screen window the first
+    // answers the size it will come back to, the second the whole display.
+    // Saving the display reopens a window as large as the screen.
+    let bounds = window.window_bounds().get_bounds();
+    let mut state = load();
+    state.window = Some(Geometry {
+        x: f32::from(bounds.origin.x),
+        y: f32::from(bounds.origin.y),
+        width: f32::from(bounds.size.width),
+        height: f32::from(bounds.size.height),
+    });
+    let _ = save(&state);
+}
+"##
+    .to_string()
 }

@@ -76,6 +76,8 @@ pub fn app_menus(cx: &App) -> Vec<Menu> {
                     name: tr("menu.add_to_project"),
                     items: vec![
                         MenuItem::action(tr("menu.add_menu_bar"), OpenMenuBar),
+                        MenuItem::action(tr("menu.add_assets"), AddAssetsModule),
+                        MenuItem::action(tr("menu.add_window"), AddWindowModule),
                         MenuItem::action(tr("menu.add_system"), AddSystemModule),
                         MenuItem::action(tr("menu.add_settings"), AddSettingsModule),
                         MenuItem::action(tr("menu.add_theme"), AddThemeModule),

@@ -93,6 +93,26 @@ impl Workspace {
         );
     }
 
+    /// Copies the assets module into the project.
+    ///
+    /// It brings a `build.rs` with it, and hands the source to the application
+    /// in `main.rs`. Without it a picture drawn by the project shows under
+    /// `cargo run` from the root and nowhere else — an image asked for by name
+    /// is looked up in an `AssetSource`, and a project that declares none draws
+    /// nothing and says so only in the log.
+    pub fn add_assets_module(&mut self, cx: &mut Context<Self>) {
+        self.add_module("assets", crate::scaffold::add_assets_module, "message.assets_added", cx);
+    }
+
+    /// Copies the window module into the project.
+    ///
+    /// It brings the system module and the same two crates the settings take.
+    /// What every desktop application ends up wanting on its second day — the
+    /// window back where it was left — and what nobody wants to write twice.
+    pub fn add_window_module(&mut self, cx: &mut Context<Self>) {
+        self.add_module("window", crate::scaffold::add_window_module, "message.window_added", cx);
+    }
+
     /// Replaces the copied modules a newer maxx has fixed.
     ///
     /// Only those the project has not touched: an edited file belongs to the

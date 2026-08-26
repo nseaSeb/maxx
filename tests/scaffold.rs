@@ -1164,3 +1164,191 @@ fn a_file_that_is_not_an_image_is_refused() {
     assert!(scaffold::import_asset(&root, &outside).is_err());
     assert!(!root.join("assets").exists(), "and nothing was created for it");
 }
+
+/// The assets module writes its two files and hands the source over.
+///
+/// Two files and one call: without `build.rs` the module includes a table that
+/// was never written, and without the call on `Application::new()` gpui keeps
+/// the source that answers nothing.
+#[test]
+fn an_assets_module_can_be_added_to_a_project() {
+    let root = scratch("maxx_assets_test");
+    scaffold::create_project(&root, "trial").expect("the project must be created");
+
+    scaffold::add_assets_module(&root).expect("the module must be added");
+    assert!(root.join("src/assets.rs").exists());
+    assert!(root.join("build.rs").exists());
+
+    let main = std::fs::read_to_string(root.join("src/main.rs")).expect("main.rs must be there");
+    assert!(main.contains("mod assets;"), "{main}");
+    assert!(main.contains("Application::new().with_assets(assets::Assets)"), "{main}");
+
+    // Adding it twice changes nothing: the panel offers the entry whatever the
+    // project already holds.
+    let before = main.clone();
+    scaffold::add_assets_module(&root).expect("the module must be added again");
+    assert_eq!(std::fs::read_to_string(root.join("src/main.rs")).unwrap(), before);
+
+    // And deleting the file leaves a `main.rs` that still compiles: the call is
+    // cut out of its line, not the line out of the file.
+    scaffold::remove_module(&root, "assets").expect("the module must be unwired");
+    let main = std::fs::read_to_string(root.join("src/main.rs")).expect("main.rs must be there");
+    assert!(!main.contains("assets::Assets"), "{main}");
+    assert!(!main.contains("mod assets;"), "{main}");
+    assert!(main.contains("Application::new().run("), "{main}");
+}
+
+/// A build script the developer wrote is theirs.
+///
+/// maxx has no business appending to a file it does not understand, so it says
+/// what to add and writes nothing at all — a half-added module is worse than
+/// none, because the next attempt believes the work is done.
+#[test]
+fn a_project_with_its_own_build_script_is_told_rather_than_overwritten() {
+    let root = scratch("maxx_assets_build_test");
+    scaffold::create_project(&root, "trial").expect("the project must be created");
+
+    let theirs = "fn main() {\n    println!(\"cargo::rerun-if-changed=build.rs\");\n}\n";
+    std::fs::write(root.join("build.rs"), theirs).expect("the build script must be written");
+
+    let error = scaffold::add_assets_module(&root).expect_err("it must refuse");
+    assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+    assert_eq!(std::fs::read_to_string(root.join("build.rs")).unwrap(), theirs);
+    assert!(!root.join("src/assets.rs").exists(), "nothing is written when it refuses");
+    let main = std::fs::read_to_string(root.join("src/main.rs")).expect("main.rs must be there");
+    assert!(!main.contains("assets::Assets"), "{main}");
+}
+
+/// The window module wires itself into `main.rs`, and unwires cleanly.
+#[test]
+fn the_window_module_wires_itself_into_main() {
+    let root = scratch("maxx_window_test");
+    scaffold::create_project(&root, "trial").expect("the project must be created");
+
+    scaffold::add_window_module(&root).expect("the module must be added");
+    assert!(root.join("src/window.rs").exists());
+    // It brings the system module with it: that is where `config_dir` and
+    // `write_atomically` live.
+    assert!(root.join("src/system.rs").exists());
+
+    let main = std::fs::read_to_string(root.join("src/main.rs")).expect("main.rs must be there");
+    assert!(main.contains("mod window;"), "{main}");
+    assert!(main.contains("let bounds = window::bounds(bounds);"), "{main}");
+    assert!(main.contains("window::remember(&window, cx);"), "{main}");
+
+    let cargo = std::fs::read_to_string(root.join("Cargo.toml")).expect("Cargo.toml must be there");
+    assert!(cargo.contains("serde_json_lenient"), "{cargo}");
+
+    let before = main.clone();
+    scaffold::add_window_module(&root).expect("the module must be added again");
+    assert_eq!(std::fs::read_to_string(root.join("src/main.rs")).unwrap(), before);
+
+    scaffold::remove_module(&root, "window").expect("the module must be unwired");
+    let main = std::fs::read_to_string(root.join("src/main.rs")).expect("main.rs must be there");
+    assert!(!main.contains("window::"), "{main}");
+    assert!(!main.contains("mod window;"), "{main}");
+    // The line the rebind shadowed is still there, which is the whole reason
+    // the wiring is a rebind and not an argument.
+    assert!(main.contains("Bounds::centered("), "{main}");
+}
+
+/// A `main.rs` maxx cannot read is left alone, with the lines to add by hand.
+#[test]
+fn a_main_the_window_module_cannot_wire_is_left_alone() {
+    let root = scratch("maxx_window_refusal_test");
+    scaffold::create_project(&root, "trial").expect("the project must be created");
+
+    let theirs = "mod ui;\n\nfn main() {\n    println!(\"a window of my own\");\n}\n";
+    std::fs::write(root.join("src/main.rs"), theirs).expect("main.rs must be written");
+
+    let error = scaffold::add_window_module(&root).expect_err("it must refuse");
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    assert!(!root.join("src/window.rs").exists(), "nothing is written when it refuses");
+    assert_eq!(std::fs::read_to_string(root.join("src/main.rs")).unwrap(), theirs);
+}
+
+/// The rebind lands after the statement, not after its first line.
+///
+/// rustfmt wraps a long `Bounds::centered(…)` over several lines, and inserting
+/// after the line the anchor sits on drops a statement into an argument list —
+/// a `main.rs` that no longer parses, written and reported as a success.
+#[test]
+fn a_wrapped_bounds_call_is_not_cut_in_half() {
+    let root = scratch("maxx_window_wrapped_test");
+    scaffold::create_project(&root, "trial").expect("the project must be created");
+
+    let main = std::fs::read_to_string(root.join("src/main.rs")).expect("main.rs must be there");
+    let wrapped = main.replace(
+        "        let bounds = Bounds::centered(None, size(px(900.), px(600.)), cx);",
+        "        let window_bounds = Bounds::centered(\n            None,\n            \
+         size(px(900.), px(600.)),\n            cx,\n        );",
+    );
+    std::fs::write(root.join("src/main.rs"), &wrapped).expect("main.rs must be written");
+
+    scaffold::add_window_module(&root).expect("the module must be added");
+    let main = std::fs::read_to_string(root.join("src/main.rs")).expect("main.rs must be there");
+    assert!(main.contains("let window_bounds = window::bounds(window_bounds);"), "{main}");
+    // The insertion is after the closing `);`, so the argument list is intact.
+    let call = main.find("Bounds::centered(").expect("the call must still be there");
+    let close = main[call..].find(");").expect("the call must still close") + call;
+    let rebind = main.find("window::bounds(").expect("the rebind must be there");
+    assert!(rebind > close, "the rebind landed inside the argument list:\n{main}");
+    syn::parse_file(&main).expect("the file must still parse");
+}
+
+/// The call goes into the closure `open_window` was given, and no other.
+///
+/// Scanning to the end of the file found the next closure anywhere — here a
+/// `cx.observe_new(|view, window, cx| {` further down — and wrote the call into
+/// it, naming a window that is not one.
+#[test]
+fn the_window_call_lands_in_the_closure_that_opens_the_window() {
+    let root = scratch("maxx_window_closure_test");
+    scaffold::create_project(&root, "trial").expect("the project must be created");
+
+    let main = "mod ui;\n\nuse gpui::{App, Application, Bounds, WindowOptions, prelude::*, px, size};\n\n\
+         fn main() {\n    Application::new().run(|cx: &mut App| {\n        \
+         let bounds = Bounds::centered(None, size(px(900.), px(600.)), cx);\n        \
+         cx.open_window(WindowOptions::default(), |window, cx| {\n            \
+         cx.new(|cx| ui::home::Home::new(window, cx))\n        })\n        .unwrap();\n\n        \
+         cx.observe_new(|view: &mut ui::home::Home, window, cx| {\n            \
+         let _ = (view, window, cx);\n        })\n        .detach();\n    });\n}\n";
+    std::fs::write(root.join("src/main.rs"), main).expect("main.rs must be written");
+
+    scaffold::add_window_module(&root).expect("the module must be added");
+    let main = std::fs::read_to_string(root.join("src/main.rs")).expect("main.rs must be there");
+    assert!(main.contains("window::remember(&window, cx);"), "{main}");
+
+    let opened = main.find(".open_window(").expect("the call must still be there");
+    let observed = main.find(".observe_new(").expect("the other closure must still be there");
+    let remember = main.find("window::remember(").expect("the call must be there");
+    assert!(remember > opened && remember < observed, "it landed in the wrong closure:\n{main}");
+    syn::parse_file(&main).expect("the file must still parse");
+}
+
+/// A CRLF `main.rs` keeps its line endings.
+///
+/// `str::lines` drops the `\r`, so joining with `\n` turns two inserted lines
+/// into a whole-file diff — and the assets module adds itself on an ordinary
+/// view save, so a Windows developer would get one without asking.
+#[test]
+fn wiring_a_module_keeps_the_line_endings_it_found() {
+    let root = scratch("maxx_crlf_test");
+    scaffold::create_project(&root, "trial").expect("the project must be created");
+
+    let main = std::fs::read_to_string(root.join("src/main.rs")).expect("main.rs must be there");
+    let crlf = main.replace('\n', "\r\n");
+    let before = crlf.matches("\r\n").count();
+    std::fs::write(root.join("src/main.rs"), &crlf).expect("main.rs must be written");
+
+    scaffold::add_assets_module(&root).expect("the assets module must be added");
+    scaffold::add_window_module(&root).expect("the window module must be added");
+
+    let main = std::fs::read_to_string(root.join("src/main.rs")).expect("main.rs must be there");
+    assert!(main.contains("assets::Assets"), "{main}");
+    assert!(main.contains("window::remember("), "{main}");
+    // Four lines added — three `mod` and the rebind, plus the call — and not one
+    // ending lost.
+    assert!(main.matches("\r\n").count() > before, "{main:?}");
+    assert_eq!(main.matches("\r\n").count(), main.matches('\n').count(), "an ending was lost");
+}
