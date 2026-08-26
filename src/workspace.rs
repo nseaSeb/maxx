@@ -203,6 +203,9 @@ pub struct Workspace {
     was_active: bool,
     /// Scroll position of the right-hand panels.
     pub(crate) side_scroll: ScrollHandle,
+    /// The canvas scrolls on its own: a view taller than the window — an image
+    /// at its natural size is enough — was cut off with no way down.
+    pub(crate) canvas_scroll: ScrollHandle,
     /// Scroll position of the output panel.
     pub(crate) output_scroll: UniformListScrollHandle,
 }
@@ -255,6 +258,7 @@ impl Workspace {
             conflicts: HashSet::new(),
             was_active: false,
             side_scroll: ScrollHandle::new(),
+            canvas_scroll: ScrollHandle::new(),
             output_scroll: UniformListScrollHandle::new(),
         };
         workspace.refresh_entries();

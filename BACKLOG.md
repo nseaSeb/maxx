@@ -71,6 +71,12 @@ Ce qui reste de ce côté :
   fichier déjà dans le projet reste où il est, un homonyme différent est
   numéroté, et le même fichier réimporté est reconnu à ses octets.
 
+  **Le sélecteur ne filtre pas, et ne le peut pas** : `PathPromptOptions` de
+  gpui n'a que `files`, `directories`, `multiple` et `prompt`, et son panneau
+  macOS n'appelle jamais `setAllowedFileTypes`. Filtrer demanderait une autre
+  boîte — `rfd`, qui réclame GTK3 sur Linux, ou un sélecteur écrit dans maxx.
+  Ni l'un ni l'autre ne vaut, pour l'instant, un refus qui nomme les formats.
+
   Ce qui reste, et qui se voit : **le chemin est lu depuis le répertoire
   courant du processus**. `cargo run` démarre à la racine, donc l'image
   s'affiche quand maxx lance le projet ou quand on le lance soi-même depuis

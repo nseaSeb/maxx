@@ -383,7 +383,13 @@ impl Workspace {
                 && let Some(path) = paths.into_iter().next()
             {
                 this.update(cx, |this, cx| match crate::scaffold::import_asset(&root, &path) {
-                    Ok(value) => this.edit_prop(prop, &value, cx),
+                    Ok(value) => {
+                        this.edit_prop(prop, &value, cx);
+                        // The copy created `assets/images/` a moment ago, and
+                        // the panel lists what it read when the project opened:
+                        // without this, maxx writes a file it does not show.
+                        this.refresh_entries();
+                    }
                     Err(error) => {
                         this.message = Some(SharedString::from(error));
                         cx.notify();

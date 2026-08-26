@@ -425,21 +425,48 @@ impl Workspace {
         // starts in — resolving it against anything else would draw something
         // the binary will not.
         let root = self.project().map(|project| project.root.as_path());
-        div().flex().flex_1().p_6().justify_center().overflow_x_hidden().child(
-            div()
-                // A capped width rather than a fixed one: the board is 520 px
-                // when there is room, and shrinks rather than being cut when
-                // the window narrows. Cut and centred, it lost both of its
-                // edges at once.
-                .w_full()
-                .max_w(px(520.))
-                .p_2()
-                .rounded_md()
-                .border_1()
-                .border_color(theme::border())
-                .bg(theme::panel_bg())
-                .child(node_element(&view.root, &[], &view.selected, root, cx)),
-        )
+        div()
+            .relative()
+            .flex_1()
+            .size_full()
+            .child(
+                // The board is as tall as what it holds — an image at its
+                // natural size is enough to pass the window — so the canvas
+                // scrolls rather than cutting the view off with no way down.
+                div()
+                    .id("canvas")
+                    .size_full()
+                    .overflow_y_scroll()
+                    .track_scroll(&self.canvas_scroll)
+                    .flex()
+                    .p_6()
+                    .justify_center()
+                    .overflow_x_hidden()
+                    .child(
+                        div()
+                            // A capped width rather than a fixed one: the board
+                            // is 520 px when there is room, and shrinks rather
+                            // than being cut when the window narrows. Cut and
+                            // centred, it lost both of its edges at once.
+                            .w_full()
+                            .max_w(px(520.))
+                            .h_full()
+                            .p_2()
+                            .rounded_md()
+                            .border_1()
+                            .border_color(theme::border())
+                            .bg(theme::panel_bg())
+                            .child(node_element(&view.root, &[], &view.selected, root, cx)),
+                    ),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .right_0()
+                    .bottom_0()
+                    .child(Scrollbar::vertical(&self.canvas_scroll)),
+            )
     }
 
     /// Tree, inspector and palette, stacked on the right.
