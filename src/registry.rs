@@ -658,12 +658,23 @@ pub fn covers(spec: &'static Spec, name: &str) -> bool {
         Target::BaseArg(_) => false,
         Target::Method(method) | Target::Flag(method) => method == name,
         Target::Family(names) => names.contains(&name),
-        // The `id` that goes with it is left visible in the other calls: maxx
-        // wrote it, and hiding a call it cannot explain would be worse than
-        // showing one it can.
         Target::Variant(method, _) => method == name,
-        Target::Scrollable(method) => method == name,
+        // The hold goes with the flag, and the property owns both: it writes
+        // them together, removes them together, and shows them as one switch.
+        // Only the `id` is left visible among the other calls — maxx wrote it,
+        // and it survives the switch being turned off.
+        Target::Scrollable(method) => method == name || name == hold_for(method),
     })
+}
+
+/// The call that holds the axis a scrolling box scrolls on.
+///
+/// Nothing scrolls inside a box whose size follows its own content: it grows
+/// instead, and the window cuts it. The property owns this call as much as the
+/// overflow one — which is why it removes it too, and why the inspector shows
+/// neither among the calls it does not know.
+fn hold_for(axis: &str) -> &'static str {
+    if axis == "overflow_x_scroll" { "w_full" } else { "h_full" }
 }
 
 /// An element id no node of `root` is already using.
@@ -1130,8 +1141,8 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
         }
         Target::Flag(name) => node.set_flag(name, value == "true"),
         Target::Scrollable(name) => {
-            let horizontal = name == "overflow_x_scroll";
-            let (hold, size) = if horizontal { ("w_full", "w") } else { ("h_full", "h") };
+            let hold = hold_for(name);
+            let size = if name == "overflow_x_scroll" { "w" } else { "h" };
             node.set_flag(name, value == "true");
             if value == "true" {
                 // Without an id, gpui has nowhere to keep the scroll offset:

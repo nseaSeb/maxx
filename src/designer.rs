@@ -1309,6 +1309,23 @@ fn thumbnail(value: &str, root: Option<&std::path::Path>) -> AnyElement {
     }
 }
 
+/// The fill mode written on a node, read back as gpui's own value.
+///
+/// Matched on the text because that is what the model holds — the variant as it
+/// goes into the file. `None` when nothing was written, which is gpui's
+/// `Contain` and therefore nothing to say.
+fn object_fit(node: &Node) -> Option<gpui::ObjectFit> {
+    let written = node.call("object_fit")?.args.first()?.to_source();
+    match written.as_str() {
+        "ObjectFit::Contain" => Some(gpui::ObjectFit::Contain),
+        "ObjectFit::Cover" => Some(gpui::ObjectFit::Cover),
+        "ObjectFit::Fill" => Some(gpui::ObjectFit::Fill),
+        "ObjectFit::ScaleDown" => Some(gpui::ObjectFit::ScaleDown),
+        "ObjectFit::None" => Some(gpui::ObjectFit::None),
+        _ => None,
+    }
+}
+
 /// What the thumbnail shows when the path leads nowhere.
 fn missing_thumbnail() -> AnyElement {
     div()
@@ -1394,11 +1411,17 @@ fn preview(
                 // paints nothing at all otherwise, and an image that silently
                 // does not show reads as a layout bug.
                 //
-                // The fit switch is read off the node like every other call: a
-                // preview that clamps what the generated code lets grow shows
-                // something the binary will not, and the switch looks broken.
+                // The three settings are read off the node like every other
+                // call: a preview that clamps what the generated code lets
+                // grow — or ignores a fill mode the binary honours — shows
+                // something that will not happen, and the switches look broken.
                 Some(root) => img(root.join(&source))
                     .when(node.call("max_w_full").is_some(), |image| image.max_w_full())
+                    .when(node.call("w_full").is_some(), |image| image.w_full())
+                    .map(|image| match object_fit(node) {
+                        Some(fit) => image.object_fit(fit),
+                        None => image,
+                    })
                     .with_fallback(missing_image)
                     .into_any_element(),
                 None => missing_image(),

@@ -700,6 +700,10 @@ fn scrolling_writes_the_pair_it_needs() {
     assert!(!rendered.contains("overflow_y_scroll"), "{rendered}");
     assert!(!rendered.contains(".h_full()"), "{rendered}");
     assert!(rendered.contains(".id("), "{rendered}");
+    // The property owns the pair it writes, so neither shows up among the calls
+    // the catalogue does not know — only the id it leaves behind.
+    assert!(maxx::registry::covers(spec, "h_full"), "the switch owns the hold");
+    assert!(!maxx::registry::covers(spec, "id"), "the id is the one it leaves");
 
     // A height set by hand says what to hold the box to already.
     let mut sized = maxx::registry::instantiate("column").expect("column is in the catalogue");

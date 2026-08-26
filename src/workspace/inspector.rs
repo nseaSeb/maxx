@@ -356,6 +356,13 @@ impl Workspace {
             }
             crate::registry::write(node, prop, value);
         }
+        // The pixel size on screen belongs to the path that was there: keeping
+        // it beside a path being typed would put a true number next to a wrong
+        // file. Cleared here, read again when the edit closes — which bumps the
+        // revision, and that is what `sync_prop_inputs` waits for.
+        if matches!(prop.kind, Kind::Path) {
+            self.image_size = None;
+        }
         self.message = crate::registry::validate(prop, value).map(crate::tr);
         cx.notify();
     }
@@ -388,7 +395,18 @@ impl Workspace {
         // modal everywhere, and `edit_prop` writes to whatever is selected when
         // it runs. Selecting something else while the dialog is open would land
         // the path — and the copy — somewhere nobody asked for.
-        let opened_on = self.view().map(|view| (view.path.clone(), view.selected.clone()));
+        // The constructor path goes with it: an index path alone says where, not
+        // what. Undo the insertion while the panel is open and the same index
+        // holds another node — an argument-less `v_flex`, which takes the path
+        // as its first argument without complaining, and the generated project
+        // stops compiling on `v_flex(PathBuf::from(..))`.
+        let opened_on = self.view().map(|view| {
+            (
+                view.path.clone(),
+                view.selected.clone(),
+                view.selected().base.path().map(str::to_string),
+            )
+        });
         let paths = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: false,
@@ -402,8 +420,13 @@ impl Workspace {
             {
                 let still_there = this
                     .update(cx, |this, _| {
-                        this.view().map(|view| (view.path.clone(), view.selected.clone()))
-                            == opened_on
+                        this.view().map(|view| {
+                            (
+                                view.path.clone(),
+                                view.selected.clone(),
+                                view.selected().base.path().map(str::to_string),
+                            )
+                        }) == opened_on
                     })
                     .unwrap_or(false);
                 if !still_there {

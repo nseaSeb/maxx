@@ -37,6 +37,15 @@ pub fn import_asset(root: &Path, file: &Path) -> Result<String, String> {
         file.extension().and_then(|value| value.to_str()).unwrap_or_default().to_lowercase();
 
     let resolved = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
+    // The same ceiling the reader holds, and before the shortcut below: a file
+    // already in the project is not a file maxx can draw, and accepting one it
+    // would then refuse to open is the two paths disagreeing about the same
+    // picture.
+    let size = std::fs::metadata(&resolved).map(|data| data.len()).unwrap_or(0);
+    if size > crate::project::MAX_IMAGE_BYTES {
+        return Err(t!("error.file_too_large", size = size / 1024).into_owned());
+    }
+
     let inside = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     if let Ok(relative) = resolved.strip_prefix(&inside) {
         return Ok(slashed(relative));
@@ -46,12 +55,6 @@ pub fn import_asset(root: &Path, file: &Path) -> Result<String, String> {
     let directory = root.join(IMAGE_DIRECTORY);
     std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
 
-    // The same ceiling the reader holds: importing a file maxx would then
-    // refuse to show would be a strange kind of success.
-    let size = std::fs::metadata(&resolved).map(|data| data.len()).unwrap_or(0);
-    if size > crate::project::MAX_IMAGE_BYTES {
-        return Err(t!("error.file_too_large", size = size / 1024).into_owned());
-    }
     let bytes = std::fs::read(&resolved).map_err(|error| error.to_string())?;
     let mut name = format!("{stem}.{extension}");
     let mut index = 2;
