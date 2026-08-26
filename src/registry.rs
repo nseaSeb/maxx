@@ -633,7 +633,18 @@ fn number_value(source: &str) -> Option<String> {
 /// is a hand-written expression the inspector must not overwrite.
 fn path_value(source: &str) -> Option<String> {
     let inner = source.strip_prefix("PathBuf::from(\"")?.strip_suffix("\")")?;
-    Some(inner.replace("\\\\", "\\"))
+    // Decoded the way it was encoded, escape for escape. Undoing `\\` alone
+    // left `\"` behind, and the next write escaped its backslash again: the
+    // argument grew by one on every keystroke instead of being refused.
+    let mut out = String::with_capacity(inner.len());
+    let mut chars = inner.chars();
+    while let Some(character) = chars.next() {
+        match character {
+            '\\' => out.push(chars.next()?),
+            _ => out.push(character),
+        }
+    }
+    Some(out)
 }
 
 /// The argument a path is written as.
@@ -838,7 +849,7 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
             // A path replaces maxx's own writing and nothing else: exempting
             // the guard below for the whole kind would let a keystroke
             // overwrite `img(self.avatar.clone())`.
-            if matches!(prop.kind, Kind::Path) && !editable(node, prop) {
+            if matches!(prop.kind, Kind::Path) && (!editable(node, prop) || is_absolute(value)) {
                 return;
             }
             let Base::Known { args, .. } = &mut node.base else {

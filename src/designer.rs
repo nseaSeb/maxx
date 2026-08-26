@@ -1289,8 +1289,13 @@ fn preview(
         // stands in — an image that cannot be found is better admitted than
         // drawn as a blank the user takes for a layout bug.
         Some("img") => {
+            // Only maxx's own writing is drawn from the disk. A hand-written
+            // `img("logo.png")` is an asset of the application, looked up in an
+            // `AssetSource` the canvas has no access to: showing the file of
+            // the same name would promise something the binary will not draw.
             let source = registry::of(node)
                 .and_then(|spec| spec.props.first())
+                .filter(|prop| registry::editable(node, prop))
                 .and_then(|prop| registry::read(node, prop))
                 .unwrap_or_default();
             match root.filter(|_| !source.is_empty()) {

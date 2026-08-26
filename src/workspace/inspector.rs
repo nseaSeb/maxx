@@ -378,6 +378,12 @@ impl Workspace {
             if let Ok(Ok(Some(paths))) = paths.await
                 && let Some(path) = paths.into_iter().next()
             {
+                // Resolved before being compared: `Project::open` canonicalizes
+                // the root, and the panel hands back what the user clicked. On
+                // a project reached through a symlink — `/tmp` on macOS — the
+                // two spellings never match, and a file sitting in the
+                // project's own `assets/` was called foreign.
+                let path = path.canonicalize().unwrap_or(path);
                 this.update(cx, |this, cx| match path.strip_prefix(&root) {
                     // Written with forward slashes whatever the system: it is
                     // the one spelling `PathBuf` reads everywhere, and the file

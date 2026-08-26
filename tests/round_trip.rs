@@ -605,13 +605,40 @@ fn an_image_path_is_written_read_back_and_still_editable() {
     // The import travels with it: `PathBuf` sits on the base, not on a call,
     // and nothing else in the tree would bring it in.
     let mut root = maxx::model::Node::known("v_flex");
-    root.push_child(node);
+    root.push_child(node.clone());
     assert!(maxx::registry::imports(&root).contains(&"use std::path::PathBuf;"));
 
     // An absolute path is refused rather than written: it would resolve on one
-    // machine only.
+    // machine only. Refused by `write` too, and not only reported by
+    // `validate` — the inspector writes first and says afterwards, so a kind
+    // that only complains still lets the value reach the file.
     assert!(maxx::registry::validate(source, "/Users/someone/logo.png").is_some());
     assert!(maxx::registry::validate(source, "assets/logo.png").is_none());
+    maxx::registry::write(&mut node, source, "/Users/someone/logo.png");
+    assert_eq!(maxx::codegen::render(&node, 0), "img(PathBuf::from(\"assets/logo.png\"))");
+}
+
+/// A path is decoded the way it was encoded, escape for escape.
+///
+/// Undoing `\\` alone left `\"` behind, and the next write escaped its
+/// backslash again: the argument grew by one on every keystroke.
+#[test]
+fn an_awkward_file_name_does_not_grow_on_every_edit() {
+    let mut node = maxx::registry::instantiate("image").expect("image is in the catalogue");
+    let spec = maxx::registry::of(&node).expect("img is in the catalogue");
+    let source = &spec.props[0];
+
+    let awkward = "assets/a \"quoted\" name.png";
+    maxx::registry::write(&mut node, source, awkward);
+    let rendered = maxx::codegen::render(&node, 0);
+
+    let back = maxx::parser::parse_expr(&rendered).expect("the expression must read back");
+    assert_eq!(maxx::registry::read(&back, source).as_deref(), Some(awkward));
+
+    // And writing what was read back changes nothing more.
+    let mut again = back;
+    maxx::registry::write(&mut again, source, awkward);
+    assert_eq!(maxx::codegen::render(&again, 0), rendered);
 }
 
 /// A hand-written source expression is shown and never overwritten.
