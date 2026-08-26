@@ -87,7 +87,9 @@ fn every_component_of_the_catalogue_is_written_out() {
 
     let source = std::fs::read_to_string(&path).unwrap();
     for spec in maxx::registry::CATALOGUE {
-        assert!(source.contains(spec.import), "l'import de {} manque", spec.label);
+        for line in spec.imports {
+            assert!(source.contains(line), "{} is missing {line}", spec.label);
+        }
     }
 
     // And the file still parses back to the same number of nodes.

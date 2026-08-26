@@ -436,7 +436,7 @@ fn every_catalogue_entry_writes_and_reads_back() {
             spec.id
         );
         assert!(
-            spec.import.starts_with("use ") && spec.import.ends_with(';'),
+            spec.imports.iter().all(|line| line.starts_with("use ") && line.ends_with(';')),
             "{}: the import is not a complete `use` line",
             spec.id
         );
@@ -682,6 +682,12 @@ fn scrolling_writes_the_pair_it_needs() {
     let rendered = maxx::codegen::render(&column, 0);
     assert!(rendered.contains(".overflow_y_scroll()"), "{rendered}");
     assert!(rendered.contains(".id("), "the offset needs somewhere to live: {rendered}");
+    // And before the overflow: `overflow_y_scroll` lives on a stateful element,
+    // so gpui only offers it once `id` has been called. Written the other way
+    // round, the chain does not compile — in the developer's project, not here.
+    let id = rendered.find(".id(").expect("just asserted");
+    let overflow = rendered.find(".overflow_y_scroll(").expect("just asserted");
+    assert!(id < overflow, "the id has to come first: {rendered}");
     // And a box whose height follows its content grows instead of scrolling.
     assert!(rendered.contains(".h_full()"), "the axis that scrolls is held: {rendered}");
 

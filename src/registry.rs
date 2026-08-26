@@ -110,8 +110,13 @@ pub struct Spec {
     pub label: &'static str,
     /// Constructor path emitted in the generated code.
     pub base: &'static str,
-    /// `use` line the generated file needs for this component.
-    pub import: &'static str,
+    /// The `use` lines the generated file needs for this component.
+    ///
+    /// A list and not one line: a variant or a `disabled` comes from a trait,
+    /// and a trait has to be in scope. With the type alone, the call is a
+    /// method the generated project does not have — and it says so only when
+    /// the developer builds it.
+    pub imports: &'static [&'static str],
     /// Whether this component accepts children.
     pub container: bool,
     /// Constructor arguments used when the component is first dropped.
@@ -174,7 +179,12 @@ const PADDINGS: &[&str] = &["p_0", "p_1", "p_2", "p_3", "p_4", "p_6", "p_8"];
 const ALIGNS: &[&str] = &["items_start", "items_center", "items_end"];
 const VARIANTS: &[&str] = &["primary", "danger", "outline", "ghost", "link"];
 const TEXT_SIZES: &[&str] = &["text_xs", "text_sm", "text_base", "text_lg", "text_xl", "text_2xl"];
-const WEIGHTS: &[&str] = &["font_normal", "font_medium", "font_semibold", "font_bold"];
+/// gpui has no `font_medium()`: the weight goes through `font_weight`, which
+/// takes a variant. Written as a family of no-argument methods — the shape
+/// every other choice has — it produced a project that would not compile, on a
+/// line maxx wrote itself, and only when the developer built it.
+const WEIGHTS: &[&str] =
+    &["FontWeight::NORMAL", "FontWeight::MEDIUM", "FontWeight::SEMIBOLD", "FontWeight::BOLD"];
 /// How an image's box relates to what holds it: as wide as the picture, never
 /// wider than the container, or exactly the container.
 const IMAGE_SIZES: &[&str] = &["max_w_full", "w_full"];
@@ -214,7 +224,11 @@ pub const COMMON: &[Prop] = &[
 pub const TEXT_COMMON: &[Prop] = &[
     Prop { label: "prop.text_color", target: Target::Method("text_color"), kind: Kind::Color },
     Prop { label: "prop.text_size", target: Target::Family(TEXT_SIZES), kind: Kind::Choice },
-    Prop { label: "prop.weight", target: Target::Family(WEIGHTS), kind: Kind::Choice },
+    Prop {
+        label: "prop.weight",
+        target: Target::Variant("font_weight", WEIGHTS),
+        kind: Kind::Choice,
+    },
 ];
 
 /// The catalogue. Adding a component means adding an entry here and a branch in
@@ -224,7 +238,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "column",
         label: "component.column",
         base: "v_flex",
-        import: "use gpui_component::v_flex;",
+        imports: &["use gpui_component::v_flex;"],
         container: true,
         default_args: &[],
         default_calls: &[],
@@ -247,7 +261,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "row",
         label: "component.row",
         base: "h_flex",
-        import: "use gpui_component::h_flex;",
+        imports: &["use gpui_component::h_flex;"],
         container: true,
         default_args: &[],
         default_calls: &[],
@@ -270,7 +284,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "label",
         label: "component.label",
         base: "Label::new",
-        import: "use gpui_component::label::Label;",
+        imports: &["use gpui_component::label::Label;"],
         container: false,
         default_args: &["Label"],
         default_calls: &[],
@@ -283,7 +297,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "input",
         label: "component.input",
         base: "Input::new",
-        import: "use gpui_component::input::Input;",
+        imports: &["use gpui_component::input::Input;"],
         container: false,
         default_args: &[],
         default_calls: &[],
@@ -300,7 +314,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "select",
         label: "component.select",
         base: "Select::new",
-        import: "use gpui_component::select::Select;",
+        imports: &["use gpui_component::select::Select;"],
         container: false,
         default_args: &[],
         default_calls: &[],
@@ -325,7 +339,13 @@ pub const CATALOGUE: &[Spec] = &[
         id: "button",
         label: "component.button",
         base: "Button::new",
-        import: "use gpui_component::button::Button;",
+        // The variants come from a trait, and a trait has to be in scope: with
+        // `Button` alone, `.primary()` is a method the generated project does
+        // not have, and it says so only when the developer builds it.
+        imports: &[
+            "use gpui_component::button::{Button, ButtonVariants};",
+            "use gpui_component::Disableable;",
+        ],
         container: false,
         default_args: &["button"],
         default_calls: &[],
@@ -345,7 +365,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "checkbox",
         label: "component.checkbox",
         base: "Checkbox::new",
-        import: "use gpui_component::checkbox::Checkbox;",
+        imports: &["use gpui_component::checkbox::Checkbox;"],
         container: false,
         default_args: &["checkbox"],
         default_calls: &[],
@@ -363,7 +383,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "switch",
         label: "component.switch",
         base: "Switch::new",
-        import: "use gpui_component::switch::Switch;",
+        imports: &["use gpui_component::switch::Switch;"],
         container: false,
         default_args: &["switch"],
         default_calls: &[],
@@ -381,7 +401,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "group_box",
         label: "component.group_box",
         base: "GroupBox::new",
-        import: "use gpui_component::group_box::GroupBox;",
+        imports: &["use gpui_component::group_box::GroupBox;"],
         container: true,
         default_args: &[],
         default_calls: &[],
@@ -394,7 +414,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "divider",
         label: "component.divider",
         base: "Divider::horizontal",
-        import: "use gpui_component::divider::Divider;",
+        imports: &["use gpui_component::divider::Divider;"],
         container: false,
         default_args: &[],
         default_calls: &[],
@@ -407,7 +427,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "radio",
         label: "component.radio",
         base: "Radio::new",
-        import: "use gpui_component::radio::Radio;",
+        imports: &["use gpui_component::radio::Radio;", "use gpui_component::Disableable;"],
         container: false,
         default_args: &["radio"],
         default_calls: &[],
@@ -426,7 +446,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "link",
         label: "component.link",
         base: "Link::new",
-        import: "use gpui_component::link::Link;",
+        imports: &["use gpui_component::link::Link;", "use gpui_component::Disableable;"],
         // `Link` is a `ParentElement`: its text is a child, not an argument. A
         // label dropped inside it is what writes it.
         container: true,
@@ -445,7 +465,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "alert",
         label: "component.alert",
         base: "Alert::new",
-        import: "use gpui_component::alert::Alert;",
+        imports: &["use gpui_component::alert::Alert;"],
         container: false,
         default_args: &["alert", "Message"],
         default_calls: &[],
@@ -462,7 +482,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "tag",
         label: "component.tag",
         base: "Tag::new",
-        import: "use gpui_component::tag::Tag;",
+        imports: &["use gpui_component::tag::Tag;"],
         container: true,
         default_args: &[],
         default_calls: &[],
@@ -482,7 +502,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "progress",
         label: "component.progress",
         base: "Progress::new",
-        import: "use gpui_component::progress::Progress;",
+        imports: &["use gpui_component::progress::Progress;"],
         container: false,
         default_args: &[],
         default_calls: &[],
@@ -495,7 +515,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "image",
         label: "component.image",
         base: "img",
-        import: "use gpui::img;",
+        imports: &["use gpui::img;"],
         container: false,
         default_args: &["assets/images/image.png"],
         // A photograph is two thousand pixels wide, and a view is five hundred:
@@ -525,7 +545,7 @@ pub const CATALOGUE: &[Spec] = &[
         id: "spacer",
         label: "component.spacer",
         base: "div",
-        import: "use gpui::div;",
+        imports: &["use gpui::div;"],
         container: false,
         default_args: &[],
         default_calls: &[],
@@ -1143,15 +1163,23 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
         Target::Scrollable(name) => {
             let hold = hold_for(name);
             let size = if name == "overflow_x_scroll" { "w" } else { "h" };
-            node.set_flag(name, value == "true");
             if value == "true" {
-                // Without an id, gpui has nowhere to keep the scroll offset:
-                // the content is clipped and never moves. The workspace assigns
-                // one no sibling is using before it gets here; this is the
-                // fallback for a node written without it.
+                // Before the overflow, and that is not a matter of taste:
+                // `overflow_y_scroll` lives on a *stateful* element, so gpui
+                // only offers it once `id` has been called. Written the other
+                // way round, the chain does not compile — and only when the
+                // developer builds their project.
+                //
+                // The id is also where gpui keeps the scroll offset: without
+                // one, the content is clipped and never moves. The workspace
+                // assigns one no sibling is using before it gets here; this is
+                // the fallback for a node written without it.
                 if node.call("id").is_none() {
                     node.set_call("id", Arg::Str("scroll".into()));
                 }
+            }
+            node.set_flag(name, value == "true");
+            if value == "true" {
                 // And nothing scrolls inside a box whose size follows its own
                 // content: it grows instead, and the window cuts it. The axis
                 // that scrolls is the one that has to be held — unless a size
@@ -1184,10 +1212,12 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
 pub fn imports(root: &Node) -> Vec<&'static str> {
     let mut lines: Vec<&'static str> = Vec::new();
     root.walk(&mut |_, node| {
-        if let Some(spec) = of(node)
-            && !lines.contains(&spec.import)
-        {
-            lines.push(spec.import);
+        if let Some(spec) = of(node) {
+            for line in spec.imports {
+                if !lines.contains(line) {
+                    lines.push(line);
+                }
+            }
         }
         // A path argument brings `PathBuf` with it, and it sits on the base
         // rather than on a call: an image is written `img(PathBuf::from(..))`.
@@ -1208,6 +1238,7 @@ pub fn imports(root: &Node) -> Vec<&'static str> {
                     ("px(", "use gpui::px;"),
                     ("rgb(0x", "use gpui::rgb;"),
                     ("ObjectFit::", "use gpui::ObjectFit;"),
+                    ("FontWeight::", "use gpui::FontWeight;"),
                 ] {
                     if source.starts_with(needle) && !lines.contains(&line) {
                         lines.push(line);

@@ -7,7 +7,7 @@
 use rust_i18n::t;
 
 use gpui::prelude::*;
-use gpui::{AnyElement, Context, Div, SharedString, div, img, px};
+use gpui::{AnyElement, Context, SharedString, div, img, px};
 use gpui_component::alert::Alert;
 use gpui_component::button::Button;
 use gpui_component::checkbox::Checkbox;
@@ -1415,9 +1415,7 @@ fn preview(
                 // call: a preview that clamps what the generated code lets
                 // grow — or ignores a fill mode the binary honours — shows
                 // something that will not happen, and the switches look broken.
-                Some(root) => img(root.join(&source))
-                    .when(node.call("max_w_full").is_some(), |image| image.max_w_full())
-                    .when(node.call("w_full").is_some(), |image| image.w_full())
+                Some(root) => apply(img(root.join(&source)), &node.calls)
                     .map(|image| match object_fit(node) {
                         Some(fit) => image.object_fit(fit),
                         None => image,
@@ -1531,8 +1529,9 @@ fn call_bool(node: &Node, name: &str) -> bool {
 ///
 /// A call that is not listed here is still carried by the model and written to
 /// the file; it simply has no effect on the preview.
-fn apply(mut element: Div, calls: &[Call]) -> Div {
+fn apply<T: Styled>(mut element: T, calls: &[Call]) -> T {
     for call in calls {
+        let argument = call.args.first().map(|arg| arg.to_source()).unwrap_or_default();
         element = match call.name.as_str() {
             "gap_0" => element.gap_0(),
             "gap_1" => element.gap_1(),
@@ -1552,8 +1551,58 @@ fn apply(mut element: Div, calls: &[Call]) -> Div {
             "items_center" => element.items_center(),
             "items_end" => element.items_end(),
             "flex_1" => element.flex_1(),
+            // The shared properties, which the panel puts first and the board
+            // used to ignore: a width typed in the inspector reached the file
+            // and changed nothing on screen, which reads as a defect of the
+            // field rather than of the preview.
+            "w" => match pixels(&argument) {
+                Some(value) => element.w(px(value)),
+                None => element,
+            },
+            "h" => match pixels(&argument) {
+                Some(value) => element.h(px(value)),
+                None => element,
+            },
+            "w_full" => element.w_full(),
+            "h_full" => element.h_full(),
+            "size_full" => element.size_full(),
+            "max_w_full" => element.max_w_full(),
+            "bg" => match colour(&argument) {
+                Some(value) => element.bg(value),
+                None => element,
+            },
+            "text_color" => match colour(&argument) {
+                Some(value) => element.text_color(value),
+                None => element,
+            },
+            "text_xs" => element.text_xs(),
+            "text_sm" => element.text_sm(),
+            "text_base" => element.text_base(),
+            "text_lg" => element.text_lg(),
+            "text_xl" => element.text_xl(),
+            "text_2xl" => element.text_2xl(),
+            "font_normal" => element.font_weight(gpui::FontWeight::NORMAL),
+            "font_medium" => element.font_weight(gpui::FontWeight::MEDIUM),
+            "font_semibold" => element.font_weight(gpui::FontWeight::SEMIBOLD),
+            "font_bold" => element.font_weight(gpui::FontWeight::BOLD),
+            "rounded_none" => element.rounded_none(),
+            "rounded_sm" => element.rounded_sm(),
+            "rounded_md" => element.rounded_md(),
+            "rounded_lg" => element.rounded_lg(),
+            "rounded_full" => element.rounded_full(),
             _ => element,
         };
     }
     element
+}
+
+/// `px(40.)` read back as a number, for the preview.
+fn pixels(source: &str) -> Option<f32> {
+    source.strip_prefix("px(")?.strip_suffix(')')?.trim_end_matches('.').parse().ok()
+}
+
+/// `rgb(0x1e2127)` read back as a colour, for the preview.
+fn colour(source: &str) -> Option<gpui::Rgba> {
+    let hex = source.strip_prefix("rgb(0x")?.strip_suffix(')')?;
+    u32::from_str_radix(hex, 16).ok().map(gpui::rgb)
 }
