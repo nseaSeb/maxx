@@ -1102,3 +1102,63 @@ fn a_handler_matches_the_component_it_hangs_on() {
     assert!(source.contains("use gpui::ClickEvent;"), "and the import comes only with the button");
     assert_eq!(source.matches("use gpui::ClickEvent;").count(), 1, "{source}");
 }
+
+/// An image chosen from anywhere on the disk comes into the project.
+///
+/// The path written is read from the directory the binary starts in — the
+/// project root — so an image that stays on the desktop draws on the canvas and
+/// nowhere else. The project has to carry its own.
+#[test]
+fn an_image_is_brought_into_the_project() {
+    let root = scratch("maxx_assets");
+    scaffold::create_project(&root, "trial").expect("the project must be created");
+
+    let outside = std::env::temp_dir().join("maxx_outside_logo.png");
+    std::fs::write(&outside, b"first").unwrap();
+
+    let written = scaffold::import_asset(&root, &outside).expect("the image must be imported");
+    assert_eq!(written, "assets/images/maxx_outside_logo.png");
+    assert_eq!(std::fs::read(root.join(&written)).unwrap(), b"first");
+
+    // The same file again is recognised by its bytes, not imported twice.
+    let again = scaffold::import_asset(&root, &outside).expect("the image must be imported");
+    assert_eq!(again, written);
+
+    // A different file of the same name is numbered rather than put in its
+    // place: the view that points at the first one keeps pointing at it.
+    std::fs::write(&outside, b"second").unwrap();
+    let other = scaffold::import_asset(&root, &outside).expect("the image must be imported");
+    assert_eq!(other, "assets/images/maxx_outside_logo-2.png");
+    assert_eq!(std::fs::read(root.join(&written)).unwrap(), b"first");
+}
+
+/// A file already in the project stays where the developer put it.
+#[test]
+fn an_image_already_in_the_project_is_not_moved() {
+    let root = scratch("maxx_assets_inside");
+    scaffold::create_project(&root, "trial").expect("the project must be created");
+
+    let inside = root.join("pictures");
+    std::fs::create_dir_all(&inside).unwrap();
+    std::fs::write(inside.join("logo.png"), b"mine").unwrap();
+
+    let written = scaffold::import_asset(&root, &inside.join("logo.png")).expect("must be taken");
+    assert_eq!(written, "pictures/logo.png");
+    assert!(!root.join("assets/images/logo.png").exists(), "nothing was copied");
+}
+
+/// What gpui cannot decode is refused on the way in.
+///
+/// It would draw nothing, with no error to see — which reads as a layout bug
+/// rather than as a file maxx never had a chance with.
+#[test]
+fn a_file_that_is_not_an_image_is_refused() {
+    let root = scratch("maxx_assets_refused");
+    scaffold::create_project(&root, "trial").expect("the project must be created");
+
+    let outside = std::env::temp_dir().join("maxx_not_an_image.txt");
+    std::fs::write(&outside, b"hello").unwrap();
+
+    assert!(scaffold::import_asset(&root, &outside).is_err());
+    assert!(!root.join("assets").exists(), "and nothing was created for it");
+}

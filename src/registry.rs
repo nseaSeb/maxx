@@ -393,7 +393,7 @@ pub const CATALOGUE: &[Spec] = &[
         base: "img",
         import: "use gpui::img;",
         container: false,
-        default_args: &["assets/image.png"],
+        default_args: &["assets/images/image.png"],
         props: &[Prop { label: "prop.source", target: Target::BaseArg(0), kind: Kind::Path }],
         handler: None,
         state: None,

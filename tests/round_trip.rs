@@ -593,10 +593,10 @@ fn an_image_path_is_written_read_back_and_still_editable() {
     let source = &spec.props[0];
 
     let rendered = maxx::codegen::render(&node, 0);
-    assert_eq!(rendered, "img(PathBuf::from(\"assets/image.png\"))");
+    assert_eq!(rendered, "img(PathBuf::from(\"assets/images/image.png\"))");
 
     let back = maxx::parser::parse_expr(&rendered).expect("the expression must read back");
-    assert_eq!(maxx::registry::read(&back, source).as_deref(), Some("assets/image.png"));
+    assert_eq!(maxx::registry::read(&back, source).as_deref(), Some("assets/images/image.png"));
     assert!(maxx::registry::editable(&back, source), "the inspector must own this argument");
 
     maxx::registry::write(&mut node, source, "assets/logo.png");

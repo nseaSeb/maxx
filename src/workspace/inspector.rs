@@ -357,12 +357,16 @@ impl Workspace {
         }
     }
 
-    /// Asks for a file and writes it as a path relative to the project.
+    /// Asks for an image and brings it into the project.
     ///
-    /// Relative, or refused: the generated binary reads from the directory
-    /// `cargo run` starts in — the project root — so a file taken from
-    /// somewhere else on the disk would show on this machine and nowhere else.
-    /// Saying so beats writing a path that quietly stops working.
+    /// A file from anywhere on the disk is copied under `assets/images/` rather
+    /// than refused: the generated binary reads from the directory it starts
+    /// in — the project root — so a path pointing outside would draw on this
+    /// canvas and nowhere else. The project has to carry its own images.
+    ///
+    /// The dialog does not filter: `PathPromptOptions` has no extension list to
+    /// give it. What is not an image gpui can decode is refused on the way in,
+    /// by [`crate::scaffold::import_asset`], which reads gpui's own list.
     pub fn pick_path(&mut self, prop: &'static crate::registry::Prop, cx: &mut Context<Self>) {
         let Some(root) = self.project().map(|project| project.root.clone()) else {
             return;
@@ -378,22 +382,10 @@ impl Workspace {
             if let Ok(Ok(Some(paths))) = paths.await
                 && let Some(path) = paths.into_iter().next()
             {
-                // Resolved before being compared: `Project::open` canonicalizes
-                // the root, and the panel hands back what the user clicked. On
-                // a project reached through a symlink — `/tmp` on macOS — the
-                // two spellings never match, and a file sitting in the
-                // project's own `assets/` was called foreign.
-                let path = path.canonicalize().unwrap_or(path);
-                this.update(cx, |this, cx| match path.strip_prefix(&root) {
-                    // Written with forward slashes whatever the system: it is
-                    // the one spelling `PathBuf` reads everywhere, and the file
-                    // travels with the project.
-                    Ok(relative) => {
-                        let value = relative.to_string_lossy().replace('\\', "/");
-                        this.edit_prop(prop, &value, cx);
-                    }
-                    Err(_) => {
-                        this.message = Some(crate::tr("error.outside_project"));
+                this.update(cx, |this, cx| match crate::scaffold::import_asset(&root, &path) {
+                    Ok(value) => this.edit_prop(prop, &value, cx),
+                    Err(error) => {
+                        this.message = Some(SharedString::from(error));
                         cx.notify();
                     }
                 })

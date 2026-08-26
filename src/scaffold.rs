@@ -7,6 +7,68 @@
 use std::io;
 use std::path::Path;
 
+/// Where an image dropped on a view is kept.
+///
+/// Under `assets/`, because that is the name every framework gives it and the
+/// one a developer opening the project will look for; under `images/`, because
+/// fonts and icons will want their own place beside it.
+pub const IMAGE_DIRECTORY: &str = "assets/images";
+
+/// Copies `file` into the project and answers the path to write, relative to
+/// the root, with forward slashes.
+///
+/// Relative and inside the project, or the image shows on one machine only:
+/// `img(PathBuf::from(..))` is read from the directory the binary starts in,
+/// which is the project root. Picking a file from the desktop and writing its
+/// absolute path would draw on the canvas and nowhere else.
+///
+/// A file already inside the project is left exactly where it is — that is the
+/// developer's layout, and moving it would break whatever else points at it.
+///
+/// A name already taken by a *different* file is numbered rather than
+/// overwritten; the same file imported twice is recognised by its bytes and
+/// imported once.
+pub fn import_asset(root: &Path, file: &Path) -> Result<String, String> {
+    let extension =
+        file.extension().and_then(|value| value.to_str()).unwrap_or_default().to_lowercase();
+    // The list is gpui's own, read back rather than written a second time: an
+    // extension it cannot decode would draw nothing, with no error to see.
+    if !gpui::Img::extensions().contains(&extension.as_str()) {
+        return Err(crate::tr("error.not_an_image").to_string());
+    }
+
+    let resolved = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
+    let inside = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    if let Ok(relative) = resolved.strip_prefix(&inside) {
+        return Ok(slashed(relative));
+    }
+
+    let stem = file.file_stem().and_then(|value| value.to_str()).unwrap_or("image").to_string();
+    let directory = root.join(IMAGE_DIRECTORY);
+    std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+
+    let bytes = std::fs::read(&resolved).map_err(|error| error.to_string())?;
+    let mut name = format!("{stem}.{extension}");
+    let mut index = 2;
+    while directory.join(&name).exists()
+        && std::fs::read(directory.join(&name)).is_ok_and(|existing| existing != bytes)
+    {
+        name = format!("{stem}-{index}.{extension}");
+        index += 1;
+    }
+
+    std::fs::write(directory.join(&name), &bytes).map_err(|error| error.to_string())?;
+    Ok(format!("{IMAGE_DIRECTORY}/{name}"))
+}
+
+/// A path written the one way `PathBuf` reads everywhere.
+fn slashed(path: &Path) -> String {
+    path.components()
+        .map(|component| component.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 /// Creates a runnable GPUI project at `root`.
 pub fn create_project(root: &Path, name: &str) -> io::Result<()> {
     // Never write over an existing crate: `src/ui/mod.rs` and `src/main.rs`

@@ -65,9 +65,18 @@ Ce qui reste de ce côté :
   `PathBuf::from("…")`, un import qui vient de la base et non d'un appel, et
   un refus des chemins absolus.
 
-  Ce qui reste : **`assets.rs`**, le module qui déclarerait un `AssetSource`
-  et permettrait l'image embarquée, donc un binaire qui se déplace sans son
-  dossier. Et les **propriétés de style sur l'aperçu** : `apply` ne prend
+  Une image choisie ailleurs sur le disque est **copiée dans
+  `assets/images/`** plutôt que refusée : le projet doit porter ses images,
+  sinon elles ne s'affichent que sur la machine où on les a choisies. Un
+  fichier déjà dans le projet reste où il est, un homonyme différent est
+  numéroté, et le même fichier réimporté est reconnu à ses octets.
+
+  Ce qui reste, et qui se voit : **le chemin est lu depuis le répertoire
+  courant du processus**. `cargo run` démarre à la racine, donc l'image
+  s'affiche quand maxx lance le projet ou quand on le lance soi-même depuis
+  sa racine — et pas si on double-clique le binaire, dont le répertoire
+  courant est ailleurs. C'est ce que **`assets.rs`** réglera : le module qui
+  déclarerait un `AssetSource`, donc l'image embarquée dans le binaire. Et les **propriétés de style sur l'aperçu** : `apply` ne prend
   qu'un `Div`, donc la largeur et la hauteur posées sur une image sont
   écrites dans le fichier mais pas montrées sur le canvas.
 

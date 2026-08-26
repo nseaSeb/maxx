@@ -215,9 +215,9 @@ error.no_render_impl:
 error.path_without_name:
   en: "path with no file name"
   fr: "chemin sans nom de fichier"
-error.outside_project:
-  en: "a file of the project: this one is elsewhere on the disk"
-  fr: "un fichier du projet : celui-ci est ailleurs sur le disque"
+error.not_an_image:
+  en: "an image gpui can read: png, jpg, gif, webp, svg…"
+  fr: "une image que gpui sait lire : png, jpg, gif, webp, svg…"
 error.path_relative:
   en: "a path relative to the project, so it still resolves elsewhere"
   fr: "un chemin relatif au projet, pour qu'il vaille encore ailleurs"

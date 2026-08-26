@@ -78,9 +78,13 @@ maigre : `Fichier ▸ Nouveau projet…` écrit toujours le même squelette.
   ni un littéral ni une liaison `&self.` —, un chemin absolu refusé plutôt
   qu'écrit, et un bouton *Choisir* qui rend relatif ce que le sélecteur donne.
 
-  Reste **`assets.rs`** : le module qui déclare un `AssetSource`, et avec lui
-  l'image embarquée — un binaire qui se déplace sans son dossier. C'est la
-  seconde moitié, et elle est indépendante.
+  Une image prise ailleurs est copiée dans `assets/images/` : le projet porte
+  ses images, ou elles ne s'affichent que sur la machine qui les a choisies.
+
+  Reste **`assets.rs`**, et ce n'est plus optionnel : le chemin est lu depuis
+  le répertoire courant du processus, donc l'image s'affiche sous `cargo run`
+  lancé à la racine et pas sur un binaire double-cliqué. Le module qui déclare
+  un `AssetSource` est ce qui embarque l'image dedans.
 - **`window.rs`.** maxx retient la géométrie de sa fenêtre ; toute application
   de bureau la veut, et personne n'a envie de la réécrire.
 
