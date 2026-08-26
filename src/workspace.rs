@@ -203,6 +203,11 @@ pub struct Workspace {
     was_active: bool,
     /// Scroll position of the right-hand panels.
     pub(crate) side_scroll: ScrollHandle,
+    /// The natural size of the selected image, when there is one.
+    ///
+    /// Read once per selection rather than once per frame: `image_dimensions`
+    /// opens the file, and the inspector redraws sixty times a second.
+    pub(crate) image_size: Option<(u32, u32)>,
     /// The canvas scrolls on its own: a view taller than the window — an image
     /// at its natural size is enough — was cut off with no way down.
     pub(crate) canvas_scroll: ScrollHandle,
@@ -259,6 +264,7 @@ impl Workspace {
             was_active: false,
             side_scroll: ScrollHandle::new(),
             canvas_scroll: ScrollHandle::new(),
+            image_size: None,
             output_scroll: UniformListScrollHandle::new(),
         };
         workspace.refresh_entries();

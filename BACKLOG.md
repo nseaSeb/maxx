@@ -80,6 +80,25 @@ Ce qui reste de ce côté :
   savoir poser des appels par défaut, `default_calls`, et pas seulement des
   arguments : c'est une table, pas un cas particulier dans le code.
 
+  Trois finitions de plus, venues de l'usage : la **Taille** est un choix à
+  trois états — naturelle, jamais plus large que le conteneur, ou exactement le
+  conteneur — et non un interrupteur, parce que la question a trois réponses ;
+  l'**Ajustement** expose `ObjectFit` de gpui, donc `Contain`, `Cover`, `Fill`,
+  `ScaleDown` et `None`, ce qui a demandé une cible qui écrit une variante
+  d'énumération (`Target::Variant`) — la sorte d'argument que le backlog
+  réclamait pour l'icône, et qui existe donc maintenant ; et la **taille
+  naturelle** s'affiche à côté de la vignette, sans quoi aucune largeur n'est
+  pensable.
+
+  Ce qui reste, et que l'usage a demandé : **écrire les dimensions en
+  commentaire dans le code**, ou des annotations à nous. Ce n'est pas
+  possible en l'état — `syn` jette les commentaires et `codegen` réécrit la
+  zone gérée depuis le modèle, donc tout commentaire posé entre les marqueurs
+  disparaîtrait au `⌘S` suivant. Il faudrait que le modèle porte les
+  annotations et que le lecteur les récupère avant `syn`, ce qui est un
+  chantier à part entière — et le seul qui permettrait aussi de garder les
+  commentaires que le développeur écrit *dans* la zone gérée.
+
   **Le sélecteur ne filtre pas, et ne le peut pas** : `PathPromptOptions` de
   gpui n'a que `files`, `directories`, `multiple` et `prompt`, et son panneau
   macOS n'appelle jamais `setAllowedFileTypes`. Filtrer demanderait une autre

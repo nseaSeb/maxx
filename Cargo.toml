@@ -36,6 +36,10 @@ schemars = "1"
 # `set_locale` y écrit le même global que celui-ci. Le prendre en dépendance
 # directe ne coûte donc rien au build.
 rust-i18n = "3"
+# Déjà dans l'arbre en 0.25 par gpui, qui décode les images avec : `image_dimensions`
+# n'en lit que l'en-tête, et c'est ce qui permet de dire à l'inspecteur combien
+# de pixels fait vraiment la photographie qu'on vient de poser.
+image = "0.25"
 
 [profile.dev]
 opt-level = 0

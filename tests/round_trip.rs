@@ -752,17 +752,54 @@ fn a_path_that_leaves_the_project_is_refused() {
 }
 
 /// What the table says a component needs on its first frame, it gets.
+///
+/// And the two questions an image raises are kept apart: how its box relates to
+/// what holds it, and how the picture fills that box.
 #[test]
-fn a_dropped_image_fits_and_can_be_told_not_to() {
+fn a_dropped_image_fits_and_the_two_sizes_are_separate() {
     let mut node = maxx::registry::instantiate("image").expect("image is in the catalogue");
     let spec = maxx::registry::of(&node).expect("img is in the catalogue");
+    let size = spec.props.iter().find(|prop| prop.label == "prop.size").expect("an image sizes");
     let fit = spec.props.iter().find(|prop| prop.label == "prop.fit").expect("an image fits");
 
-    assert_eq!(maxx::registry::read(&node, fit).as_deref(), Some("true"));
-    assert!(maxx::registry::covers(spec, "max_w_full"), "the switch owns the call it writes");
+    assert_eq!(maxx::registry::read(&node, size).as_deref(), Some("max_w_full"));
+    assert!(maxx::registry::covers(spec, "max_w_full"), "the choice owns the call it writes");
 
-    maxx::registry::write(&mut node, fit, "false");
-    assert!(!maxx::codegen::render(&node, 0).contains("max_w_full"));
+    maxx::registry::write(&mut node, size, "w_full");
+    let rendered = maxx::codegen::render(&node, 0);
+    assert!(rendered.contains(".w_full()") && !rendered.contains("max_w_full"), "{rendered}");
+
+    // The fill mode is an enum variant, written out as it goes into the file,
+    // and it brings its type with it.
+    maxx::registry::write(&mut node, fit, "ObjectFit::Cover");
+    let rendered = maxx::codegen::render(&node, 0);
+    assert!(rendered.contains(".object_fit(ObjectFit::Cover)"), "{rendered}");
+
+    let mut root = maxx::model::Node::known("v_flex");
+    root.push_child(node.clone());
+    assert!(maxx::registry::imports(&root).contains(&"use gpui::ObjectFit;"));
+
+    // Read back from what was written, and refused when it is not one of them.
+    let back = maxx::parser::parse_expr(&rendered).expect("must read back");
+    assert_eq!(maxx::registry::read(&back, fit).as_deref(), Some("ObjectFit::Cover"));
+    maxx::registry::write(&mut node, fit, "ObjectFit::Whatever");
+    assert!(maxx::codegen::render(&node, 0).contains("ObjectFit::Cover"));
+}
+
+/// The shared style properties follow the component.
+///
+/// An image draws no text of its own: offering it a font weight is five rows
+/// that do nothing, drowning the two that matter.
+#[test]
+fn an_image_is_not_offered_text_properties() {
+    let image = maxx::registry::by_id("image").expect("image is in the catalogue");
+    let label = maxx::registry::by_id("label").expect("label is in the catalogue");
+
+    let labels =
+        |spec| maxx::registry::props(spec).iter().map(|prop| prop.label).collect::<Vec<_>>();
+    assert!(!labels(image).contains(&"prop.weight"), "{:?}", labels(image));
+    assert!(labels(image).contains(&"prop.width"), "a box still has a size");
+    assert!(labels(label).contains(&"prop.weight"), "a label writes text");
 }
 
 /// The id handed out avoids the ones written as constructor arguments too.

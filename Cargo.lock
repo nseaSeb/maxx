@@ -3365,6 +3365,7 @@ version = "0.1.0"
 dependencies = [
  "gpui",
  "gpui-component",
+ "image",
  "proc-macro2",
  "quote",
  "rust-i18n",

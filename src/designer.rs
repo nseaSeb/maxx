@@ -730,6 +730,15 @@ impl Workspace {
                     Some(state) if matches!(prop.kind, Kind::Path) => row
                         .child(thumbnail(&current, self.project().map(|p| p.root.as_path())))
                         .child(div().flex_1().child(Input::new(state).small()))
+                        // How many pixels the picture really has: a width is
+                        // not thinkable without it, and the field says nothing.
+                        .children(self.image_size.map(|(width, height)| {
+                            div()
+                                .flex_none()
+                                .text_xs()
+                                .text_color(theme::text_muted())
+                                .child(SharedString::from(format!("{width} × {height}")))
+                        }))
                         .child(
                             div()
                                 .id(SharedString::from(format!("pick-{}", prop.label)))
@@ -778,6 +787,9 @@ impl Workspace {
             Kind::Choice => {
                 let names = match prop.target {
                     crate::registry::Target::Family(names) => names,
+                    // A list of enum variants cycles exactly like a family of
+                    // methods: one of them applies, or none.
+                    crate::registry::Target::Variant(_, values) => values,
                     _ => &[][..],
                 };
                 let next = next_in_family(names, &current);

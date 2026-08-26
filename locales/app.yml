@@ -732,8 +732,8 @@ prop.disabled:
   en: "Disabled"
   fr: "Désactivé"
 prop.fit:
-  en: "Fits"
-  fr: "S'adapte"
+  en: "Fill mode"
+  fr: "Ajustement"
 prop.flex:
   en: "Elastic"
   fr: "Élastique"
@@ -776,6 +776,9 @@ prop.selected:
 prop.scroll:
   en: "Scrolls"
   fr: "Défilement"
+prop.size:
+  en: "Size"
+  fr: "Taille"
 prop.source:
   en: "Source"
   fr: "Source"

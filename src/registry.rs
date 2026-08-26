@@ -19,6 +19,13 @@ pub enum Target {
     /// A family of no-argument methods of which at most one applies, e.g.
     /// `gap_1` … `gap_8`. Setting one removes the others.
     Family(&'static [&'static str]),
+    /// A method taking one variant of an enumeration: `.object_fit(
+    /// ObjectFit::Cover)`.
+    ///
+    /// The variants are written out in full, path included, because that is
+    /// what goes into the file — and because the inspector shows them as they
+    /// are written, the way it already shows `gap_2` rather than "medium".
+    Variant(&'static str, &'static [&'static str]),
     /// Scrolling on the named axis: `overflow_y_scroll` or its horizontal
     /// counterpart.
     ///
@@ -63,6 +70,22 @@ pub enum Kind {
     Path,
 }
 
+/// Which shared style properties a component accepts.
+///
+/// `COMMON` was posed on everything, so an image offered a text size and a font
+/// weight — five rows that do nothing, drowning the two that matter. And it is
+/// not only noise: a component that does not implement `Styled` at all would be
+/// handed calls that do not compile.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Common {
+    /// Everything: size, box and text.
+    All,
+    /// Size and box, for a component that draws no text of its own.
+    Box,
+    /// None, for one that is not `Styled`.
+    None,
+}
+
 /// One editable property.
 #[derive(Clone, Copy, Debug)]
 pub struct Prop {
@@ -102,6 +125,8 @@ pub struct Spec {
     pub default_calls: &'static [&'static str],
     /// Properties the inspector exposes.
     pub props: &'static [Prop],
+    /// Which shared style properties it accepts.
+    pub common: Common,
     /// The shape of the method its action property calls, when it has one.
     pub handler: Option<HandlerSpec>,
     /// The field this component needs on the view, when it needs one.
@@ -150,6 +175,21 @@ const ALIGNS: &[&str] = &["items_start", "items_center", "items_end"];
 const VARIANTS: &[&str] = &["primary", "danger", "outline", "ghost", "link"];
 const TEXT_SIZES: &[&str] = &["text_xs", "text_sm", "text_base", "text_lg", "text_xl", "text_2xl"];
 const WEIGHTS: &[&str] = &["font_normal", "font_medium", "font_semibold", "font_bold"];
+/// How an image's box relates to what holds it: as wide as the picture, never
+/// wider than the container, or exactly the container.
+const IMAGE_SIZES: &[&str] = &["max_w_full", "w_full"];
+
+/// gpui's own list, in the order one reaches for them. `Contain` is what gpui
+/// does when nothing is said, so it is written only when chosen — like every
+/// other value the inspector leaves at its default.
+const OBJECT_FITS: &[&str] = &[
+    "ObjectFit::Contain",
+    "ObjectFit::Cover",
+    "ObjectFit::Fill",
+    "ObjectFit::ScaleDown",
+    "ObjectFit::None",
+];
+
 const ROUNDED: &[&str] =
     &["rounded_none", "rounded_sm", "rounded_md", "rounded_lg", "rounded_full"];
 
@@ -163,10 +203,18 @@ pub const COMMON: &[Prop] = &[
     Prop { label: "prop.width", target: Target::Method("w"), kind: Kind::Number },
     Prop { label: "prop.height", target: Target::Method("h"), kind: Kind::Number },
     Prop { label: "prop.background", target: Target::Method("bg"), kind: Kind::Color },
+    Prop { label: "prop.rounded", target: Target::Family(ROUNDED), kind: Kind::Choice },
+];
+
+/// The shared properties that only make sense where there is text.
+///
+/// Kept apart rather than filtered by name: the list is the answer to "does
+/// this component draw text of its own", and that is a question about the
+/// component, not about the property's spelling.
+pub const TEXT_COMMON: &[Prop] = &[
     Prop { label: "prop.text_color", target: Target::Method("text_color"), kind: Kind::Color },
     Prop { label: "prop.text_size", target: Target::Family(TEXT_SIZES), kind: Kind::Choice },
     Prop { label: "prop.weight", target: Target::Family(WEIGHTS), kind: Kind::Choice },
-    Prop { label: "prop.rounded", target: Target::Family(ROUNDED), kind: Kind::Choice },
 ];
 
 /// The catalogue. Adding a component means adding an entry here and a branch in
@@ -191,6 +239,7 @@ pub const CATALOGUE: &[Spec] = &[
                 kind: Kind::Bool,
             },
         ],
+        common: Common::All,
         handler: None,
         state: None,
     },
@@ -213,6 +262,7 @@ pub const CATALOGUE: &[Spec] = &[
                 kind: Kind::Bool,
             },
         ],
+        common: Common::All,
         handler: None,
         state: None,
     },
@@ -225,6 +275,7 @@ pub const CATALOGUE: &[Spec] = &[
         default_args: &["Label"],
         default_calls: &[],
         props: &[Prop { label: "prop.text", target: Target::BaseArg(0), kind: Kind::Text }],
+        common: Common::All,
         handler: None,
         state: None,
     },
@@ -237,6 +288,7 @@ pub const CATALOGUE: &[Spec] = &[
         default_args: &[],
         default_calls: &[],
         props: &[Prop { label: "prop.bound_field", target: Target::BaseArg(0), kind: Kind::Field }],
+        common: Common::All,
         handler: None,
         state: Some(StateSpec {
             ty: "Entity<InputState>",
@@ -256,6 +308,7 @@ pub const CATALOGUE: &[Spec] = &[
         // The list's contents live in the initializer, so in the code you edit
         // by hand: maxx puts two entries there so that something shows, and does
         // not pretend to manage where the data comes from.
+        common: Common::All,
         handler: None,
         state: Some(StateSpec {
             ty: "Entity<SelectState<SearchableVec<SharedString>>>",
@@ -284,6 +337,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.disabled", target: Target::Method("disabled"), kind: Kind::Bool },
             Prop { label: "prop.action", target: Target::Method("on_click"), kind: Kind::Handler },
         ],
+        common: Common::All,
         handler: Some(CLICK),
         state: None,
     },
@@ -301,6 +355,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.checked", target: Target::Method("checked"), kind: Kind::Bool },
             Prop { label: "prop.action", target: Target::Method("on_click"), kind: Kind::Handler },
         ],
+        common: Common::All,
         handler: Some(TOGGLED),
         state: None,
     },
@@ -318,6 +373,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.on", target: Target::Method("checked"), kind: Kind::Bool },
             Prop { label: "prop.action", target: Target::Method("on_click"), kind: Kind::Handler },
         ],
+        common: Common::All,
         handler: Some(TOGGLED),
         state: None,
     },
@@ -330,6 +386,7 @@ pub const CATALOGUE: &[Spec] = &[
         default_args: &[],
         default_calls: &[],
         props: &[Prop { label: "prop.title", target: Target::Method("title"), kind: Kind::Text }],
+        common: Common::All,
         handler: None,
         state: None,
     },
@@ -342,6 +399,7 @@ pub const CATALOGUE: &[Spec] = &[
         default_args: &[],
         default_calls: &[],
         props: &[Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text }],
+        common: Common::All,
         handler: None,
         state: None,
     },
@@ -360,6 +418,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.disabled", target: Target::Method("disabled"), kind: Kind::Bool },
             Prop { label: "prop.action", target: Target::Method("on_click"), kind: Kind::Handler },
         ],
+        common: Common::All,
         handler: Some(TOGGLED),
         state: None,
     },
@@ -378,6 +437,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.href", target: Target::Method("href"), kind: Kind::Text },
             Prop { label: "prop.disabled", target: Target::Method("disabled"), kind: Kind::Bool },
         ],
+        common: Common::All,
         handler: None,
         state: None,
     },
@@ -394,6 +454,7 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.message", target: Target::BaseArg(1), kind: Kind::Text },
             Prop { label: "prop.title", target: Target::Method("title"), kind: Kind::Text },
         ],
+        common: Common::All,
         handler: None,
         state: None,
     },
@@ -413,6 +474,7 @@ pub const CATALOGUE: &[Spec] = &[
                 kind: Kind::Bool,
             },
         ],
+        common: Common::All,
         handler: None,
         state: None,
     },
@@ -425,6 +487,7 @@ pub const CATALOGUE: &[Spec] = &[
         default_args: &[],
         default_calls: &[],
         props: &[Prop { label: "prop.value", target: Target::Method("value"), kind: Kind::Ratio }],
+        common: Common::All,
         handler: None,
         state: None,
     },
@@ -442,8 +505,19 @@ pub const CATALOGUE: &[Spec] = &[
         default_calls: &["max_w_full"],
         props: &[
             Prop { label: "prop.source", target: Target::BaseArg(0), kind: Kind::Path },
-            Prop { label: "prop.fit", target: Target::Flag("max_w_full"), kind: Kind::Bool },
+            // Two questions, and they are not the same one: how the box relates
+            // to what holds it, and how the picture fills the box. The second
+            // only has anything to say once the first has bounded something.
+            Prop { label: "prop.size", target: Target::Family(IMAGE_SIZES), kind: Kind::Choice },
+            Prop {
+                label: "prop.fit",
+                target: Target::Variant("object_fit", OBJECT_FITS),
+                kind: Kind::Choice,
+            },
         ],
+        // An image draws no text of its own: a font weight on it is a row that
+        // does nothing.
+        common: Common::Box,
         handler: None,
         state: None,
     },
@@ -456,6 +530,7 @@ pub const CATALOGUE: &[Spec] = &[
         default_args: &[],
         default_calls: &[],
         props: &[Prop { label: "prop.flex", target: Target::Flag("flex_1"), kind: Kind::Bool }],
+        common: Common::All,
         handler: None,
         state: None,
     },
@@ -562,7 +637,15 @@ pub fn write_binding(node: &mut Node, prop: &Prop, expression: Option<&str>) {
 
 /// Every property of a component: its own, then the shared style ones.
 pub fn props(spec: &'static Spec) -> Vec<&'static Prop> {
-    spec.props.iter().chain(COMMON.iter()).collect()
+    let shared: &[Prop] = match spec.common {
+        Common::All | Common::Box => COMMON,
+        Common::None => &[],
+    };
+    let text: &[Prop] = match spec.common {
+        Common::All => TEXT_COMMON,
+        _ => &[],
+    };
+    spec.props.iter().chain(shared).chain(text).collect()
 }
 
 /// Whether any property of `spec` owns the call named `name`.
@@ -578,6 +661,7 @@ pub fn covers(spec: &'static Spec, name: &str) -> bool {
         // The `id` that goes with it is left visible in the other calls: maxx
         // wrote it, and hiding a call it cannot explain would be worse than
         // showing one it can.
+        Target::Variant(method, _) => method == name,
         Target::Scrollable(method) => method == name,
     })
 }
@@ -939,6 +1023,9 @@ pub fn read(node: &Node, prop: &Prop) -> Option<String> {
                 _ => color_value(&source),
             }
         }
+        Target::Variant(name, _) => {
+            node.call(name).and_then(|call| call.args.first()).map(|arg| arg.to_source())
+        }
         Target::Method(name) if matches!(prop.kind, Kind::Handler) => node
             .call(name)
             .and_then(|call| call.args.first())
@@ -1034,6 +1121,13 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
             };
             node.set_call(name, arg);
         }
+        Target::Variant(name, values) => {
+            if value.is_empty() {
+                node.remove_call(name);
+            } else if values.contains(&value) {
+                node.set_call(name, Arg::Verbatim(value.to_string()));
+            }
+        }
         Target::Flag(name) => node.set_flag(name, value == "true"),
         Target::Scrollable(name) => {
             let horizontal = name == "overflow_x_scroll";
@@ -1099,7 +1193,11 @@ pub fn imports(root: &Node) -> Vec<&'static str> {
         for call in &node.calls {
             for arg in &call.args {
                 let source = arg.to_source();
-                for (needle, line) in [("px(", "use gpui::px;"), ("rgb(0x", "use gpui::rgb;")] {
+                for (needle, line) in [
+                    ("px(", "use gpui::px;"),
+                    ("rgb(0x", "use gpui::rgb;"),
+                    ("ObjectFit::", "use gpui::ObjectFit;"),
+                ] {
                     if source.starts_with(needle) && !lines.contains(&line) {
                         lines.push(line);
                     }

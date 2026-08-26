@@ -75,6 +75,19 @@ impl Workspace {
             return;
         };
 
+        // How many pixels the picture really has, which is what makes a width
+        // thinkable: 400 and 4000 ask for different numbers, and the field says
+        // neither. Read here rather than in `render`, which runs on every
+        // frame — the guard above is what keeps it to one read per selection.
+        self.image_size = None;
+        if spec.id == "image"
+            && let Some(root) = self.project().map(|project| project.root.clone())
+            && let Some(prop) = spec.props.first()
+            && let Some(value) = crate::registry::read(&node, prop).filter(|v| !v.is_empty())
+        {
+            self.image_size = image::image_dimensions(root.join(value)).ok();
+        }
+
         for prop in crate::registry::props(spec) {
             if !matches!(
                 prop.kind,
