@@ -387,13 +387,25 @@ impl Workspace {
             if let Ok(Ok(Some(paths))) = paths.await
                 && let Some(path) = paths.into_iter().next()
             {
+                let still_there = this
+                    .update(cx, |this, _| {
+                        this.view().map(|view| (view.path.clone(), view.selected.clone()))
+                            == opened_on
+                    })
+                    .unwrap_or(false);
+                if !still_there {
+                    return;
+                }
+                // Copied off the interface thread: a photograph is read whole
+                // and written whole, and the window would stop answering for
+                // as long as that takes — which is exactly what the reader's
+                // ceiling exists to avoid.
+                let imported = cx
+                    .background_spawn(async move { crate::scaffold::import_asset(&root, &path) })
+                    .await;
+
                 this.update(cx, |this, cx| {
-                    if this.view().map(|view| (view.path.clone(), view.selected.clone()))
-                        != opened_on
-                    {
-                        return;
-                    }
-                    match crate::scaffold::import_asset(&root, &path) {
+                    match imported {
                         Ok(value) => {
                             this.edit_prop(prop, &value, cx);
                             // The copy created `assets/images/` a moment ago,

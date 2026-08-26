@@ -764,3 +764,32 @@ fn a_dropped_image_fits_and_can_be_told_not_to() {
     maxx::registry::write(&mut node, fit, "false");
     assert!(!maxx::codegen::render(&node, 0).contains("max_w_full"));
 }
+
+/// The id handed out avoids the ones written as constructor arguments too.
+///
+/// A button, a checkbox, a switch carry theirs as an argument rather than as an
+/// `id` call: looking only at the call would hand out an id one of them already
+/// answers to, which is the collision the function exists to prevent.
+#[test]
+fn a_new_element_id_avoids_the_ones_written_as_arguments() {
+    let mut root = maxx::model::Node::known("v_flex");
+    let mut button = maxx::registry::instantiate("button").expect("button is in the catalogue");
+    let spec = maxx::registry::of(&button).expect("Button is in the catalogue");
+    let id = spec.props.iter().find(|prop| prop.label == "prop.id").expect("a button has an id");
+
+    maxx::registry::write(&mut button, id, "scroll");
+    root.push_child(button);
+
+    assert_eq!(maxx::registry::unique_element_id(&root), "scroll_2");
+}
+
+/// Every default argument is encoded from the property that targets it.
+///
+/// Deciding for the whole list from the first property was right only as long
+/// as the one component with a path argument had a single argument.
+#[test]
+fn a_second_default_argument_is_not_written_as_the_first() {
+    let alert = maxx::registry::instantiate("alert").expect("alert is in the catalogue");
+    let rendered = maxx::codegen::render(&alert, 0);
+    assert!(!rendered.contains("PathBuf::from"), "{rendered}");
+}

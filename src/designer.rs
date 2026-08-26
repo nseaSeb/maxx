@@ -1287,9 +1287,28 @@ fn thumbnail(value: &str, root: Option<&std::path::Path>) -> AnyElement {
         .border_color(theme::border())
         .bg(theme::bg());
     match root.filter(|_| !value.is_empty()) {
-        Some(root) => frame.child(img(root.join(value)).size_full()).into_any_element(),
+        // A file that is not there paints nothing, which is byte for byte what
+        // an empty field paints — and telling those two apart is the whole
+        // point of the thumbnail.
+        Some(root) => frame
+            .child(img(root.join(value)).size_full().with_fallback(missing_thumbnail))
+            .into_any_element(),
         None => frame.into_any_element(),
     }
+}
+
+/// What the thumbnail shows when the path leads nowhere.
+fn missing_thumbnail() -> AnyElement {
+    div()
+        .size_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .bg(theme::hover_bg())
+        .text_xs()
+        .text_color(theme::danger())
+        .child("?")
+        .into_any_element()
 }
 
 /// The frame an image stands in for: nothing written yet, no project to
@@ -1362,8 +1381,12 @@ fn preview(
                 // The frame is also the fallback: a file that is not there
                 // paints nothing at all otherwise, and an image that silently
                 // does not show reads as a layout bug.
+                //
+                // The fit switch is read off the node like every other call: a
+                // preview that clamps what the generated code lets grow shows
+                // something the binary will not, and the switch looks broken.
                 Some(root) => img(root.join(&source))
-                    .max_w_full()
+                    .when(node.call("max_w_full").is_some(), |image| image.max_w_full())
                     .with_fallback(missing_image)
                     .into_any_element(),
                 None => missing_image(),

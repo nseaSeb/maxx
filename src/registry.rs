@@ -596,6 +596,20 @@ pub fn unique_element_id(root: &Node) -> String {
         {
             taken.push(value.to_string());
         }
+        // A button, a checkbox, a switch carry theirs as a constructor
+        // argument: looking only at the `id` call would hand out an id one of
+        // them already answers to, which is the collision this exists to
+        // prevent.
+        if let Some(spec) = of(node) {
+            for prop in spec.props {
+                if let (Target::BaseArg(index), "prop.id") = (prop.target, prop.label)
+                    && let Base::Known { args, .. } = &node.base
+                    && let Some(value) = args.get(index).and_then(|arg| arg.as_str())
+                {
+                    taken.push(value.to_string());
+                }
+            }
+        }
     });
     let mut name = "scroll".to_string();
     let mut index = 2;
@@ -625,12 +639,27 @@ pub fn instantiate(id: &str) -> Option<Node> {
         // field, the chain references it.
         vec![Arg::Verbatim("&self.field".into())]
     } else {
-        match spec.props.first().map(|prop| prop.kind) {
-            // A path is an expression, not a literal: the table holds what the
-            // inspector shows, and the encoder is the same one `write` uses.
-            Some(Kind::Path) => spec.default_args.iter().map(|value| path_arg(value)).collect(),
-            _ => spec.default_args.iter().map(|value| Arg::Str((*value).into())).collect(),
-        }
+        // Per argument, and not from the first property: a component whose
+        // first argument is a path and whose second is a string — the shape
+        // `alert` already has — would have had the second written as a path
+        // too, and the generated project would not compile.
+        spec.default_args
+            .iter()
+            .enumerate()
+            .map(|(index, value)| {
+                let kind = spec.props.iter().find_map(|prop| match prop.target {
+                    Target::BaseArg(at) if at == index => Some(prop.kind),
+                    _ => None,
+                });
+                match kind {
+                    // A path is an expression, not a literal: the table holds
+                    // what the inspector shows, and the encoder is the same one
+                    // `write` uses.
+                    Some(Kind::Path) => path_arg(value),
+                    _ => Arg::Str((*value).into()),
+                }
+            })
+            .collect()
     };
 
     let mut node = Node::known(spec.base);
@@ -1022,7 +1051,7 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
                 // content: it grows instead, and the window cuts it. The axis
                 // that scrolls is the one that has to be held — unless a size
                 // was set by hand, which says what to hold it to already.
-                if node.call(size).is_none() {
+                if node.call(size).is_none() && node.call("size_full").is_none() {
                     node.set_flag(hold, true);
                 }
             } else {

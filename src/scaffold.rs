@@ -4,6 +4,7 @@
 //! `maxx`. The only trace `maxx` leaves is a pair of marker comments around the
 //! expression it owns.
 
+use rust_i18n::t;
 use std::io;
 use std::path::Path;
 
@@ -45,6 +46,12 @@ pub fn import_asset(root: &Path, file: &Path) -> Result<String, String> {
     let directory = root.join(IMAGE_DIRECTORY);
     std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
 
+    // The same ceiling the reader holds: importing a file maxx would then
+    // refuse to show would be a strange kind of success.
+    let size = std::fs::metadata(&resolved).map(|data| data.len()).unwrap_or(0);
+    if size > crate::project::MAX_IMAGE_BYTES {
+        return Err(t!("error.file_too_large", size = size / 1024).into_owned());
+    }
     let bytes = std::fs::read(&resolved).map_err(|error| error.to_string())?;
     let mut name = format!("{stem}.{extension}");
     let mut index = 2;

@@ -5,6 +5,15 @@ use gpui::SharedString;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+/// Beyond this, a picture is refused rather than read.
+///
+/// Higher than the reader's ceiling for text, because the cost is different:
+/// decoding a photograph once, not parsing a buffer with tree-sitter. A ceiling
+/// all the same — a window frozen on a hundred-megabyte file looks like a crash
+/// whatever the reason, and importing one maxx would then refuse to show would
+/// be worse still.
+pub const MAX_IMAGE_BYTES: u64 = 16 * 1024 * 1024;
+
 /// Whether this file is a picture maxx can show.
 ///
 /// gpui's own list, read back rather than written a second time: an extension

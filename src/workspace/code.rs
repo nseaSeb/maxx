@@ -9,13 +9,6 @@ use super::*;
 /// is visible; a frozen window looks like a crash.
 const MAX_BYTES: u64 = 2 * 1024 * 1024;
 
-/// The same, for a picture.
-///
-/// Higher, because the cost is different: decoding a photograph once, not
-/// parsing a buffer with tree-sitter. A ceiling all the same — a window frozen
-/// on a hundred-megabyte file looks like a crash whatever the reason.
-const MAX_IMAGE_BYTES: u64 = 16 * 1024 * 1024;
-
 /// A file open in the code reader.
 ///
 /// Read once, at opening, and never written: the reader is a window onto the
@@ -93,7 +86,7 @@ impl CodeFile {
         // check below would refuse it, which is right for a binary and wrong
         // for the image the developer has just added to the project.
         if crate::project::is_image(path) {
-            if size > MAX_IMAGE_BYTES {
+            if size > crate::project::MAX_IMAGE_BYTES {
                 return Err(t!("error.file_too_large", size = size / 1024).into_owned());
             }
             return Ok(from_image(path.to_path_buf(), size));
