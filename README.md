@@ -75,6 +75,11 @@ writes the file, `⌘Z` / `⌘⇧Z` undo and redo, `⌘D` duplicates the selecte
 `⌘⌥C` and `⌘⌥V` copy and paste it, `⌘⇧⌫` deletes it, and `⌘B` hides the project
 panel.
 
+The structure tree drags too, and it is where a node changes parent: dropped
+between two rows it lands there, dropped on a container it goes inside it, and
+dropped on a leaf it comes right after. The palette drops there as well — the
+tree is a second way in for the components the canvas hides under one another.
+
 What `⌘⌥C` puts on the clipboard is Rust, not a format of maxx's own: a subtree
 copied here pastes into Zed, and an expression written there pastes back.
 
@@ -310,10 +315,11 @@ demand.
 | `src/about.rs` | the About window |
 
 How it all fits together, and why: [`ARCHITECTURE.md`](ARCHITECTURE.md).
-What is known and deferred is in [`BACKLOG.md`](BACKLOG.md).
+What is known and deferred is in [`BACKLOG.md`](BACKLOG.md), and where it is all
+going, in which order, in [`ROADMAP.md`](ROADMAP.md).
 
-Those two, and the interface strings, are still in French; the code and its
-comments are in English.
+Those three, and the interface strings, are still in French; the code, its
+comments and its tests are in English.
 
 ## Settings
 
