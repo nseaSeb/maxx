@@ -188,6 +188,9 @@ impl Workspace {
                     )
                     .into_owned(),
                 ),
+                None if file.image => SharedString::from(
+                    t!("status.image", name = file.name(), size = file.kilobytes()).into_owned(),
+                ),
                 None => SharedString::from(
                     t!("status.code", name = file.name(), lines = file.lines()).into_owned(),
                 ),

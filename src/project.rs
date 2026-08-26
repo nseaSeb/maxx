@@ -5,6 +5,16 @@ use gpui::SharedString;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+/// Whether this file is a picture maxx can show.
+///
+/// gpui's own list, read back rather than written a second time: an extension
+/// it cannot decode would draw nothing, with no error to see.
+pub fn is_image(path: &Path) -> bool {
+    let extension =
+        path.extension().and_then(|value| value.to_str()).unwrap_or_default().to_lowercase();
+    gpui::Img::extensions().contains(&extension.as_str())
+}
+
 /// A directory opened as a project.
 pub struct Project {
     /// Absolute path of the project root.

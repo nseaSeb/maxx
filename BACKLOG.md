@@ -86,6 +86,30 @@ Ce qui reste de ce côté :
   qu'un `Div`, donc la largeur et la hauteur posées sur une image sont
   écrites dans le fichier mais pas montrées sur le canvas.
 
+- ~~Le défilement~~ — fait, des deux côtés. Le gabarit d'une vue porte
+  maintenant `id`, `size_full` et `overflow_y_scroll` : une vue plus haute que
+  la fenêtre était coupée sans recours, et une image à sa taille naturelle y
+  suffit. Et une propriété **Défilement** sur la colonne et la ligne, avec
+  l'axe qui va avec le conteneur.
+
+  Ce qu'elle a demandé : une cible qui écrit **deux appels**, `Target::Scrollable`.
+  gpui ne garde le décalage de défilement que pour un élément qui a un `id`,
+  donc le drapeau seul rogne le contenu sans jamais le faire bouger. Et cet
+  identifiant doit être unique entre frères, ce qu'aucun nœud ne peut savoir
+  seul : c'est l'espace de travail qui le distribue, comme il distribue le nom
+  d'un champ d'état.
+
+  Ce qui reste : **la barre visible**. `Scrollbar` demande un `ScrollHandle`
+  dans un champ de la vue — `StateSpec` sait déjà faire — mais la barre est un
+  *frère* posé en absolu dans un parent `relative()`, et le modèle de maxx est
+  une chaîne unique. C'est un modèle de sous-arbre, pas une propriété.
+
+- ~~Voir une image~~ — faite : un fichier du panneau dont l'extension est dans
+  la liste de gpui s'ouvre dans un onglet et s'affiche, au lieu d'être refusé
+  par le contrôle UTF-8 du lecteur. La barre d'état nomme son poids plutôt que
+  ses lignes, et le plafond est plus haut que celui du texte : décoder une
+  photo n'est pas analyser un tampon avec tree-sitter.
+
 ## Menus
 
 - **Les sous-menus** sont faits : lus, affichés d'un cran en retrait, créés,

@@ -19,6 +19,15 @@ pub enum Target {
     /// A family of no-argument methods of which at most one applies, e.g.
     /// `gap_1` … `gap_8`. Setting one removes the others.
     Family(&'static [&'static str]),
+    /// Scrolling on the named axis: `overflow_y_scroll` or its horizontal
+    /// counterpart.
+    ///
+    /// Its own target and not a [`Target::Flag`] because it takes two calls,
+    /// not one: gpui keeps a scroll offset between frames only for an element
+    /// that has an `id`, so the flag alone would clip the content and never
+    /// scroll it. The id has to be unique among siblings, which no single node
+    /// can know — that is why the workspace writes this one, not [`write`].
+    Scrollable(&'static str),
 }
 
 /// What kind of editor the inspector shows.
@@ -168,6 +177,11 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.padding", target: Target::Family(PADDINGS), kind: Kind::Choice },
             Prop { label: "prop.align", target: Target::Family(ALIGNS), kind: Kind::Choice },
             Prop { label: "prop.flex", target: Target::Flag("flex_1"), kind: Kind::Bool },
+            Prop {
+                label: "prop.scroll",
+                target: Target::Scrollable("overflow_y_scroll"),
+                kind: Kind::Bool,
+            },
         ],
         handler: None,
         state: None,
@@ -184,6 +198,11 @@ pub const CATALOGUE: &[Spec] = &[
             Prop { label: "prop.padding", target: Target::Family(PADDINGS), kind: Kind::Choice },
             Prop { label: "prop.align", target: Target::Family(ALIGNS), kind: Kind::Choice },
             Prop { label: "prop.flex", target: Target::Flag("flex_1"), kind: Kind::Bool },
+            Prop {
+                label: "prop.scroll",
+                target: Target::Scrollable("overflow_x_scroll"),
+                kind: Kind::Bool,
+            },
         ],
         handler: None,
         state: None,
@@ -525,7 +544,35 @@ pub fn covers(spec: &'static Spec, name: &str) -> bool {
         Target::BaseArg(_) => false,
         Target::Method(method) | Target::Flag(method) => method == name,
         Target::Family(names) => names.contains(&name),
+        // The `id` that goes with it is left visible in the other calls: maxx
+        // wrote it, and hiding a call it cannot explain would be worse than
+        // showing one it can.
+        Target::Scrollable(method) => method == name,
     })
+}
+
+/// An element id no node of `root` is already using.
+///
+/// gpui keeps a scroll offset per element id, and two siblings sharing one is a
+/// conflict the framework catches at the worst moment. Walking the whole tree
+/// rather than the siblings is the cheap answer, and it survives a node being
+/// dragged somewhere else.
+pub fn unique_element_id(root: &Node) -> String {
+    let mut taken = Vec::new();
+    root.walk(&mut |_, node| {
+        if let Some(call) = node.call("id")
+            && let Some(value) = call.args.first().and_then(|arg| arg.as_str())
+        {
+            taken.push(value.to_string());
+        }
+    });
+    let mut name = "scroll".to_string();
+    let mut index = 2;
+    while taken.contains(&name) {
+        name = format!("scroll_{index}");
+        index += 1;
+    }
+    name
 }
 
 /// The catalogue entry with this identifier.
@@ -829,7 +876,9 @@ pub fn read(node: &Node, prop: &Prop) -> Option<String> {
             None if matches!(prop.kind, Kind::Bool) => Some("false".into()),
             None => None,
         },
-        Target::Flag(name) => Some(node.call(name).is_some().to_string()),
+        Target::Flag(name) | Target::Scrollable(name) => {
+            Some(node.call(name).is_some().to_string())
+        }
         Target::Family(names) => {
             names.iter().find(|name| node.call(name).is_some()).map(|name| (*name).to_string())
         }
@@ -908,6 +957,19 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
             node.set_call(name, arg);
         }
         Target::Flag(name) => node.set_flag(name, value == "true"),
+        Target::Scrollable(name) => {
+            node.set_flag(name, value == "true");
+            // Without an id, gpui has nowhere to keep the scroll offset: the
+            // content is clipped and never moves. The workspace assigns one no
+            // sibling is using before it gets here; this is the fallback for a
+            // node written without it.
+            //
+            // Turning scrolling off leaves the id: maxx cannot prove nothing
+            // else uses it, and a stray id costs nothing.
+            if value == "true" && node.call("id").is_none() {
+                node.set_call("id", Arg::Str("scroll".into()));
+            }
+        }
         Target::Family(names) => {
             for name in names {
                 node.set_flag(name, false);

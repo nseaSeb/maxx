@@ -770,6 +770,9 @@ prop.rounded_full:
 prop.selected:
   en: "Selected"
   fr: "Sélectionné"
+prop.scroll:
+  en: "Scrolls"
+  fr: "Défilement"
 prop.source:
   en: "Source"
   fr: "Source"
@@ -836,6 +839,9 @@ status.changed_outside:
 status.code:
   en: "%{name} · %{lines} lines · read only"
   fr: "%{name} · %{lines} lignes · lecture seule"
+status.image:
+  en: "%{name} · %{size} kB"
+  fr: "%{name} · %{size} ko"
 status.items:
   en: "%{name} · %{count} items"
   fr: "%{name} · %{count} éléments"

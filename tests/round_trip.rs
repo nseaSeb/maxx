@@ -655,3 +655,51 @@ fn a_computed_image_source_is_left_alone() {
     maxx::registry::write(&mut node, source, "assets/logo.png");
     assert_eq!(maxx::codegen::render(&node, 0), "img(self.avatar.clone())");
 }
+
+/// Scrolling is two calls, not one, and the id is what makes it work.
+///
+/// gpui keeps a scroll offset per element id: the overflow flag on its own
+/// clips the content and never moves it. The pair has to be written together,
+/// and the id has to be one no sibling is using.
+#[test]
+fn scrolling_writes_the_pair_it_needs() {
+    let mut column = maxx::registry::instantiate("column").expect("column is in the catalogue");
+    let spec = maxx::registry::of(&column).expect("v_flex is in the catalogue");
+    let scroll =
+        spec.props.iter().find(|prop| prop.label == "prop.scroll").expect("a column scrolls");
+
+    maxx::registry::write(&mut column, scroll, "true");
+    let rendered = maxx::codegen::render(&column, 0);
+    assert!(rendered.contains(".overflow_y_scroll()"), "{rendered}");
+    assert!(rendered.contains(".id("), "the offset needs somewhere to live: {rendered}");
+
+    // It reads back as what it is, and the catalogue owns the call rather than
+    // showing it among the ones it does not know.
+    let back = maxx::parser::parse_expr(&rendered).expect("must read back");
+    assert_eq!(maxx::registry::read(&back, scroll).as_deref(), Some("true"));
+    assert!(maxx::registry::covers(spec, "overflow_y_scroll"));
+
+    // Turned off, the flag goes and the id stays: maxx cannot prove nothing
+    // else uses it.
+    let mut back = back;
+    maxx::registry::write(&mut back, scroll, "false");
+    let rendered = maxx::codegen::render(&back, 0);
+    assert!(!rendered.contains("overflow_y_scroll"), "{rendered}");
+    assert!(rendered.contains(".id("), "{rendered}");
+
+    // A row scrolls sideways, because that is where its content overflows.
+    let row = maxx::registry::instantiate("row").expect("row is in the catalogue");
+    let spec = maxx::registry::of(&row).expect("h_flex is in the catalogue");
+    assert!(maxx::registry::covers(spec, "overflow_x_scroll"));
+}
+
+/// The id handed out is one no node of the tree is already using.
+#[test]
+fn a_second_scrolling_container_gets_its_own_id() {
+    let mut root = maxx::model::Node::known("v_flex");
+    let mut first = maxx::model::Node::known("v_flex");
+    first.set_call("id", maxx::model::Arg::Str("scroll".into()));
+    root.push_child(first);
+
+    assert_eq!(maxx::registry::unique_element_id(&root), "scroll_2");
+}

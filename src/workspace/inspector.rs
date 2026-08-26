@@ -412,10 +412,21 @@ impl Workspace {
             return;
         };
         let selected = view.selected.clone();
+        // An element id has to be unique among siblings, and no node can know
+        // what its siblings carry: the tree is here, so the id is assigned
+        // here, before the catalogue writes the rest.
+        let scroll_id = matches!(prop.target, registry::Target::Scrollable(_))
+            .then(|| registry::unique_element_id(&view.root));
         if view.root.at(&selected).is_some() {
             self.checkpoint();
             let view = self.view_mut().expect("just borrowed");
             if let Some(node) = view.root.at_mut(&selected) {
+                if let Some(id) = scroll_id
+                    && value == "true"
+                    && node.call("id").is_none()
+                {
+                    node.set_call("id", crate::model::Arg::Str(id));
+                }
                 registry::write(node, prop, value);
             }
         }

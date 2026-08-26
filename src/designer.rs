@@ -1261,7 +1261,7 @@ fn node_element(
 
 /// The frame an image stands in for: nothing written yet, no project to
 /// resolve the path against, or a file that is not there.
-fn missing_image() -> AnyElement {
+pub(crate) fn missing_image() -> AnyElement {
     div()
         .h(px(60.))
         .w(px(90.))

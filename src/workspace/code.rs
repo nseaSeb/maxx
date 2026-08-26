@@ -9,6 +9,13 @@ use super::*;
 /// is visible; a frozen window looks like a crash.
 const MAX_BYTES: u64 = 2 * 1024 * 1024;
 
+/// The same, for a picture.
+///
+/// Higher, because the cost is different: decoding a photograph once, not
+/// parsing a buffer with tree-sitter. A ceiling all the same — a window frozen
+/// on a hundred-megabyte file looks like a crash whatever the reason.
+const MAX_IMAGE_BYTES: u64 = 16 * 1024 * 1024;
+
 /// A file open in the code reader.
 ///
 /// Read once, at opening, and never written: the reader is a window onto the
@@ -29,6 +36,13 @@ pub struct CodeFile {
     /// looking at it — whereas a file opened from the explorer gets a tab of
     /// its own.
     pub of_view: bool,
+    /// Whether this file is shown as a picture rather than as text.
+    ///
+    /// An image has no text to colour and no field to build: the reader draws
+    /// it, and the status bar names its weight rather than its lines.
+    pub image: bool,
+    /// Its size on disk, for the status bar of a picture.
+    size: u64,
     /// Its name, and how many lines it holds.
     ///
     /// Counted here rather than in the status bar, which re-runs on every
@@ -48,6 +62,23 @@ fn from_text(path: PathBuf, text: String, language: &'static str, of_view: bool)
         path,
         language,
         of_view,
+        image: false,
+        size: 0,
+    }
+}
+
+/// The same, for a picture: nothing is read but its weight.
+fn from_image(path: PathBuf, size: u64) -> CodeFile {
+    let name = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+    CodeFile {
+        lines: 0,
+        name: SharedString::from(name),
+        text: SharedString::default(),
+        path,
+        language: "text",
+        of_view: false,
+        image: true,
+        size,
     }
 }
 
@@ -58,6 +89,15 @@ impl CodeFile {
             return Err(crate::tr("error.not_a_file").to_string());
         }
         let size = std::fs::metadata(path).map(|data| data.len()).unwrap_or(0);
+        // A picture is shown as a picture, and never read as text: the UTF-8
+        // check below would refuse it, which is right for a binary and wrong
+        // for the image the developer has just added to the project.
+        if crate::project::is_image(path) {
+            if size > MAX_IMAGE_BYTES {
+                return Err(t!("error.file_too_large", size = size / 1024).into_owned());
+            }
+            return Ok(from_image(path.to_path_buf(), size));
+        }
         if size > MAX_BYTES {
             return Err(t!("error.file_too_large", size = size / 1024).into_owned());
         }
@@ -85,6 +125,11 @@ impl CodeFile {
     /// How many lines it holds.
     pub fn lines(&self) -> usize {
         self.lines
+    }
+
+    /// Its weight in kilobytes, for a picture.
+    pub fn kilobytes(&self) -> u64 {
+        self.size / 1024
     }
 }
 
@@ -273,6 +318,10 @@ impl Workspace {
             self.code_input = None;
             return;
         };
+        if file.image {
+            self.code_input = None;
+            return;
+        }
         let language = file.language;
         let text = file.text.clone();
         self.code_input = Some(cx.new(|cx| {
@@ -288,6 +337,23 @@ impl Workspace {
 
     /// The file being read, filling the main area.
     pub(crate) fn render_code(&self, _cx: &mut Context<Self>) -> AnyElement {
+        if let Some(file) = self.code.as_ref().filter(|file| file.image) {
+            return div()
+                .flex()
+                .flex_1()
+                .items_center()
+                .justify_center()
+                .overflow_hidden()
+                .p_6()
+                .bg(theme::bg())
+                .child(
+                    gpui::img(file.path.clone())
+                        .max_w_full()
+                        .max_h_full()
+                        .with_fallback(crate::designer::missing_image),
+                )
+                .into_any_element();
+        }
         let Some(state) = self.code_input.as_ref() else {
             return div().flex_1().into_any_element();
         };

@@ -29,13 +29,11 @@ pub const IMAGE_DIRECTORY: &str = "assets/images";
 /// overwritten; the same file imported twice is recognised by its bytes and
 /// imported once.
 pub fn import_asset(root: &Path, file: &Path) -> Result<String, String> {
-    let extension =
-        file.extension().and_then(|value| value.to_str()).unwrap_or_default().to_lowercase();
-    // The list is gpui's own, read back rather than written a second time: an
-    // extension it cannot decode would draw nothing, with no error to see.
-    if !gpui::Img::extensions().contains(&extension.as_str()) {
+    if !crate::project::is_image(file) {
         return Err(crate::tr("error.not_an_image").to_string());
     }
+    let extension =
+        file.extension().and_then(|value| value.to_str()).unwrap_or_default().to_lowercase();
 
     let resolved = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
     let inside = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
@@ -89,7 +87,7 @@ pub fn create_project(root: &Path, name: &str) -> io::Result<()> {
     std::fs::write(root.join("src/main.rs"), main_rs())?;
     std::fs::write(root.join("src/menus.rs"), menus_rs())?;
     std::fs::write(root.join("src/ui/mod.rs"), "pub mod home;\n")?;
-    std::fs::write(root.join("src/ui/home.rs"), view_rs("Home"))?;
+    std::fs::write(root.join("src/ui/home.rs"), view_rs("Home", "home"))?;
     Ok(())
 }
 
@@ -103,7 +101,7 @@ pub fn create_view(root: &Path, module: &str) -> io::Result<()> {
             format!("{} already exists", file.display()),
         ));
     }
-    std::fs::write(&file, view_rs(&type_name))?;
+    std::fs::write(&file, view_rs(&type_name, module))?;
 
     // Registered by textual insertion so the rest of `mod.rs` — comments,
     // ordering, anything the developer put there — is untouched.
@@ -1394,7 +1392,16 @@ fn main() {
     .to_string()
 }
 
-fn view_rs(type_name: &str) -> String {
+/// The view template.
+///
+/// The root scrolls, and that is not a flourish: a window is 900 by 600, and a
+/// view taller than that was cut with no way down — one image at its natural
+/// size is enough. `id` is what gpui needs to keep a scroll offset between
+/// frames, and `size_full` is what gives the view the window to fill.
+///
+/// The three calls are ordinary Rust that maxx carries as data: they show in
+/// the inspector, and whoever does not want them removes them there.
+fn view_rs(type_name: &str, module: &str) -> String {
     format!(
         r#"use gpui::{{Context, Window, prelude::*}};
 use gpui_component::label::Label;
@@ -1412,6 +1419,9 @@ impl Render for {type_name} {{
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {{
         // maxx:begin
         v_flex()
+            .id("{module}")
+            .size_full()
+            .overflow_y_scroll()
             .gap_2()
             .p_4()
             .child(Label::new("Welcome"))
