@@ -12,7 +12,19 @@ cargo run
 
 **The catalogue's components**, all in `src/ui/home.rs`: group box, label, text
 field bound to a field of the view, checkbox, switch, radio, tag, progress bar,
-divider, alert, link, and a button with a tooltip and a handler.
+divider, alert, link, an image, and a button with a tooltip and a handler.
+
+**An image the project carries.** `assets/images/canvas.png`, written as
+`img(PathBuf::from("assets/images/canvas.png"))` — a path relative to the root,
+because that is the directory the binary starts in. Chosen from anywhere on the
+disk in maxx, it is copied there rather than pointed at where it sat: a project
+that does not carry its own images shows them on one machine only.
+
+**A view that scrolls.** The root carries `id`, `size_full` and
+`overflow_y_scroll`, which is what the window needs to stop cutting a view
+taller than itself. The three are ordinary calls, shown in the inspector and
+removable there — and the order matters: gpui only offers `overflow_y_scroll`
+to an element that already has an `id`.
 
 **A window opened from the menu bar** — `Window > Open the inspector`, or `⌘I`,
 or the button on the home view. That is the gesture bringing together two traps

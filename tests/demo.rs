@@ -87,6 +87,7 @@ fn the_demo_uses_the_components_it_advertises() {
         "Switch::new",
         "GroupBox::new",
         "Divider::horizontal",
+        "img",
     ] {
         assert!(
             bases.iter().any(|base| base == expected),

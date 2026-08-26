@@ -1,4 +1,6 @@
-use gpui::{ClickEvent, Context, Entity, SharedString, Window, prelude::*};
+use std::path::PathBuf;
+
+use gpui::{ClickEvent, Context, Entity, SharedString, Window, img, prelude::*};
 use gpui_component::alert::Alert;
 use gpui_component::button::Button;
 use gpui_component::checkbox::Checkbox;
@@ -57,6 +59,9 @@ impl Render for Home {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // maxx:begin
         v_flex()
+            .id("home")
+            .size_full()
+            .overflow_y_scroll()
             .gap_4()
             .p_4()
             .child(Label::new("A maxx demonstration"))
@@ -86,6 +91,20 @@ impl Render for Home {
                         .child(Progress::new().value(60.))
                         .child(Divider::horizontal())
                         .child(Label::new(self.summary.clone())),
+                ),
+            )
+            .child(
+                GroupBox::new().title("An image the project carries").child(
+                    v_flex()
+                        .gap_2()
+                        .child(
+                            img(PathBuf::from("assets/images/canvas.png"))
+                                .max_w_full()
+                                .rounded_md(),
+                        )
+                        .child(Label::new(
+                            "Chosen from anywhere, copied into assets/images, and read from there.",
+                        )),
                 ),
             )
             .child(
