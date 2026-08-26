@@ -727,8 +727,10 @@ impl Workspace {
                                 ),
                         )
                     }
-                    Some(state) if matches!(prop.kind, Kind::Path) => {
-                        row.child(div().flex_1().child(Input::new(state).small())).child(
+                    Some(state) if matches!(prop.kind, Kind::Path) => row
+                        .child(thumbnail(&current, self.project().map(|p| p.root.as_path())))
+                        .child(div().flex_1().child(Input::new(state).small()))
+                        .child(
                             div()
                                 .id(SharedString::from(format!("pick-{}", prop.label)))
                                 .px_2()
@@ -740,8 +742,7 @@ impl Workspace {
                                 .on_click(
                                     cx.listener(move |this, _, _, cx| this.pick_path(prop, cx)),
                                 ),
-                        )
-                    }
+                        ),
                     Some(state) if matches!(prop.kind, Kind::Text) => row
                         .child(div().flex_1().child(Input::new(state).small()))
                         .child(binding_toggle(spec, prop, false, cx)),
@@ -1268,6 +1269,27 @@ fn node_element(
             }
         }))
         .into_any_element()
+}
+
+/// A small look at what the Source field points to.
+///
+/// A path that is wrong and a file that is missing read exactly the same in a
+/// text field. Twenty-eight pixels tell them apart without leaving the
+/// inspector, and they answer the question one actually has: is that the right
+/// picture?
+fn thumbnail(value: &str, root: Option<&std::path::Path>) -> AnyElement {
+    let frame = div()
+        .size(px(28.))
+        .flex_none()
+        .overflow_hidden()
+        .rounded_sm()
+        .border_1()
+        .border_color(theme::border())
+        .bg(theme::bg());
+    match root.filter(|_| !value.is_empty()) {
+        Some(root) => frame.child(img(root.join(value)).size_full()).into_any_element(),
+        None => frame.into_any_element(),
+    }
 }
 
 /// The frame an image stands in for: nothing written yet, no project to

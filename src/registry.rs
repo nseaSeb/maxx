@@ -93,6 +93,13 @@ pub struct Spec {
     pub container: bool,
     /// Constructor arguments used when the component is first dropped.
     pub default_args: &'static [&'static str],
+    /// No-argument calls set when the component is first dropped.
+    ///
+    /// What the component needs to behave well on the very first frame, and
+    /// which the developer is free to remove afterwards: an image that fits the
+    /// column it lands in rather than pushing everything aside. A default in
+    /// the table, not a special case in the code.
+    pub default_calls: &'static [&'static str],
     /// Properties the inspector exposes.
     pub props: &'static [Prop],
     /// The shape of the method its action property calls, when it has one.
@@ -172,6 +179,7 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui_component::v_flex;",
         container: true,
         default_args: &[],
+        default_calls: &[],
         props: &[
             Prop { label: "prop.gap", target: Target::Family(GAPS), kind: Kind::Choice },
             Prop { label: "prop.padding", target: Target::Family(PADDINGS), kind: Kind::Choice },
@@ -193,6 +201,7 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui_component::h_flex;",
         container: true,
         default_args: &[],
+        default_calls: &[],
         props: &[
             Prop { label: "prop.gap", target: Target::Family(GAPS), kind: Kind::Choice },
             Prop { label: "prop.padding", target: Target::Family(PADDINGS), kind: Kind::Choice },
@@ -214,6 +223,7 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui_component::label::Label;",
         container: false,
         default_args: &["Label"],
+        default_calls: &[],
         props: &[Prop { label: "prop.text", target: Target::BaseArg(0), kind: Kind::Text }],
         handler: None,
         state: None,
@@ -225,6 +235,7 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui_component::input::Input;",
         container: false,
         default_args: &[],
+        default_calls: &[],
         props: &[Prop { label: "prop.bound_field", target: Target::BaseArg(0), kind: Kind::Field }],
         handler: None,
         state: Some(StateSpec {
@@ -240,6 +251,7 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui_component::select::Select;",
         container: false,
         default_args: &[],
+        default_calls: &[],
         props: &[Prop { label: "prop.bound_field", target: Target::BaseArg(0), kind: Kind::Field }],
         // The list's contents live in the initializer, so in the code you edit
         // by hand: maxx puts two entries there so that something shows, and does
@@ -263,6 +275,7 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui_component::button::Button;",
         container: false,
         default_args: &["button"],
+        default_calls: &[],
         props: &[
             Prop { label: "prop.id", target: Target::BaseArg(0), kind: Kind::Text },
             Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text },
@@ -281,6 +294,7 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui_component::checkbox::Checkbox;",
         container: false,
         default_args: &["checkbox"],
+        default_calls: &[],
         props: &[
             Prop { label: "prop.id", target: Target::BaseArg(0), kind: Kind::Text },
             Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text },
@@ -297,6 +311,7 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui_component::switch::Switch;",
         container: false,
         default_args: &["switch"],
+        default_calls: &[],
         props: &[
             Prop { label: "prop.id", target: Target::BaseArg(0), kind: Kind::Text },
             Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text },
@@ -313,6 +328,7 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui_component::group_box::GroupBox;",
         container: true,
         default_args: &[],
+        default_calls: &[],
         props: &[Prop { label: "prop.title", target: Target::Method("title"), kind: Kind::Text }],
         handler: None,
         state: None,
@@ -324,6 +340,7 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui_component::divider::Divider;",
         container: false,
         default_args: &[],
+        default_calls: &[],
         props: &[Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text }],
         handler: None,
         state: None,
@@ -335,6 +352,7 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui_component::radio::Radio;",
         container: false,
         default_args: &["radio"],
+        default_calls: &[],
         props: &[
             Prop { label: "prop.id", target: Target::BaseArg(0), kind: Kind::Text },
             Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text },
@@ -354,6 +372,7 @@ pub const CATALOGUE: &[Spec] = &[
         // label dropped inside it is what writes it.
         container: true,
         default_args: &["link"],
+        default_calls: &[],
         props: &[
             Prop { label: "prop.id", target: Target::BaseArg(0), kind: Kind::Text },
             Prop { label: "prop.href", target: Target::Method("href"), kind: Kind::Text },
@@ -369,6 +388,7 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui_component::alert::Alert;",
         container: false,
         default_args: &["alert", "Message"],
+        default_calls: &[],
         props: &[
             Prop { label: "prop.id", target: Target::BaseArg(0), kind: Kind::Text },
             Prop { label: "prop.message", target: Target::BaseArg(1), kind: Kind::Text },
@@ -384,6 +404,7 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui_component::tag::Tag;",
         container: true,
         default_args: &[],
+        default_calls: &[],
         props: &[
             Prop { label: "prop.outline", target: Target::Flag("outline"), kind: Kind::Bool },
             Prop {
@@ -402,6 +423,7 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui_component::progress::Progress;",
         container: false,
         default_args: &[],
+        default_calls: &[],
         props: &[Prop { label: "prop.value", target: Target::Method("value"), kind: Kind::Ratio }],
         handler: None,
         state: None,
@@ -413,7 +435,15 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui::img;",
         container: false,
         default_args: &["assets/images/image.png"],
-        props: &[Prop { label: "prop.source", target: Target::BaseArg(0), kind: Kind::Path }],
+        // A photograph is two thousand pixels wide, and a view is five hundred:
+        // dropped as it is, the first image pushes everything else off the
+        // board. Fitting is what one wants nine times out of ten, and the
+        // switch is right there for the tenth.
+        default_calls: &["max_w_full"],
+        props: &[
+            Prop { label: "prop.source", target: Target::BaseArg(0), kind: Kind::Path },
+            Prop { label: "prop.fit", target: Target::Flag("max_w_full"), kind: Kind::Bool },
+        ],
         handler: None,
         state: None,
     },
@@ -424,6 +454,7 @@ pub const CATALOGUE: &[Spec] = &[
         import: "use gpui::div;",
         container: false,
         default_args: &[],
+        default_calls: &[],
         props: &[Prop { label: "prop.flex", target: Target::Flag("flex_1"), kind: Kind::Bool }],
         handler: None,
         state: None,
@@ -616,6 +647,9 @@ pub fn instantiate(id: &str) -> Option<Node> {
         // A spacer with no `flex_1` takes no room and cannot be found again.
         "spacer" => node.set_flag("flex_1", true),
         _ => {}
+    }
+    for call in spec.default_calls {
+        node.set_flag(call, true);
     }
     Some(node)
 }

@@ -71,6 +71,15 @@ Ce qui reste de ce côté :
   fichier déjà dans le projet reste où il est, un homonyme différent est
   numéroté, et le même fichier réimporté est reconnu à ses octets.
 
+  Deux finitions qui viennent de l'usage : une image déposée **s'adapte**
+  d'emblée — une photographie fait deux mille pixels de large et une vue cinq
+  cents, donc la première image poussait tout le reste hors de la planche — et
+  l'inspecteur montre une **vignette** de vingt-huit pixels à côté du champ
+  Source, parce qu'un chemin faux et un fichier absent se ressemblent
+  exactement dans une boîte de texte. Le premier a demandé au catalogue de
+  savoir poser des appels par défaut, `default_calls`, et pas seulement des
+  arguments : c'est une table, pas un cas particulier dans le code.
+
   **Le sélecteur ne filtre pas, et ne le peut pas** : `PathPromptOptions` de
   gpui n'a que `files`, `directories`, `multiple` et `prompt`, et son panneau
   macOS n'appelle jamais `setAllowedFileTypes`. Filtrer demanderait une autre

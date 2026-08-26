@@ -593,14 +593,19 @@ fn an_image_path_is_written_read_back_and_still_editable() {
     let source = &spec.props[0];
 
     let rendered = maxx::codegen::render(&node, 0);
-    assert_eq!(rendered, "img(PathBuf::from(\"assets/images/image.png\"))");
+    // Dropped fitting: a photograph is wider than any view, and the switch is
+    // there for whoever wants it at its own size.
+    assert_eq!(rendered, "img(PathBuf::from(\"assets/images/image.png\")).max_w_full()");
 
     let back = maxx::parser::parse_expr(&rendered).expect("the expression must read back");
     assert_eq!(maxx::registry::read(&back, source).as_deref(), Some("assets/images/image.png"));
     assert!(maxx::registry::editable(&back, source), "the inspector must own this argument");
 
     maxx::registry::write(&mut node, source, "assets/logo.png");
-    assert_eq!(maxx::codegen::render(&node, 0), "img(PathBuf::from(\"assets/logo.png\"))");
+    assert_eq!(
+        maxx::codegen::render(&node, 0),
+        "img(PathBuf::from(\"assets/logo.png\")).max_w_full()"
+    );
 
     // The import travels with it: `PathBuf` sits on the base, not on a call,
     // and nothing else in the tree would bring it in.
@@ -615,7 +620,10 @@ fn an_image_path_is_written_read_back_and_still_editable() {
     assert!(maxx::registry::validate(source, "/Users/someone/logo.png").is_some());
     assert!(maxx::registry::validate(source, "assets/logo.png").is_none());
     maxx::registry::write(&mut node, source, "/Users/someone/logo.png");
-    assert_eq!(maxx::codegen::render(&node, 0), "img(PathBuf::from(\"assets/logo.png\"))");
+    assert_eq!(
+        maxx::codegen::render(&node, 0),
+        "img(PathBuf::from(\"assets/logo.png\")).max_w_full()"
+    );
 }
 
 /// A path is decoded the way it was encoded, escape for escape.
@@ -736,9 +744,23 @@ fn a_path_that_leaves_the_project_is_refused() {
         maxx::registry::write(&mut node, source, refused);
         assert_eq!(
             maxx::codegen::render(&node, 0),
-            "img(PathBuf::from(\"assets/images/image.png\"))",
+            "img(PathBuf::from(\"assets/images/image.png\")).max_w_full()",
             "{refused}"
         );
     }
     assert!(maxx::registry::validate(source, "assets/images/logo.png").is_none());
+}
+
+/// What the table says a component needs on its first frame, it gets.
+#[test]
+fn a_dropped_image_fits_and_can_be_told_not_to() {
+    let mut node = maxx::registry::instantiate("image").expect("image is in the catalogue");
+    let spec = maxx::registry::of(&node).expect("img is in the catalogue");
+    let fit = spec.props.iter().find(|prop| prop.label == "prop.fit").expect("an image fits");
+
+    assert_eq!(maxx::registry::read(&node, fit).as_deref(), Some("true"));
+    assert!(maxx::registry::covers(spec, "max_w_full"), "the switch owns the call it writes");
+
+    maxx::registry::write(&mut node, fit, "false");
+    assert!(!maxx::codegen::render(&node, 0).contains("max_w_full"));
 }

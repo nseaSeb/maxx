@@ -731,6 +731,9 @@ prop.checked:
 prop.disabled:
   en: "Disabled"
   fr: "Désactivé"
+prop.fit:
+  en: "Fits"
+  fr: "S'adapte"
 prop.flex:
   en: "Elastic"
   fr: "Élastique"
