@@ -858,14 +858,14 @@ status.no_project:
   en: "No project"
   fr: "Aucun projet"
 status.nodes:
-  en: "%{name}%{dirty}%{conflict} · %{count} nodes"
-  fr: "%{name}%{dirty}%{conflict} · %{count} nœuds"
+  en: "%{name} · %{count} nodes"
+  fr: "%{name} · %{count} nœuds"
 status.unsaved:
-  en: "unsaved"
-  fr: "non enregistré"
+  en: "• unsaved"
+  fr: "• non enregistré"
 status.view_code:
-  en: "%{name}%{dirty} · %{lines} lines · the code ⌘S would write"
-  fr: "%{name}%{dirty} · %{lines} lignes · le code que ⌘S écrirait"
+  en: "%{name} · %{lines} lines · the code ⌘S would write"
+  fr: "%{name} · %{lines} lignes · le code que ⌘S écrirait"
 tools.automatic:
   en: "Automatic (%{tool})"
   fr: "Automatique (%{tool})"

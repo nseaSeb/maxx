@@ -90,6 +90,15 @@ pub fn on_accent() -> Rgba {
     Colour { dark: 0x1e2127, light: 0xffffff }.get()
 }
 
+/// The colour of something to attend to, which is not a failure: a view that
+/// has not been written yet, a file that changed outside.
+///
+/// One Dark's yellow, and its counterpart in the light palette — the same role
+/// Zed gives it, so a warning here reads as a warning there.
+pub fn warning() -> Rgba {
+    Colour { dark: 0xe5c07b, light: 0x9a6700 }.get()
+}
+
 /// The colour of a failure, in the output panel and the status bar.
 pub fn danger() -> Rgba {
     Colour { dark: 0xe06c75, light: 0xcf222e }.get()

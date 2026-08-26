@@ -179,17 +179,7 @@ impl Workspace {
                 // would write, which on a modified view is not what the disk
                 // holds — and the dot is the only thing that says it.
                 None if file.of_view => SharedString::from(
-                    t!(
-                        "status.view_code",
-                        name = file.name(),
-                        dirty = if self.view().is_some_and(|view| view.dirty()) {
-                            unsaved()
-                        } else {
-                            String::new()
-                        },
-                        lines = file.lines()
-                    )
-                    .into_owned(),
+                    t!("status.view_code", name = file.name(), lines = file.lines()).into_owned(),
                 ),
                 None if file.image => SharedString::from(
                     t!("status.image", name = file.name(), size = file.kilobytes()).into_owned(),
@@ -209,7 +199,14 @@ impl Workspace {
                 .border_color(theme::border())
                 .text_xs()
                 .text_color(theme::text_muted())
-                .child(label);
+                .gap_2()
+                .child(label)
+                // The same warning as on the canvas side, in the same colour:
+                // the code shown is what ⌘S *would* write, so on a modified
+                // view it is precisely not what the file holds.
+                .children(self.view().filter(|view| file.of_view && view.dirty()).map(|_| {
+                    div().text_color(theme::warning()).child(crate::tr("status.unsaved"))
+                }));
         }
         if let Some(menus) = self.menu_file.as_ref() {
             let label = match &self.message {
@@ -237,25 +234,24 @@ impl Workspace {
                 .text_color(theme::text_muted())
                 .child(label);
         }
+        // Said in words and in colour rather than marked with a dot: what is on
+        // the canvas and what is in the file differ until ⌘S, and a bullet is
+        // not enough to explain that to someone reading their own `.rs` beside
+        // maxx and finding it behind. Carried apart from the label because only
+        // this part of the line is a warning — colouring the whole of it would
+        // make the file name shout too.
+        let mut warnings: Vec<SharedString> = Vec::new();
+        if self.view().is_some_and(|view| view.dirty()) {
+            warnings.push(crate::tr("status.unsaved"));
+        }
+        if conflict {
+            warnings.push(crate::tr("status.changed_outside"));
+        }
+
         let label = match (&self.message, &self.view(), &self.project) {
             (Some(message), _, _) => message.clone(),
             (None, Some(view), _) => SharedString::from(
-                t!(
-                    "status.nodes",
-                    name = view.name(),
-                    // Said in words rather than marked with a dot: what is on
-                    // the canvas and what is in the file differ until ⌘S, and a
-                    // bullet is not enough to explain that to someone reading
-                    // their own `.rs` beside maxx and finding it behind.
-                    dirty = if view.dirty() { unsaved() } else { String::new() },
-                    conflict = if conflict {
-                        crate::tr("status.changed_outside").to_string()
-                    } else {
-                        String::new()
-                    },
-                    count = view.root.count()
-                )
-                .into_owned(),
+                t!("status.nodes", name = view.name(), count = view.root.count()).into_owned(),
             ),
             (None, None, Some(project)) => SharedString::from(
                 t!("status.items", name = project.name, count = self.entries.len()).into_owned(),
@@ -274,7 +270,13 @@ impl Workspace {
             .border_color(theme::border())
             .text_xs()
             .text_color(theme::text_muted())
+            .gap_2()
             .child(label)
+            .children(
+                warnings
+                    .into_iter()
+                    .map(|warning| div().text_color(theme::warning()).child(warning)),
+            )
     }
 }
 
@@ -459,9 +461,4 @@ impl Workspace {
                 .into_any_element(),
         )
     }
-}
-
-/// What the status bar says of a view that has not been written yet.
-fn unsaved() -> String {
-    format!(" • {}", crate::tr("status.unsaved"))
 }
