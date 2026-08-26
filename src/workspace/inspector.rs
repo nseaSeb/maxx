@@ -371,6 +371,11 @@ impl Workspace {
         let Some(root) = self.project().map(|project| project.root.clone()) else {
             return;
         };
+        // The node the dialog was opened from, remembered: the panel is not
+        // modal everywhere, and `edit_prop` writes to whatever is selected when
+        // it runs. Selecting something else while the dialog is open would land
+        // the path — and the copy — somewhere nobody asked for.
+        let opened_on = self.view().map(|view| (view.path.clone(), view.selected.clone()));
         let paths = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: false,
@@ -382,17 +387,25 @@ impl Workspace {
             if let Ok(Ok(Some(paths))) = paths.await
                 && let Some(path) = paths.into_iter().next()
             {
-                this.update(cx, |this, cx| match crate::scaffold::import_asset(&root, &path) {
-                    Ok(value) => {
-                        this.edit_prop(prop, &value, cx);
-                        // The copy created `assets/images/` a moment ago, and
-                        // the panel lists what it read when the project opened:
-                        // without this, maxx writes a file it does not show.
-                        this.refresh_entries();
+                this.update(cx, |this, cx| {
+                    if this.view().map(|view| (view.path.clone(), view.selected.clone()))
+                        != opened_on
+                    {
+                        return;
                     }
-                    Err(error) => {
-                        this.message = Some(SharedString::from(error));
-                        cx.notify();
+                    match crate::scaffold::import_asset(&root, &path) {
+                        Ok(value) => {
+                            this.edit_prop(prop, &value, cx);
+                            // The copy created `assets/images/` a moment ago,
+                            // and the panel lists what it read when the project
+                            // opened: without this, maxx writes a file it does
+                            // not show.
+                            this.refresh_entries();
+                        }
+                        Err(error) => {
+                            this.message = Some(SharedString::from(error));
+                            cx.notify();
+                        }
                     }
                 })
                 .ok();

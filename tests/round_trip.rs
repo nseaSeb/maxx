@@ -628,7 +628,9 @@ fn an_awkward_file_name_does_not_grow_on_every_edit() {
     let spec = maxx::registry::of(&node).expect("img is in the catalogue");
     let source = &spec.props[0];
 
-    let awkward = "assets/a \"quoted\" name.png";
+    // Quote, backslash, tab: the three that `escape` writes as two characters,
+    // and the three a naive decoder gives back as the letter that followed.
+    let awkward = "assets/a \"quoted\"\tname\\here.png";
     maxx::registry::write(&mut node, source, awkward);
     let rendered = maxx::codegen::render(&node, 0);
 
@@ -681,13 +683,25 @@ fn scrolling_writes_the_pair_it_needs() {
     assert_eq!(maxx::registry::read(&back, scroll).as_deref(), Some("true"));
     assert!(maxx::registry::covers(spec, "overflow_y_scroll"));
 
-    // Turned off, the flag goes and the id stays: maxx cannot prove nothing
-    // else uses it.
+    // Turned off, the hold goes with the flag — a `h_full` left behind pins the
+    // box to its parent for good — and the id stays, because maxx cannot prove
+    // nothing else uses it.
     let mut back = back;
     maxx::registry::write(&mut back, scroll, "false");
     let rendered = maxx::codegen::render(&back, 0);
     assert!(!rendered.contains("overflow_y_scroll"), "{rendered}");
+    assert!(!rendered.contains(".h_full()"), "{rendered}");
     assert!(rendered.contains(".id("), "{rendered}");
+
+    // A height set by hand says what to hold the box to already.
+    let mut sized = maxx::registry::instantiate("column").expect("column is in the catalogue");
+    let height =
+        spec.props.iter().chain(maxx::registry::COMMON).find(|prop| prop.label == "prop.height");
+    maxx::registry::write(&mut sized, height.expect("a column has a height"), "300");
+    maxx::registry::write(&mut sized, scroll, "true");
+    let rendered = maxx::codegen::render(&sized, 0);
+    assert!(!rendered.contains(".h_full()"), "{rendered}");
+    assert!(rendered.contains(".h(px(300.))"), "{rendered}");
 
     // A row scrolls sideways, because that is where its content overflows.
     let row = maxx::registry::instantiate("row").expect("row is in the catalogue");
@@ -704,4 +718,27 @@ fn a_second_scrolling_container_gets_its_own_id() {
     root.push_child(first);
 
     assert_eq!(maxx::registry::unique_element_id(&root), "scroll_2");
+}
+
+/// A path that climbs out of the project is refused like an absolute one.
+///
+/// `../../Desktop/logo.png` resolves here — the canvas draws it, and so does
+/// the binary on this machine — and nowhere else. That is the whole reason the
+/// property refuses anything but a path relative to the root.
+#[test]
+fn a_path_that_leaves_the_project_is_refused() {
+    let mut node = maxx::registry::instantiate("image").expect("image is in the catalogue");
+    let spec = maxx::registry::of(&node).expect("img is in the catalogue");
+    let source = &spec.props[0];
+
+    for refused in ["/Users/someone/logo.png", "../../Desktop/logo.png", "..\\logo.png"] {
+        assert!(maxx::registry::validate(source, refused).is_some(), "{refused}");
+        maxx::registry::write(&mut node, source, refused);
+        assert_eq!(
+            maxx::codegen::render(&node, 0),
+            "img(PathBuf::from(\"assets/images/image.png\"))",
+            "{refused}"
+        );
+    }
+    assert!(maxx::registry::validate(source, "assets/images/logo.png").is_none());
 }

@@ -48,8 +48,11 @@ pub fn import_asset(root: &Path, file: &Path) -> Result<String, String> {
     let bytes = std::fs::read(&resolved).map_err(|error| error.to_string())?;
     let mut name = format!("{stem}.{extension}");
     let mut index = 2;
+    // A file that cannot be read is a file that differs, not a file to write
+    // over: `is_ok_and` answered the same thing for "same bytes" and "could not
+    // look", and the second case overwrote what it had not seen.
     while directory.join(&name).exists()
-        && std::fs::read(directory.join(&name)).is_ok_and(|existing| existing != bytes)
+        && !std::fs::read(directory.join(&name)).is_ok_and(|existing| existing == bytes)
     {
         name = format!("{stem}-{index}.{extension}");
         index += 1;

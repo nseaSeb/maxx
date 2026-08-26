@@ -478,7 +478,7 @@ pub fn validate(prop: &Prop, value: &str) -> Option<&'static str> {
         }
         // Relative to the project root, or the image stops being found the day
         // the project moves — and it never showed on anybody else's machine.
-        Kind::Path if is_absolute(value) => Some("error.path_relative"),
+        Kind::Path if leaves_the_project(value) => Some("error.path_relative"),
         _ => None,
     }
 }
@@ -680,14 +680,22 @@ fn number_value(source: &str) -> Option<String> {
 /// is a hand-written expression the inspector must not overwrite.
 fn path_value(source: &str) -> Option<String> {
     let inner = source.strip_prefix("PathBuf::from(\"")?.strip_suffix("\")")?;
-    // Decoded the way it was encoded, escape for escape. Undoing `\\` alone
-    // left `\"` behind, and the next write escaped its backslash again: the
-    // argument grew by one on every keystroke instead of being refused.
+    // The exact inverse of [`crate::model::escape`], sequence for sequence.
+    // Undoing `\\` alone left `\"` behind, and the next write escaped its
+    // backslash again: the argument grew by one on every keystroke. Taking the
+    // character after a backslash literally was no better — `\t` came back as
+    // the letter `t`, and a file whose name holds a tab stopped loading with
+    // nothing said.
     let mut out = String::with_capacity(inner.len());
     let mut chars = inner.chars();
     while let Some(character) = chars.next() {
         match character {
-            '\\' => out.push(chars.next()?),
+            '\\' => match chars.next()? {
+                'n' => out.push('\n'),
+                't' => out.push('\t'),
+                'r' => out.push('\r'),
+                escaped => out.push(escaped),
+            },
             _ => out.push(character),
         }
     }
@@ -700,10 +708,15 @@ fn path_arg(value: &str) -> Arg {
 }
 
 /// Whether this path would only resolve on the machine it was typed on.
-fn is_absolute(value: &str) -> bool {
+///
+/// Absolute, root-relative, or climbing out of the project with `..`: all three
+/// draw here and nowhere else, which is the whole reason the property refuses
+/// anything but a path relative to the root.
+fn leaves_the_project(value: &str) -> bool {
+    let value = value.replace('\\', "/");
     value.starts_with('/')
-        || value.starts_with("\\\\")
         || matches!(value.as_bytes(), [drive, b':', ..] if drive.is_ascii_alphabetic())
+        || value.split('/').any(|part| part == "..")
 }
 
 /// `rgb(0x1e2127)` reads back as `1e2127`.
@@ -898,7 +911,9 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
             // A path replaces maxx's own writing and nothing else: exempting
             // the guard below for the whole kind would let a keystroke
             // overwrite `img(self.avatar.clone())`.
-            if matches!(prop.kind, Kind::Path) && (!editable(node, prop) || is_absolute(value)) {
+            if matches!(prop.kind, Kind::Path)
+                && (!editable(node, prop) || leaves_the_project(value))
+            {
                 return;
             }
             let Base::Known { args, .. } = &mut node.base else {
@@ -958,6 +973,8 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
         }
         Target::Flag(name) => node.set_flag(name, value == "true"),
         Target::Scrollable(name) => {
+            let horizontal = name == "overflow_x_scroll";
+            let (hold, size) = if horizontal { ("w_full", "w") } else { ("h_full", "h") };
             node.set_flag(name, value == "true");
             if value == "true" {
                 // Without an id, gpui has nowhere to keep the scroll offset:
@@ -969,12 +986,20 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
                 }
                 // And nothing scrolls inside a box whose size follows its own
                 // content: it grows instead, and the window cuts it. The axis
-                // that scrolls is the one that has to be held.
-                node.set_flag(if name == "overflow_x_scroll" { "w_full" } else { "h_full" }, true);
+                // that scrolls is the one that has to be held — unless a size
+                // was set by hand, which says what to hold it to already.
+                if node.call(size).is_none() {
+                    node.set_flag(hold, true);
+                }
+            } else {
+                // The hold goes with it. Unlike the stray id, which nothing can
+                // see, a `h_full` left behind pins the box to its parent for
+                // good — and whoever tried scrolling and changed their mind
+                // would have no way to know why.
+                node.set_flag(hold, false);
             }
-            // Turning scrolling off leaves both behind: maxx cannot prove
-            // nothing else relies on them, and they are shown in the inspector
-            // for whoever wants them gone.
+            // The id stays either way: maxx cannot prove nothing else uses it,
+            // and it is shown in the inspector for whoever wants it gone.
         }
         Target::Family(names) => {
             for name in names {
