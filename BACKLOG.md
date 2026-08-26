@@ -79,6 +79,27 @@ Ce qui reste de ce côté :
 
 ## Confort
 
+- **Renommer une vue.** maxx sait en créer une, la supprimer et en adopter une,
+  mais pas la renommer — et l'argument qui justifie le nom généré s'appuie
+  pourtant là-dessus (`views.rs`, `new_view` : « `view_2` is renamable in Zed in
+  two seconds »). C'est vrai du fichier, pas de la vue : il faut aussi la ligne
+  de `src/ui/mod.rs`, le nom du type, et, quand c'est la vue d'entrée, l'import
+  et l'appel de `main.rs`. Quatre endroits, dont un que rien ne signale si on
+  l'oublie.
+
+  Les pièces existent toutes : `scaffold::create_view` sait déclarer dans
+  `mod.rs`, `workspace::unregister_view` sait dé-déclarer, `view_module` sait
+  reconnaître une vue, `explorer::entry_view` sait laquelle `main.rs` ouvre. Il
+  manque la commande qui les enchaîne — et le renommage du type, qui est le seul
+  morceau nouveau : textuel comme le reste, sur le `pub struct` et ses `impl`,
+  jamais sur le corps des méthodes.
+
+  Ce qu'il faudra décider en l'écrivant : ce que maxx fait des occurrences
+  qu'il ne possède pas. Un `Accueil::new` appelé depuis une autre vue est du
+  code de l'utilisateur, et le remplacer serait franchir la limite que tout le
+  reste du projet respecte. Le dire et s'arrêter est probablement la bonne
+  réponse, comme pour un module modifié.
+
 - ~~Palette de commandes `⌘K`~~ — faite, et sans liste à elle : `palette::flatten`
   aplatit ce que `menus::app_menus` renvoie déjà. Une commande ajoutée au menu y
   apparaît sans qu'on y touche, dans la langue de l'interface, avec son

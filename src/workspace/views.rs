@@ -119,7 +119,13 @@ impl Workspace {
     /// Adds a view to the open project and opens it.
     ///
     /// The name is generated rather than asked for: a modal text prompt lands
-    /// with the editor, and `view_2` is renamable in Zed in two seconds.
+    /// with the editor, and a generated name is one less thing to invent before
+    /// drawing anything.
+    ///
+    /// Renaming it afterwards is on the developer, in their editor, and it is
+    /// four places rather than one — the file, its line in `src/ui/mod.rs`, the
+    /// type, and `main.rs` when this is the view it opens. maxx does not do it
+    /// yet; the backlog says what it would take.
     pub fn new_view(&mut self, cx: &mut Context<Self>) {
         let Some(project) = self.project.as_ref() else {
             return;
