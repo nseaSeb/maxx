@@ -679,11 +679,12 @@ pub fn covers(spec: &'static Spec, name: &str) -> bool {
         Target::Method(method) | Target::Flag(method) => method == name,
         Target::Family(names) => names.contains(&name),
         Target::Variant(method, _) => method == name,
-        // The hold goes with the flag, and the property owns both: it writes
-        // them together, removes them together, and shows them as one switch.
-        // Only the `id` is left visible among the other calls — maxx wrote it,
-        // and it survives the switch being turned off.
-        Target::Scrollable(method) => method == name || name == hold_for(method),
+        // The overflow only. The hold and the id are left visible among the
+        // other calls: maxx writes them, but it cannot prove it wrote *this*
+        // one — a `h_full` may well be the developer's own layout — and hiding
+        // a call it might then delete is how a hand-written line disappears
+        // without anyone seeing it go.
+        Target::Scrollable(method) => method == name,
     })
 }
 
@@ -1187,15 +1188,12 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
                 if node.call(size).is_none() && node.call("size_full").is_none() {
                     node.set_flag(hold, true);
                 }
-            } else {
-                // The hold goes with it. Unlike the stray id, which nothing can
-                // see, a `h_full` left behind pins the box to its parent for
-                // good — and whoever tried scrolling and changed their mind
-                // would have no way to know why.
-                node.set_flag(hold, false);
             }
-            // The id stays either way: maxx cannot prove nothing else uses it,
-            // and it is shown in the inspector for whoever wants it gone.
+            // Turning it off leaves both behind, and that is the lesser evil:
+            // maxx cannot tell its own `h_full` from one written by hand, and
+            // deleting a layout call nobody asked it to touch is worse than
+            // leaving one that shows in the inspector, under its own name, for
+            // whoever wants it gone.
         }
         Target::Family(names) => {
             for name in names {

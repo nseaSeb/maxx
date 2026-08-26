@@ -1581,10 +1581,15 @@ fn apply<T: Styled>(mut element: T, calls: &[Call]) -> T {
             "text_lg" => element.text_lg(),
             "text_xl" => element.text_xl(),
             "text_2xl" => element.text_2xl(),
-            "font_normal" => element.font_weight(gpui::FontWeight::NORMAL),
-            "font_medium" => element.font_weight(gpui::FontWeight::MEDIUM),
-            "font_semibold" => element.font_weight(gpui::FontWeight::SEMIBOLD),
-            "font_bold" => element.font_weight(gpui::FontWeight::BOLD),
+            // La graisse s'écrit `font_weight(FontWeight::…)` depuis qu'on a
+            // découvert que `font_medium()` n'existe pas : c'est le nom de
+            // l'appel qu'il faut suivre ici, pas celui de la variante.
+            "font_weight" => match argument.as_str() {
+                "FontWeight::MEDIUM" => element.font_weight(gpui::FontWeight::MEDIUM),
+                "FontWeight::SEMIBOLD" => element.font_weight(gpui::FontWeight::SEMIBOLD),
+                "FontWeight::BOLD" => element.font_weight(gpui::FontWeight::BOLD),
+                _ => element.font_weight(gpui::FontWeight::NORMAL),
+            },
             "rounded_none" => element.rounded_none(),
             "rounded_sm" => element.rounded_sm(),
             "rounded_md" => element.rounded_md(),

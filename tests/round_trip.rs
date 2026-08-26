@@ -697,19 +697,20 @@ fn scrolling_writes_the_pair_it_needs() {
     assert_eq!(maxx::registry::read(&back, scroll).as_deref(), Some("true"));
     assert!(maxx::registry::covers(spec, "overflow_y_scroll"));
 
-    // Turned off, the hold goes with the flag — a `h_full` left behind pins the
-    // box to its parent for good — and the id stays, because maxx cannot prove
-    // nothing else uses it.
+    // Turned off, the overflow goes and the rest stays. maxx cannot tell its
+    // own `h_full` from one written by hand, and deleting a layout call nobody
+    // asked it to touch is worse than leaving one that shows in the inspector.
     let mut back = back;
     maxx::registry::write(&mut back, scroll, "false");
     let rendered = maxx::codegen::render(&back, 0);
     assert!(!rendered.contains("overflow_y_scroll"), "{rendered}");
-    assert!(!rendered.contains(".h_full()"), "{rendered}");
+    assert!(rendered.contains(".h_full()"), "{rendered}");
     assert!(rendered.contains(".id("), "{rendered}");
-    // The property owns the pair it writes, so neither shows up among the calls
-    // the catalogue does not know — only the id it leaves behind.
-    assert!(maxx::registry::covers(spec, "h_full"), "the switch owns the hold");
-    assert!(!maxx::registry::covers(spec, "id"), "the id is the one it leaves");
+    // And the switch owns the overflow alone: the two calls it leaves behind
+    // are shown among the ones the catalogue does not know, under their own
+    // names, for whoever wants them gone.
+    assert!(!maxx::registry::covers(spec, "h_full"), "the hold is left visible");
+    assert!(!maxx::registry::covers(spec, "id"), "so is the id");
 
     // A height set by hand says what to hold the box to already.
     let mut sized = maxx::registry::instantiate("column").expect("column is in the catalogue");

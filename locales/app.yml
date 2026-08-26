@@ -840,8 +840,8 @@ state_type.text:
   en: "Text"
   fr: "Texte"
 status.changed_outside:
-  en: " ⚠ changed outside maxx"
-  fr: " ⚠ modifié en dehors de maxx"
+  en: "⚠ changed outside maxx"
+  fr: "⚠ modifié en dehors de maxx"
 status.code:
   en: "%{name} · %{lines} lines · read only"
   fr: "%{name} · %{lines} lignes · lecture seule"
