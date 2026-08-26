@@ -621,7 +621,13 @@ impl Workspace {
     }
 
     /// Steps back one edit.
+    ///
+    /// The text edit in progress, if any, is closed first: without that, `⌘Z`
+    /// typed while a field still holds the focus would step over the text just
+    /// written — and the snapshot the field is holding would then be pushed on
+    /// top of a history it no longer describes.
     pub fn undo(&mut self, cx: &mut Context<Self>) {
+        self.close_text_edit(cx);
         self.revision += 1;
         let Some(view) = self.view_mut() else {
             return;
@@ -636,6 +642,7 @@ impl Workspace {
 
     /// Steps forward one edit.
     pub fn redo(&mut self, cx: &mut Context<Self>) {
+        self.close_text_edit(cx);
         self.revision += 1;
         let Some(view) = self.view_mut() else {
             return;
