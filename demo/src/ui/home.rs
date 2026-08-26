@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use gpui::{ClickEvent, Context, Entity, SharedString, Window, img, prelude::*};
 use gpui_component::alert::Alert;
 use gpui_component::button::Button;
@@ -97,11 +95,7 @@ impl Render for Home {
                 GroupBox::new().title("An image the project carries").child(
                     v_flex()
                         .gap_2()
-                        .child(
-                            img(PathBuf::from("assets/images/canvas.png"))
-                                .max_w_full()
-                                .rounded_md(),
-                        )
+                        .child(img("assets/images/canvas.png").max_w_full().rounded_md())
                         .child(Label::new(
                             "Chosen from anywhere, copied into assets/images, and read from there.",
                         )),

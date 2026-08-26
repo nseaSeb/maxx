@@ -81,15 +81,26 @@ maigre : `Fichier ▸ Nouveau projet…` écrit toujours le même squelette.
   Une image prise ailleurs est copiée dans `assets/images/` : le projet porte
   ses images, ou elles ne s'affichent que sur la machine qui les a choisies.
 
-  Reste **`assets.rs`**, et ce n'est plus optionnel : le chemin est lu depuis
-  le répertoire courant du processus, donc l'image s'affiche sous `cargo run`
-  lancé à la racine et pas sur un binaire double-cliqué. Le module qui déclare
-  un `AssetSource` est ce qui embarque l'image dedans.
-- **`window.rs`.** maxx retient la géométrie de sa fenêtre ; toute application
-  de bureau la veut, et personne n'a envie de la réécrire.
+- ~~**`assets.rs`**~~ — fait, et la source d'une image est devenue une chaîne
+  nue : `img("assets/images/logo.png")` est la seule graphie que gpui cherche
+  dans l'`AssetSource`, là où un `PathBuf` est lu depuis le répertoire courant
+  du processus. Le module le déclare, un `build.rs` embarque `assets/` et
+  `icons/` dans le binaire, et le repli disque sert ce qui a été ajouté depuis
+  la dernière compilation. Il s'ajoute tout seul au premier enregistrement
+  d'une vue qui dessine une image : une chaîne sans source derrière ne dessine
+  rien et ne le dit qu'au journal.
 
-Critère de fin de chantier : *créer un projet, y déposer une image, le lancer,
-le fermer, le rouvrir — et retrouver la fenêtre où on l'avait laissée.*
+  Les projets écrits avant gardent leur `PathBuf::from(…)`, que `write`
+  préserve plutôt que de le convertir — les deux graphies ne veulent pas dire
+  la même chose à l'exécution.
+- ~~**`window.rs`**~~ — fait. Son propre `state.json` à côté de
+  `settings.json` : les réglages sont ceux de l'utilisateur, l'état est celui
+  de la machine. Deux crochets, `on_window_should_close` et `on_app_quit`, pour
+  les deux sorties, et rien par image.
+
+~~Critère de fin de chantier~~ — atteint : *créer un projet, y déposer une
+image, le lancer, le fermer, le rouvrir — et retrouver la fenêtre où on l'avait
+laissée.* Restent les modèles de projet et `maxx.toml`.
 
 ### 2. Le catalogue — ce qu'on peut déposer
 
@@ -109,6 +120,16 @@ Par coût croissant, pas par ordre alphabétique.
   `description_list` sont des conteneurs à *deux* contenus — un titre et un
   corps — là où `Node` n'a qu'une liste d'enfants. C'est le seul manque
   structurel du modèle, et il vaut d'être décidé plutôt que contourné.
+- **La barre de défilement visible.** `prop.scroll` écrit `.id()` +
+  `.overflow_y_scroll()` : ça défile à la molette et ne montre rien.
+  `ScrollableElement::overflow_y_scrollbar()` de gpui-component est un seul
+  appel chaîné, sans état ni `id` — mais il ne convient pas, et c'est vérifié à
+  l'écran : `Scrollable::render` déplace le style vers son enveloppe et l'élément
+  qui porte les enfants retombe sur `Display::Block`, donc **le `gap` et
+  l'alignement du conteneur sont perdus**. La forme juste est une enveloppe
+  `relative()` et une barre en recouvrement, soit deux éléments pour un nœud :
+  c'est le même manque que les emplacements multiples ci-dessus, et il se
+  décidera avec eux.
 - **L'infobulle n'est pas un nœud** mais un décorateur (`.tooltip(…)`, qui
   prend une fermeture) : sa place est une propriété de `COMMON`.
 - **Les boîtes de dialogue non plus** : `dialog`, `sheet`, `popover`,

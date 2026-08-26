@@ -1397,10 +1397,11 @@ fn preview(
         // stands in — an image that cannot be found is better admitted than
         // drawn as a blank the user takes for a layout bug.
         Some("img") => {
-            // Only maxx's own writing is drawn from the disk. A hand-written
-            // `img("logo.png")` is an asset of the application, looked up in an
-            // `AssetSource` the canvas has no access to: showing the file of
-            // the same name would promise something the binary will not draw.
+            // Only maxx's own writing is drawn. The path is relative to the
+            // root, which is what makes the canvas and the binary agree: the
+            // canvas joins it onto the project, the assets module answers the
+            // same string. An expression someone else wrote is left as a frame
+            // rather than guessed at.
             let source = registry::of(node)
                 .and_then(|spec| spec.props.first())
                 .filter(|prop| registry::editable(node, prop))

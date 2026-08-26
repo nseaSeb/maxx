@@ -582,10 +582,10 @@ fn a_binding_that_collides_with_nothing_is_kept() {
 /// An image path is an expression, and it has to survive as one.
 ///
 /// `Kind::Path` is the only property written as neither a literal nor a
-/// `&self.` binding: it goes out as `PathBuf::from("…")`, comes back through
-/// `syn`, and the inspector has to recognise its own writing on the way in —
-/// otherwise the field shows the expression and the next keystroke overwrites
-/// the whole argument.
+/// `&self.` binding: it goes out as a string relative to the root, comes back
+/// through `syn`, and the inspector has to recognise its own writing on the way
+/// in — otherwise the field shows the expression and the next keystroke
+/// overwrites the whole argument.
 #[test]
 fn an_image_path_is_written_read_back_and_still_editable() {
     let mut node = maxx::registry::instantiate("image").expect("image is in the catalogue");
@@ -595,23 +595,22 @@ fn an_image_path_is_written_read_back_and_still_editable() {
     let rendered = maxx::codegen::render(&node, 0);
     // Dropped fitting: a photograph is wider than any view, and the switch is
     // there for whoever wants it at its own size.
-    assert_eq!(rendered, "img(PathBuf::from(\"assets/images/image.png\")).max_w_full()");
+    assert_eq!(rendered, "img(\"assets/images/image.png\").max_w_full()");
 
     let back = maxx::parser::parse_expr(&rendered).expect("the expression must read back");
     assert_eq!(maxx::registry::read(&back, source).as_deref(), Some("assets/images/image.png"));
     assert!(maxx::registry::editable(&back, source), "the inspector must own this argument");
 
     maxx::registry::write(&mut node, source, "assets/logo.png");
-    assert_eq!(
-        maxx::codegen::render(&node, 0),
-        "img(PathBuf::from(\"assets/logo.png\")).max_w_full()"
-    );
+    assert_eq!(maxx::codegen::render(&node, 0), "img(\"assets/logo.png\").max_w_full()");
 
-    // The import travels with it: `PathBuf` sits on the base, not on a call,
-    // and nothing else in the tree would bring it in.
+    // No `PathBuf` import to bring in any more, and that is the point: a string
+    // is what gpui looks up in the `AssetSource`, a path is what it reads from
+    // the working directory.
     let mut root = maxx::model::Node::known("v_flex");
     root.push_child(node.clone());
-    assert!(maxx::registry::imports(&root).contains(&"use std::path::PathBuf;"));
+    assert!(!maxx::registry::imports(&root).contains(&"use std::path::PathBuf;"));
+    assert!(maxx::registry::uses_an_asset(&root), "the tree owes the project an AssetSource");
 
     // An absolute path is refused rather than written: it would resolve on one
     // machine only. Refused by `write` too, and not only reported by
@@ -620,10 +619,41 @@ fn an_image_path_is_written_read_back_and_still_editable() {
     assert!(maxx::registry::validate(source, "/Users/someone/logo.png").is_some());
     assert!(maxx::registry::validate(source, "assets/logo.png").is_none());
     maxx::registry::write(&mut node, source, "/Users/someone/logo.png");
+    assert_eq!(maxx::codegen::render(&node, 0), "img(\"assets/logo.png\").max_w_full()");
+}
+
+/// A project written by an older maxx keeps the spelling it has.
+///
+/// `PathBuf::from("…")` and `"…"` do not mean the same thing at runtime — one
+/// is read from the working directory, the other is looked up in the
+/// application's `AssetSource` — so flipping an existing one under the
+/// developer would change what their project does, on a line they never
+/// touched. And it would leave the file with a `use std::path::PathBuf;`
+/// nothing uses, because `imports` adds and never prunes.
+#[test]
+fn an_older_project_keeps_the_path_form_it_had() {
+    let source = "img(PathBuf::from(\"assets/images/old.png\")).max_w_full()";
+    let mut node = maxx::parser::parse_expr(source).expect("the expression must read back");
+    let spec = maxx::registry::of(&node).expect("img is in the catalogue");
+    let prop = &spec.props[0];
+
+    assert_eq!(
+        maxx::registry::read(&node, prop).as_deref(),
+        Some("assets/images/old.png"),
+        "the older spelling still reads back"
+    );
+    assert!(maxx::registry::editable(&node, prop), "and stays the inspector's to write");
+
+    maxx::registry::write(&mut node, prop, "assets/images/new.png");
     assert_eq!(
         maxx::codegen::render(&node, 0),
-        "img(PathBuf::from(\"assets/logo.png\")).max_w_full()"
+        "img(PathBuf::from(\"assets/images/new.png\")).max_w_full()"
     );
+
+    let mut root = maxx::model::Node::known("v_flex");
+    root.push_child(node);
+    assert!(maxx::registry::imports(&root).contains(&"use std::path::PathBuf;"));
+    assert!(!maxx::registry::uses_an_asset(&root), "a path owes the project nothing");
 }
 
 /// A path is decoded the way it was encoded, escape for escape.
@@ -755,7 +785,7 @@ fn a_path_that_leaves_the_project_is_refused() {
         maxx::registry::write(&mut node, source, refused);
         assert_eq!(
             maxx::codegen::render(&node, 0),
-            "img(PathBuf::from(\"assets/images/image.png\")).max_w_full()",
+            "img(\"assets/images/image.png\").max_w_full()",
             "{refused}"
         );
     }

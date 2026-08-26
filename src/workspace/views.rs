@@ -252,10 +252,56 @@ impl Workspace {
                 false
             }
         };
+        // A picture asked for by name needs an `AssetSource`, and a project
+        // that declares none draws nothing and says so only in the log. Saving
+        // is the one place every image passes through — a drop, a paste, an
+        // undo, a hand-written view maxx has adopted.
+        if saved {
+            self.ensure_assets_module();
+        }
         self.format_after_save(&path, saved, cx);
         self.conflicts.remove(&path);
         self.revision += 1;
         cx.notify();
+    }
+
+    /// Adds the assets module when the view just written draws one.
+    ///
+    /// Adding rather than saying it and stopping: a bare string with no source
+    /// behind it is the silent failure this module exists to remove, and saving
+    /// a view already adds a field, an import and a handler stub to the
+    /// developer's file.
+    fn ensure_assets_module(&mut self) {
+        let Some(project) = self.project.as_ref() else {
+            return;
+        };
+        let root = project.root.clone();
+        if root.join("src/assets.rs").exists() || self.assets_refused.contains(&root) {
+            return;
+        }
+        // A module the project once carried and no longer does was deleted on
+        // purpose — `maxx.toml` remembers it. Putting it back on the next save
+        // would be maxx arguing with the developer, and there would be no way
+        // to win the argument.
+        if crate::projectfile::load(&root).modules.contains_key("assets") {
+            return;
+        }
+        let Some(view) = self.view() else {
+            return;
+        };
+        if !crate::registry::uses_an_asset(&view.root) {
+            return;
+        }
+        match crate::scaffold::add_assets_module(&root) {
+            Ok(()) => {
+                self.refresh_entries();
+                self.message = Some(crate::tr("message.assets_added_for_image"));
+            }
+            Err(error) => {
+                self.assets_refused.insert(root);
+                self.message = Some(SharedString::from(error.to_string()));
+            }
+        }
     }
 
     /// Passes the freshly written file through `rustfmt`, when asked to.

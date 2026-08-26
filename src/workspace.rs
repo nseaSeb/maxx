@@ -198,6 +198,11 @@ pub struct Workspace {
     edit_snapshot: Option<(PathBuf, Node)>,
     /// Views changed both on disk and in the designer, awaiting a decision.
     conflicts: HashSet<PathBuf>,
+    /// Projects where the assets module could not be added on its own.
+    ///
+    /// Kept so the refusal is said once and not on every save: it carries the
+    /// lines to add by hand, and repeating it would be nagging.
+    assets_refused: HashSet<PathBuf>,
     /// Whether the window held the focus on the previous frame, to notice the
     /// moment it comes back.
     was_active: bool,
@@ -261,6 +266,7 @@ impl Workspace {
             state_type: 0,
             edit_snapshot: None,
             conflicts: HashSet::new(),
+            assets_refused: HashSet::new(),
             was_active: false,
             side_scroll: ScrollHandle::new(),
             canvas_scroll: ScrollHandle::new(),

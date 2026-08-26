@@ -26,6 +26,8 @@ actions!(
         AddSystemModule,
         AddSettingsModule,
         AddThemeModule,
+        AddAssetsModule,
+        AddWindowModule,
         UpdateModules,
         NoRecentProject,
         ClearRecentProjects,
@@ -266,6 +268,12 @@ pub fn register_handlers(cx: &mut App) {
     });
     cx.on_action(|_: &AddSettingsModule, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.add_settings_module(cx));
+    });
+    cx.on_action(|_: &AddAssetsModule, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.add_assets_module(cx));
+    });
+    cx.on_action(|_: &AddWindowModule, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.add_window_module(cx));
     });
     cx.on_action(|_: &UpdateModules, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.update_modules(cx));
