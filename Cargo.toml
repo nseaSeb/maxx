@@ -41,6 +41,10 @@ rust-i18n = "3"
 # de pixels fait vraiment la photographie qu'on vient de poser.
 image = "0.25"
 
+[dev-dependencies]
+# Déjà dans l'arbre par gpui : sert à rasteriser les essais d'icône.
+resvg = "0.45"
+
 [profile.dev]
 opt-level = 0
 

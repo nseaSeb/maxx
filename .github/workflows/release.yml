@@ -91,6 +91,18 @@ jobs:
           mkdir -p paquets
           cp "$source" "paquets/$cible"
 
+      # Une icône ne s'attache pas à un exécutable : sur macOS c'est le paquet
+      # qui la porte, et le nom que le Dock affiche avec elle. Le binaire nu
+      # part quand même, pour qui le veut dans son `PATH`.
+      - name: Paquet d'application (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/bundle-macos.sh target/release/maxx paquets
+          ditto -c -k --keepParent paquets/maxx.app paquets/maxx-macos.app.zip
+          rm -rf paquets/maxx.app
+
       - uses: actions/upload-artifact@v4
         with:
           name: binaire-${{ runner.os }}

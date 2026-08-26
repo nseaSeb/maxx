@@ -355,6 +355,41 @@ A missing, partial or damaged file never stops maxx from starting — every valu
 has a default, and an unreadable file is reported and then left alone, so that
 whatever you were in the middle of writing is not overwritten.
 
+## The icon
+
+maxx is named after a labrador, and the icon is his: a dog's head, frontal,
+inside a twelve-toothed gear.
+
+The gear is not decoration. It quotes the *structure* of the Rust logo — a gear
+with something in the middle — without copying a single one of its curves, and
+what sits in the middle is the dog rather than a letter. The crimson is the one
+measured in the drawing maxx was named from, `#c4373e`, which is kept beside it
+as `assets/logo.png`.
+
+The source is `assets/icon.svg`, on Apple's grid: the rounded square takes 824
+of the 1024, centred. It is SVG because that is the only form that can be
+corrected — a gear tooth moves in a text file, not in a million pixels.
+
+```sh
+cargo run --example make_icon          # assets/icon.svg → assets/icon-1024.png
+```
+
+Then the sizes macOS asks for, and the bundle that carries them:
+
+```sh
+cd assets && mkdir -p maxx.iconset
+for spec in 16:16x16 32:16x16@2x 32:32x32 64:32x32@2x 128:128x128 \
+            256:128x128@2x 256:256x256 512:256x256@2x 512:512x512 1024:512x512@2x; do
+  sips -z "${spec%%:*}" "${spec%%:*}" icon-1024.png --out "maxx.iconset/icon_${spec##*:}.png"
+done
+iconutil -c icns maxx.iconset -o maxx.icns && rm -rf maxx.iconset
+```
+
+`scripts/bundle-macos.sh` assembles `maxx.app` around a built binary, because an
+icon does not attach to an executable: on macOS the bundle carries it, along
+with the name the Dock shows. The release workflow runs it and attaches the
+bundle beside the bare binaries.
+
 ## Licence
 
 maxx is MIT licensed — see [`LICENSE`](LICENSE).
