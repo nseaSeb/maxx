@@ -182,8 +182,11 @@ impl Workspace {
                     t!(
                         "status.view_code",
                         name = file.name(),
-                        dirty =
-                            if self.view().is_some_and(|view| view.dirty()) { " •" } else { "" },
+                        dirty = if self.view().is_some_and(|view| view.dirty()) {
+                            unsaved()
+                        } else {
+                            String::new()
+                        },
                         lines = file.lines()
                     )
                     .into_owned(),
@@ -240,7 +243,11 @@ impl Workspace {
                 t!(
                     "status.nodes",
                     name = view.name(),
-                    dirty = if view.dirty() { " •" } else { "" },
+                    // Said in words rather than marked with a dot: what is on
+                    // the canvas and what is in the file differ until ⌘S, and a
+                    // bullet is not enough to explain that to someone reading
+                    // their own `.rs` beside maxx and finding it behind.
+                    dirty = if view.dirty() { unsaved() } else { String::new() },
                     conflict = if conflict {
                         crate::tr("status.changed_outside").to_string()
                     } else {
@@ -452,4 +459,9 @@ impl Workspace {
                 .into_any_element(),
         )
     }
+}
+
+/// What the status bar says of a view that has not been written yet.
+fn unsaved() -> String {
+    format!(" • {}", crate::tr("status.unsaved"))
 }

@@ -860,6 +860,9 @@ status.no_project:
 status.nodes:
   en: "%{name}%{dirty}%{conflict} · %{count} nodes"
   fr: "%{name}%{dirty}%{conflict} · %{count} nœuds"
+status.unsaved:
+  en: "unsaved"
+  fr: "non enregistré"
 status.view_code:
   en: "%{name}%{dirty} · %{lines} lines · the code ⌘S would write"
   fr: "%{name}%{dirty} · %{lines} lignes · le code que ⌘S écrirait"
