@@ -62,6 +62,8 @@ actions!(
         ToggleProjectPanel,
         ToggleStatusBar,
         ToggleOutput,
+        ToggleCode,
+        ViewCode,
         OpenPreferences,
         OpenMenuBar,
         RemoveMenuBar,
@@ -248,6 +250,17 @@ pub fn register_handlers(cx: &mut App) {
     cx.on_action(|_: &ToggleOutput, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.toggle_output(cx));
     });
+    cx.on_action(|_: &ToggleCode, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.toggle_code(cx));
+    });
+    // The explorer selection, not the active view: this one hangs off the right
+    // click, and it is about the file the pointer is on.
+    cx.on_action(|_: &ViewCode, cx: &mut App| {
+        let path = selected_entry_path(cx);
+        if let Some(path) = path {
+            with_active_workspace(cx, |workspace, _, cx| workspace.open_code(path, cx));
+        }
+    });
     cx.on_action(|_: &AddSystemModule, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.add_system_module(cx));
     });
@@ -336,6 +349,7 @@ pub fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-r", RunProject, None),
         KeyBinding::new("cmd-.", StopProject, None),
         KeyBinding::new("cmd-j", ToggleOutput, None),
+        KeyBinding::new("cmd-e", ToggleCode, None),
         KeyBinding::new("cmd-alt-r", RevealInFinder, None),
         KeyBinding::new("cmd-alt-t", OpenTerminal, None),
         KeyBinding::new("cmd-alt-z", OpenInZed, None),

@@ -126,6 +126,8 @@ pub fn app_menus(cx: &App) -> Vec<Menu> {
         Menu {
             name: tr("menu.view"),
             items: vec![
+                MenuItem::action(tr("menu.toggle_code"), ToggleCode),
+                MenuItem::separator(),
                 MenuItem::action(tr("menu.project_panel"), ToggleProjectPanel),
                 MenuItem::action(tr("menu.output"), ToggleOutput),
                 MenuItem::action(tr("menu.status_bar"), ToggleStatusBar),

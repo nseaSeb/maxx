@@ -34,6 +34,7 @@ parseur servent à garantir.
 | `workspace/views.rs` | les onglets, la lecture et l'écriture d'une vue |
 | `workspace/inspector.rs` | la sélection, les propriétés, l'état, l'insertion, l'annulation |
 | `workspace/explorer.rs` | l'arbre de fichiers, sa sélection, ses suppressions |
+| `workspace/code.rs` | le lecteur de code : n'importe quel fichier texte, en lecture seule |
 | `workspace/menus.rs` | l'éditeur de barre de menus |
 | `workspace/chrome.rs` | la coque : titre, écran d'accueil, barre d'état, `Render` |
 | `workspace/process.rs` | `cargo run` et le panneau de sortie |

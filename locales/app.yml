@@ -65,6 +65,9 @@ context.open_in:
 context.reveal:
   en: "Reveal in the Finder"
   fr: "Révéler dans le Finder"
+context.view_code:
+  en: "View the code"
+  fr: "Voir le code"
 designer.add:
   en: "Add"
   fr: "Ajouter"
@@ -170,6 +173,12 @@ error.env_missing:
 error.field_exists:
   en: "the field “%{name}” already exists"
   fr: "le champ « %{name} » existe déjà"
+error.file_not_text:
+  en: "this file is not text — open it outside maxx"
+  fr: "ce fichier n'est pas du texte — ouvrez-le en dehors de maxx"
+error.file_too_large:
+  en: "this file is too large to show here (%{size} kB)"
+  fr: "ce fichier est trop gros pour être montré ici (%{size} ko)"
 error.identifier:
   en: "letters, digits and “_” only, and never a leading digit"
   fr: "lettres, chiffres et « _ » seulement, et pas de chiffre en tête"
@@ -188,6 +197,9 @@ error.no_render:
 error.no_trailing_expression:
   en: "the body of “render” does not end on an expression — maxx would not know where to put its markers"
   fr: "le corps de « render » ne se termine pas par une expression — maxx ne saurait pas où poser ses marqueurs"
+error.not_a_file:
+  en: "a folder has no code to show"
+  fr: "un dossier n'a pas de code à montrer"
 error.number:
   en: "a number, for example 50 or 12.5"
   fr: "un nombre, par exemple 50 ou 12.5"
@@ -398,6 +410,9 @@ menu.theme:
 menu.title:
   en: "Title"
   fr: "Titre"
+menu.toggle_code:
+  en: "Canvas or code"
+  fr: "Canvas ou code"
 menu.undo:
   en: "Undo"
   fr: "Annuler"
@@ -788,6 +803,9 @@ state_type.text:
 status.changed_outside:
   en: " ⚠ changed outside maxx"
   fr: " ⚠ modifié en dehors de maxx"
+status.code:
+  en: "%{name} · %{lines} lines · read only"
+  fr: "%{name} · %{lines} lignes · lecture seule"
 status.items:
   en: "%{name} · %{count} items"
   fr: "%{name} · %{count} éléments"
@@ -800,6 +818,9 @@ status.no_project:
 status.nodes:
   en: "%{name}%{dirty}%{conflict} · %{count} nodes"
   fr: "%{name}%{dirty}%{conflict} · %{count} nœuds"
+status.view_code:
+  en: "%{name}%{dirty} · %{lines} lines · the code ⌘S would write"
+  fr: "%{name}%{dirty} · %{lines} lignes · le code que ⌘S écrirait"
 tools.automatic:
   en: "Automatic (%{tool})"
   fr: "Automatique (%{tool})"

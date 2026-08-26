@@ -172,6 +172,39 @@ impl Workspace {
 
     fn render_status_bar(&self) -> impl IntoElement {
         let conflict = self.view().is_some_and(|view| self.conflicts.contains(&view.path));
+        if let Some(file) = self.code.as_ref() {
+            let label = match &self.message {
+                Some(message) => message.clone(),
+                // A view seen as code says so: what is on screen is what `⌘S`
+                // would write, which on a modified view is not what the disk
+                // holds — and the dot is the only thing that says it.
+                None if file.of_view => SharedString::from(
+                    t!(
+                        "status.view_code",
+                        name = file.name(),
+                        dirty =
+                            if self.view().is_some_and(|view| view.dirty()) { " •" } else { "" },
+                        lines = file.lines()
+                    )
+                    .into_owned(),
+                ),
+                None => SharedString::from(
+                    t!("status.code", name = file.name(), lines = file.lines()).into_owned(),
+                ),
+            };
+            return div()
+                .flex()
+                .items_center()
+                .h(px(24.))
+                .px_3()
+                .flex_none()
+                .bg(theme::panel_bg())
+                .border_t_1()
+                .border_color(theme::border())
+                .text_xs()
+                .text_color(theme::text_muted())
+                .child(label);
+        }
         if let Some(menus) = self.menu_file.as_ref() {
             let label = match &self.message {
                 Some(message) => message.clone(),
@@ -262,6 +295,7 @@ impl Render for Workspace {
 
         self.sync_prop_inputs(window, cx);
         self.sync_menu_inputs(window, cx);
+        self.sync_code_input(window, cx);
         let visible = crate::settings::prefs(cx).clone();
         let show_panel = visible.show_project_panel && self.project.is_some();
         let panel_width = crate::settings::state(cx).panel_width.unwrap_or(240.);

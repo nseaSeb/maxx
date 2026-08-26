@@ -147,6 +147,35 @@ Ce qui reste de ce côté :
 - **`view::ensure_imports` s'ancre sur le dernier `use` en colonne 0** du
   fichier : un `use` placé après l'`impl` attirerait les imports insérés vers le
   bas du fichier. Cas tordu, mais réel.
+- ~~Voir un fichier que maxx ne sait pas dessiner~~ — fait, en lecture seule.
+  N'importe quel fichier texte de l'explorateur s'ouvre dans `workspace/code.rs`,
+  colorisé par tree-sitter, avec ses numéros de ligne ; un `.rs` sans région
+  gérée — `main.rs`, `ui/mod.rs` — y va aussi, au lieu de l'erreur d'analyse
+  qu'il recevait.
+
+  `⌘E` retourne la vue en cours : le code montré est celui que `⌘S` écrirait,
+  rendu depuis l'arbre — `View::render_source`, sorti de `View::save`, dont il
+  ne restait que le `fs::write` à retirer. Le disque aurait été plus simple et
+  faux : une vue modifiée aurait montré un code périmé, exactement quand on
+  ouvre le panneau pour vérifier. Et une seule tabulation : une vue vue comme
+  code reste le même document, d'où `CodeFile::of_view`.
+
+  La colorisation ne coûte aucune dépendance à nous : `gpui-component` porte
+  déjà les grammaires, derrière sa feature `tree-sitter-languages`. Le seul
+  effet de bord de l'activer est un `cc` retenu en 1.2.67 dans `Cargo.lock` :
+  `tree-sitter-sequel` le plafonne en `~1.2`, alors que `gpui` tirait 1.4.4 par
+  `embed-resource`, et cargo refusait de résoudre tant que les deux
+  cohabitaient. `cargo update -p cc --precise 1.2.67` débloque — et comme `cc`
+  pilote la compilation native de tout l'arbre, la vérification qui compte est
+  que `gpui` a bien été recompilé derrière : la sortie de ce build porte
+  « Compiling cc v1.2.67 » puis « Compiling gpui v0.2.2 », et elle aboutit.
+
+  **Éditer et enregistrer depuis maxx est écarté**, et pas par manque de temps :
+  un `.rs` géré a déjà une source de vérité, le canvas, et deux écrivains sur un
+  même fichier demandent une politique de conflit dont `Workspace::conflicts`
+  n'esquisse aujourd'hui que la moitié — il sait dire qu'un fichier a changé
+  dehors, pas fusionner. Tant que cette politique n'est pas décidée, le lecteur
+  lit et `⌘⌥Z` reste le chemin vers l'écriture.
 
 ## Avant de rendre le dépôt public
 

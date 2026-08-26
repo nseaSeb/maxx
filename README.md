@@ -62,6 +62,17 @@ panel.
 What `⌘⌥C` puts on the clipboard is Rust, not a format of maxx's own: a subtree
 copied here pastes into Zed, and an expression written there pastes back.
 
+In the project panel, a view opens on the canvas and every other file — a
+`Cargo.toml`, a `README.md`, a `main.rs` with no managed region — opens in the
+code reader: syntax highlighting, line numbers, selection and copy, and no
+writing. Right-click gives *View the code* for any file; editing stays in your
+editor, one `⌘⌥Z` away.
+
+`⌘E` turns the view being designed over. What it shows is not the file on disk
+but the Rust `⌘S` would write, rendered from the tree as it stands — so the
+canvas and the code can never disagree. Press it again to come back. One tab
+either way: it is the same document, seen from two sides.
+
 `⌘K` opens the command palette. It has no list of its own — it *is* the menu
 bar, flattened, with the path that leads to each command and the keystroke it
 answers to, both read back rather than written a second time. Type words in any

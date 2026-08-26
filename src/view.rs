@@ -211,8 +211,13 @@ impl View {
         self.root.at(&self.selected).unwrap_or(&self.root)
     }
 
-    /// Renders the tree, splices it into the file and writes it to disk.
-    pub fn save(&mut self) -> Result<(), String> {
+    /// The file as [`Self::save`] would write it, without writing it.
+    ///
+    /// Split out of `save` so the code reader can show the same text: what the
+    /// canvas is about to produce, rather than what the disk still holds. The
+    /// whole pipeline was already textual and pure — only the `fs::write` had
+    /// to come out.
+    pub fn render_source(&self) -> Result<String, String> {
         // `splice` re-indents every line by the marker's own indentation, so
         // the block is rendered flush left and only the width budget knows
         // about that offset.
@@ -232,7 +237,12 @@ impl View {
         for (handler, shape) in registry::handlers(&self.root) {
             source = ensure_handler(source, &handler, shape);
         }
+        Ok(source)
+    }
 
+    /// Renders the tree, splices it into the file and writes it to disk.
+    pub fn save(&mut self) -> Result<(), String> {
+        let source = self.render_source()?;
         std::fs::write(&self.path, &source).map_err(|error| error.to_string())?;
         self.source = source;
         self.saved = self.root.clone();
