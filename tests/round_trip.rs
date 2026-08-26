@@ -672,6 +672,8 @@ fn scrolling_writes_the_pair_it_needs() {
     let rendered = maxx::codegen::render(&column, 0);
     assert!(rendered.contains(".overflow_y_scroll()"), "{rendered}");
     assert!(rendered.contains(".id("), "the offset needs somewhere to live: {rendered}");
+    // And a box whose height follows its content grows instead of scrolling.
+    assert!(rendered.contains(".h_full()"), "the axis that scrolls is held: {rendered}");
 
     // It reads back as what it is, and the catalogue owns the call rather than
     // showing it among the ones it does not know.

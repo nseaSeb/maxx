@@ -959,16 +959,22 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
         Target::Flag(name) => node.set_flag(name, value == "true"),
         Target::Scrollable(name) => {
             node.set_flag(name, value == "true");
-            // Without an id, gpui has nowhere to keep the scroll offset: the
-            // content is clipped and never moves. The workspace assigns one no
-            // sibling is using before it gets here; this is the fallback for a
-            // node written without it.
-            //
-            // Turning scrolling off leaves the id: maxx cannot prove nothing
-            // else uses it, and a stray id costs nothing.
-            if value == "true" && node.call("id").is_none() {
-                node.set_call("id", Arg::Str("scroll".into()));
+            if value == "true" {
+                // Without an id, gpui has nowhere to keep the scroll offset:
+                // the content is clipped and never moves. The workspace assigns
+                // one no sibling is using before it gets here; this is the
+                // fallback for a node written without it.
+                if node.call("id").is_none() {
+                    node.set_call("id", Arg::Str("scroll".into()));
+                }
+                // And nothing scrolls inside a box whose size follows its own
+                // content: it grows instead, and the window cuts it. The axis
+                // that scrolls is the one that has to be held.
+                node.set_flag(if name == "overflow_x_scroll" { "w_full" } else { "h_full" }, true);
             }
+            // Turning scrolling off leaves both behind: maxx cannot prove
+            // nothing else relies on them, and they are shown in the inspector
+            // for whoever wants them gone.
         }
         Target::Family(names) => {
             for name in names {

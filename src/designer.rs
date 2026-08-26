@@ -439,6 +439,12 @@ impl Workspace {
                     .overflow_y_scroll()
                     .track_scroll(&self.canvas_scroll)
                     .flex()
+                    // Aligned to the top, and it is not cosmetic: a flex line
+                    // stretches its children to its own height by default, so
+                    // the board was held to the window and its content spilled
+                    // out of it — cut at the same place, with a scrollbar that
+                    // had nothing to move.
+                    .items_start()
                     .p_6()
                     .justify_center()
                     .overflow_x_hidden()
@@ -450,7 +456,12 @@ impl Workspace {
                             // centred, it lost both of its edges at once.
                             .w_full()
                             .max_w(px(520.))
-                            .h_full()
+                            // No height: the board is as tall as what it
+                            // holds, and that is what gives the scroll
+                            // something to scroll. Held to the viewport by
+                            // `h_full`, its content overflowed it instead —
+                            // cut at the same place as before, with a bar that
+                            // had nothing to move.
                             .p_2()
                             .rounded_md()
                             .border_1()
