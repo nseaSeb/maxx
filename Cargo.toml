@@ -18,7 +18,11 @@ publish = false
 # runtime_shaders avoids the build-time `metal` compiler, which Xcode 26 ships
 # as a separate downloadable component. Do not remove it on this machine.
 gpui = { version = "0.2.2", features = ["runtime_shaders"] }
-gpui-component = "0.5.1"
+# tree-sitter-languages is what the code reader reads with: without it the
+# crate's `Language` enum holds Json alone, and every file — Rust included —
+# would be coloured with the JSON grammar. It costs the ~29 bundled grammars at
+# build time, and adds no third-party dependency of our own.
+gpui-component = { version = "0.5.1", features = ["tree-sitter-languages"] }
 syn = { version = "3", features = ["full", "extra-traits"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"

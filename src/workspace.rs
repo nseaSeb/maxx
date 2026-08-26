@@ -2,6 +2,7 @@
 //! which window a freshly opened folder lands in.
 
 mod chrome;
+mod code;
 mod explorer;
 mod inspector;
 mod menus;
@@ -11,6 +12,7 @@ mod process;
 mod views;
 
 pub use chrome::fillable;
+pub use code::{CodeFile, language_for};
 pub use explorer::{protected_entry, top_level_module, unregister_view, view_module};
 
 use rust_i18n::t;
@@ -23,7 +25,7 @@ use gpui::{
 use gpui::{ScrollHandle, ScrollStrategy, Task, UniformListScrollHandle};
 use gpui_component::Root;
 use gpui_component::Sizable as _;
-use gpui_component::input::{InputEvent, InputState};
+use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::menu::ContextMenuExt as _;
 use gpui_component::resizable::{ResizableState, h_resizable, resizable_panel};
 use gpui_component::scroll::Scrollbar;
@@ -134,6 +136,14 @@ pub struct Workspace {
     selected: Option<PathBuf>,
     /// The project's menu bar, when `src/menus.rs` is the file being edited.
     pub menu_file: Option<MenuFile>,
+    /// The file the code reader is showing, when it is showing one.
+    pub code: Option<CodeFile>,
+    /// The reader's field, built once per file.
+    code_input: Option<Entity<InputState>>,
+    /// The file that field was built for.
+    code_synced: Option<PathBuf>,
+    /// The revision the view's code was rendered at.
+    code_revision: u64,
     /// Whether the preferences screen has taken over the main area.
     pub preferences: bool,
     /// Where the split between the project panel and the rest sits.
@@ -212,6 +222,10 @@ impl Workspace {
             expanded: HashSet::new(),
             selected: None,
             menu_file: None,
+            code: None,
+            code_input: None,
+            code_synced: None,
+            code_revision: 0,
             preferences: false,
             panel_split: cx.new(|_| ResizableState::default()),
             inspector_split: cx.new(|_| ResizableState::default()),
@@ -259,6 +273,9 @@ impl Workspace {
         self.menu_file = None;
         self.preferences = false;
         self.menu_synced = None;
+        // A window with no project can still hold a file in the reader; showing
+        // it under the new project's name would be the previous project's file.
+        self.forget_code(|_| true);
         let project = Project::open(path);
         window.set_window_title(&project.name);
         self.project = Some(project);
@@ -279,6 +296,10 @@ impl Workspace {
         self.project = None;
         self.views.clear();
         self.active = None;
+        // The reader's status line comes before every other branch, welcome
+        // screen included: left behind, it would name a file of a project that
+        // is no longer open.
+        self.forget_code(|_| true);
         self.menu_file = None;
         self.preferences = false;
         self.menu_synced = None;

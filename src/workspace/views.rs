@@ -33,6 +33,7 @@ impl Workspace {
         // to leave them, or the tab strip stays without effect.
         self.menu_file = None;
         self.preferences = false;
+        self.code = None;
         if index < self.views.len() {
             self.active = Some(index);
             self.selected = Some(self.views[index].path.clone());
@@ -55,6 +56,12 @@ impl Workspace {
             cx.notify();
             return;
         }
+        // The reader may be showing this very view's code, and `render_designer`
+        // tests `self.code` before it tests `self.view()`: left behind, the
+        // panel would go on rendering a document that is no longer open, with
+        // no tab left to leave it by.
+        let path = view.path.clone();
+        self.forget_code(|candidate| candidate == path);
         self.views.remove(index);
         self.active = match self.active {
             Some(_) if self.views.is_empty() => None,
@@ -99,18 +106,44 @@ impl Workspace {
         if path.extension().is_some_and(|extension| extension == "rs") {
             // Already open: just bring its tab forward.
             if let Some(index) = self.views.iter().position(|view| view.path == path) {
+                self.code = None;
                 self.active = Some(index);
                 self.revision += 1;
             } else {
                 match View::load(&path) {
                     Ok(view) => {
+                        self.code = None;
                         self.views.push(view);
                         self.active = Some(self.views.len() - 1);
                         self.revision += 1;
                     }
-                    Err(error) => self.message = Some(SharedString::from(error)),
+                    // A `.rs` without a managed region is not a broken view: it
+                    // is `main.rs`, `ui/mod.rs`, a module written by hand. The
+                    // reader shows it rather than the parser refusing it.
+                    //
+                    // Only that one reason, though. `View::load` also refuses a
+                    // syntax error in the region and markers in the wrong order,
+                    // and those are a diagnosis: swallowing them would leave a
+                    // read-only panel and no clue what maxx choked on. The file
+                    // is read a second time here, on the failing path only.
+                    Err(error) => {
+                        let no_region = std::fs::read_to_string(&path).is_ok_and(|source| {
+                            matches!(
+                                crate::parser::locate(&source),
+                                Err(crate::parser::Error::NoMarkers)
+                            )
+                        });
+                        if no_region {
+                            self.open_code(path, cx);
+                            return;
+                        }
+                        self.message = Some(SharedString::from(error));
+                    }
                 }
             }
+        } else {
+            self.open_code(path, cx);
+            return;
         }
         self.selected = Some(path);
         cx.notify();

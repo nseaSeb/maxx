@@ -67,6 +67,15 @@ impl Workspace {
                 .child(self.render_menu_editor(cx))
                 .into_any_element();
         }
+        if self.code.is_some() {
+            // The tab strip stays: it is the way back to an open view.
+            return v_flex()
+                .flex_1()
+                .overflow_hidden()
+                .child(self.render_tabs(cx))
+                .child(self.render_code(cx))
+                .into_any_element();
+        }
         if self.view().is_none() {
             return div()
                 .flex()
@@ -106,8 +115,11 @@ impl Workspace {
             .into_any_element()
     }
 
-    /// One tab per open view.
+    /// One tab per open view, plus the file the code reader holds.
     fn render_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        // A file opened on its own takes the light; a view seen as code keeps
+        // its own tab lit, because it is the same document either way.
+        let reading = self.code.as_ref().is_some_and(|file| !file.of_view);
         let tabs: Vec<(usize, SharedString, bool, bool)> = self
             .open_views()
             .iter()
@@ -116,11 +128,13 @@ impl Workspace {
                 (
                     index,
                     SharedString::from(view.name()),
-                    self.active_index() == Some(index),
+                    !reading && self.active_index() == Some(index),
                     view.dirty(),
                 )
             })
             .collect();
+        // Never dirty: the reader does not write.
+        let read_tab = self.code.as_ref().filter(|file| !file.of_view).map(|file| file.name());
 
         div()
             .flex()
@@ -158,6 +172,32 @@ impl Workspace {
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.activate_view(index, cx);
                     }))
+            }))
+            .children(read_tab.map(|name| {
+                h_flex()
+                    .id("tab-code")
+                    .gap_1()
+                    .px_3()
+                    .cursor_pointer()
+                    .bg(theme::bg())
+                    .border_r_1()
+                    .border_color(theme::border())
+                    .text_xs()
+                    .text_color(theme::text())
+                    .child(name)
+                    .child(
+                        div()
+                            .id("tab-code-close")
+                            .px_1()
+                            .rounded_sm()
+                            .hover(|this| this.bg(theme::hover_bg()))
+                            .child("×")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                cx.stop_propagation();
+                                this.close_code(cx);
+                            })),
+                    )
+                    .on_click(cx.listener(|this, _, _, cx| this.activate_code(cx)))
             }))
     }
 

@@ -101,8 +101,8 @@ impl Workspace {
             let _ = crate::scaffold::remove_module(&root, &module);
         }
 
-        // Every tab under it, and the menu editor, are now looking at a file
-        // that is gone.
+        // Every tab under it, the menu editor and the code reader are now
+        // looking at a file that is gone.
         let gone = |candidate: &std::path::Path| {
             candidate == path || (is_dir && candidate.starts_with(&path))
         };
@@ -120,6 +120,7 @@ impl Workspace {
             self.menu_file = None;
             self.menu_synced = None;
         }
+        self.forget_code(gone);
 
         self.selected = None;
         self.expanded.retain(|expanded| !gone(expanded));
@@ -207,6 +208,7 @@ impl Workspace {
                 menu.menu(crate::tr("context.new_view"), Box::new(crate::actions::NewView))
                     .menu(crate::tr("context.delete"), Box::new(crate::actions::DeleteFile))
                     .separator()
+                    .menu(crate::tr("context.view_code"), Box::new(crate::actions::ViewCode))
                     .menu(crate::tr("context.reveal"), Box::new(crate::actions::RevealInFinder))
                     .menu(
                         t!("context.open_in", editor = editor).into_owned(),
