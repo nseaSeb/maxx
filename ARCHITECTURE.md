@@ -336,6 +336,23 @@ n'ouvre pas serait pire que pas d'enregistrement du tout. Et c'est le site de
 construction qui fait foi, pas la ligne `use` : un `main.rs` peut importer
 plusieurs vues, une seule est confiée à `Root`.
 
+**Les formes de projet** sont la troisième sorte de code que maxx écrit, après
+les vues qu'il dessine et les modules qu'il copie. `src/ui/shell.rs` — une
+barre latérale et la vue du moment — est du Rust ordinaire écrit une fois à la
+création : ni marqueurs `maxx:`, ni version, ni rattrapage. C'est voulu, et
+c'est la différence avec un module : une coquille est la forme du projet, que
+le développeur va faire sienne dès la première page ajoutée.
+
+Elles posaient un problème que les vues n'ont pas : rien ne les compilait.
+`src/scaffold/templates.rs` ne dépend de rien, si bien que `build.rs`
+l'inclut, appelle les mêmes fonctions que les projets reçoivent et écrit leur
+sortie dans `OUT_DIR` ; `examples/shapes.rs` l'y compile, contre une vue et un
+module de réglages réduits à leur surface. Un `clippy --all-targets` attrape
+donc une méthode que `gpui-component` n'a pas. Ce qu'il n'attrape pas — le
+câblage de `main.rs`, les crates déclarées, le module de réglages en entier —
+est dans `tests/project.rs::every_shape_compiles`, ignoré par défaut parce
+qu'il construit deux projets entiers.
+
 Le garde-fou qui fait tenir l'ensemble est dans `tests/modules.rs` : il retient
 l'empreinte de chaque gabarit à sa version courante. Modifier un gabarit fait
 échouer ce test, ce qui oblige à décider si la correction doit atteindre les

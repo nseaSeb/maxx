@@ -68,7 +68,14 @@ pub fn app_menus(cx: &App) -> Vec<Menu> {
         Menu {
             name: tr("menu.file"),
             items: vec![
-                MenuItem::action(tr("menu.new_project"), NewProject),
+                MenuItem::submenu(Menu {
+                    name: tr("menu.new_project"),
+                    items: vec![
+                        MenuItem::action(tr("menu.template_empty"), NewProject),
+                        MenuItem::action(tr("menu.template_sidebar"), NewSidebarProject),
+                        MenuItem::action(tr("menu.template_settings"), NewSettingsProject),
+                    ],
+                }),
                 MenuItem::action(tr("menu.new_view"), NewView),
                 MenuItem::action(tr("menu.new_window"), NewWindow),
                 MenuItem::separator(),

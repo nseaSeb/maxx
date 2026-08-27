@@ -62,10 +62,18 @@ Reste à aligner, par ordre de manque ressenti :
 C'est là que maxx est irremplaçable, et c'est ce sur quoi il est le plus
 maigre : `Fichier ▸ Nouveau projet…` écrit toujours le même squelette.
 
-- **Des modèles de projet à la création.** Vide / barre latérale + contenu /
-  application à réglages. `Sidebar` et `title_bar` de `gpui-component` arrivent
-  par là, et pas par la palette de composants : ce ne sont pas des éléments à
-  déposer, ce sont des formes de projet.
+- ~~**Des modèles de projet à la création.**~~ — fait pour deux des trois
+  formes. *Vide*, *Barre latérale et contenu*, *Avec des réglages*, sous
+  `Fichier ▸ Nouveau projet`. `Sidebar` arrive par là et non par la palette :
+  ce n'est pas un élément à déposer, c'est ce à quoi le canvas s'accroche. La
+  coquille (`src/ui/shell.rs`) est du Rust écrit une fois, pas une vue que maxx
+  dessine ; les pages qu'elle tient, elles, restent des vues que maxx dessine.
+  `title_bar` n'est pas encore de la partie.
+
+  Ce que maxx écrit là ne passait par aucun compilateur : `build.rs` écrit
+  désormais les mêmes gabarits dans `OUT_DIR`, où `examples/shapes.rs` les
+  compile à chaque `cargo clippy --all-targets`. Et `tests/project.rs` porte,
+  ignoré par défaut, le test qui construit les deux projets pour de bon.
 - ~~**`maxx.toml` porte le projet, pas seulement les modules.**~~ — fait. Deux
   sections facultatives : `[project] entry` dit la vue sur laquelle la fenêtre
   s'ouvre, `[run]` dit le profil, les features et les arguments de
@@ -107,7 +115,8 @@ maigre : `Fichier ▸ Nouveau projet…` écrit toujours le même squelette.
 
 ~~Critère de fin de chantier~~ — atteint : *créer un projet, y déposer une
 image, le lancer, le fermer, le rouvrir — et retrouver la fenêtre où on l'avait
-laissée.* Restent les modèles de projet.
+laissée.* Reste, du chantier : `title_bar` dans une forme de projet, et de
+quoi éditer `[run]` autrement qu'à la main.
 
 ### 2. Le catalogue — ce qu'on peut déposer
 

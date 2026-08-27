@@ -437,6 +437,15 @@ menu.status_bar:
 menu.stop:
   en: "Stop"
   fr: "Arrêter"
+menu.template_empty:
+  en: "Empty"
+  fr: "Vide"
+menu.template_settings:
+  en: "With settings"
+  fr: "Avec des réglages"
+menu.template_sidebar:
+  en: "Sidebar and content"
+  fr: "Barre latérale et contenu"
 menu.theme:
   en: "Light or dark"
   fr: "Clair ou sombre"

@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use maxx::projectfile::{self, fingerprint};
-use maxx::scaffold;
+use maxx::scaffold::{self, Template};
 
 fn scratch(name: &str) -> PathBuf {
     let dir =
@@ -56,7 +56,7 @@ fn changing_a_template_forces_a_decision_about_its_version() {
 #[test]
 fn adding_a_module_records_what_the_project_took() {
     let root = scratch("maxx_modules_record");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
     scaffold::add_system_module(&root).expect("the module must be added");
 
     let file = projectfile::load(&root);
@@ -74,7 +74,7 @@ fn adding_a_module_records_what_the_project_took() {
 #[test]
 fn an_old_copy_is_offered_an_update_and_a_touched_one_is_not() {
     let root = scratch("maxx_modules_update");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
     scaffold::add_system_module(&root).expect("the module must be added");
 
     // Nothing to do as long as the project is up to date.
@@ -100,7 +100,7 @@ fn an_old_copy_is_offered_an_update_and_a_touched_one_is_not() {
 #[test]
 fn a_module_the_developer_edited_is_left_alone() {
     let root = scratch("maxx_modules_touched");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
     scaffold::add_system_module(&root).expect("the module must be added");
 
     let path = root.join("src/system.rs");
@@ -137,7 +137,7 @@ fn line_endings_alone_do_not_count_as_an_edit() {
 #[test]
 fn a_module_already_there_under_its_old_name_is_not_copied_again() {
     let root = scratch("maxx_old_name");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     std::fs::write(root.join("src/systeme.rs"), "// my earlier copy\n").unwrap();
 
     let error = scaffold::add_system_module(&root).expect_err("must be refused");

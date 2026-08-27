@@ -6,7 +6,8 @@
 use std::path::PathBuf;
 
 use maxx::projectfile::{self, ProjectFile, Run};
-use maxx::scaffold;
+use maxx::scaffold::{self, Template};
+use maxx::view::View;
 
 fn scratch(name: &str) -> PathBuf {
     let dir =
@@ -118,7 +119,7 @@ fn an_unknown_key_does_not_cost_the_whole_file() {
 #[test]
 fn a_new_project_says_which_view_it_opens_on() {
     let root = scratch("maxx_project_entry_new");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
 
     assert_eq!(projectfile::entry(&root).as_deref(), Some("home"));
     let main = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
@@ -128,7 +129,7 @@ fn a_new_project_says_which_view_it_opens_on() {
 #[test]
 fn the_window_can_be_pointed_at_another_view() {
     let root = scratch("maxx_project_entry_change");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     scaffold::create_view(&root, "settings_screen").unwrap();
 
     scaffold::set_entry_view(&root, "settings_screen").expect("the entry must move");
@@ -147,7 +148,7 @@ fn the_window_can_be_pointed_at_another_view() {
 #[test]
 fn the_entry_is_read_from_the_view_rather_than_from_its_name() {
     let root = scratch("maxx_project_entry_type");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     scaffold::create_view(&root, "second").unwrap();
     // A view adopted from a project maxx did not write is called whatever its
     // author called it; deriving the type from the module name would import a
@@ -166,7 +167,7 @@ fn the_entry_is_read_from_the_view_rather_than_from_its_name() {
 #[test]
 fn a_main_maxx_cannot_read_is_left_alone() {
     let root = scratch("maxx_project_entry_refused");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     scaffold::create_view(&root, "second").unwrap();
 
     // A `main.rs` that opens its window some other way: maxx says so instead of
@@ -211,7 +212,7 @@ fn qualify_entry(root: &std::path::Path) {
 #[test]
 fn a_view_named_in_full_is_replaced_whole() {
     let root = scratch("maxx_project_entry_qualified");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     scaffold::create_view(&root, "second").unwrap();
     qualify_entry(&root);
 
@@ -233,7 +234,7 @@ fn a_view_named_in_full_is_replaced_whole() {
 #[test]
 fn a_view_already_imported_is_not_imported_twice() {
     let root = scratch("maxx_project_entry_twice");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     scaffold::create_view(&root, "second").unwrap();
 
     // A `main.rs` naming several views, which is the case the doc anticipates.
@@ -259,7 +260,7 @@ fn a_view_already_imported_is_not_imported_twice() {
 #[test]
 fn setting_the_same_view_twice_changes_nothing() {
     let root = scratch("maxx_project_entry_idempotent");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
 
     scaffold::set_entry_view(&root, "home").unwrap();
     let once = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
@@ -273,7 +274,7 @@ fn setting_the_same_view_twice_changes_nothing() {
 #[test]
 fn the_entry_is_the_view_handed_to_root() {
     let root = scratch("maxx_project_entry_root");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     scaffold::create_view(&root, "second").unwrap();
 
     // A `main.rs` that builds something else before its root view: the first
@@ -297,7 +298,7 @@ fn the_entry_is_the_view_handed_to_root() {
 #[test]
 fn a_view_type_is_the_one_that_renders() {
     let root = scratch("maxx_project_entry_helper");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     scaffold::create_view(&root, "second").unwrap();
 
     // A helper declared above the view, as a file maxx did not write may well
@@ -318,7 +319,7 @@ fn a_view_type_is_the_one_that_renders() {
 #[test]
 fn a_file_that_does_not_parse_is_never_written_over() {
     let root = scratch("maxx_project_broken_file");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     projectfile::record(&root, "system", 1, "body").unwrap();
 
     // One missing bracket, hand-written: rewriting from an empty file would
@@ -338,7 +339,7 @@ fn a_file_that_does_not_parse_is_never_written_over() {
 #[test]
 fn a_main_with_two_views_and_no_root_is_left_alone() {
     let root = scratch("maxx_project_entry_ambiguous");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     scaffold::create_view(&root, "second").unwrap();
 
     // Two candidates and nothing naming the one the window opens on: rewriting
@@ -353,4 +354,95 @@ fn a_main_with_two_views_and_no_root_is_left_alone() {
 
     scaffold::set_entry_view(&root, "second").expect_err("this cannot be guessed");
     assert_eq!(projectfile::entry(&root).as_deref(), Some("home"), "the record must not move");
+}
+
+#[test]
+fn the_sidebar_shape_hangs_two_views_off_a_shell() {
+    let root = scratch("maxx_template_sidebar");
+    scaffold::create_project(&root, "trial", Template::Sidebar).unwrap();
+
+    let modules = std::fs::read_to_string(root.join("src/ui/mod.rs")).unwrap();
+    for module in ["home", "library", "shell"] {
+        assert!(modules.contains(&format!("pub mod {module};")), "{modules}");
+        assert!(root.join(format!("src/ui/{module}.rs")).exists(), "src/ui/{module}.rs is missing");
+    }
+
+    // The window opens on the shell, and `maxx.toml` says so.
+    assert_eq!(projectfile::entry(&root).as_deref(), Some("shell"));
+    let main = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    assert!(main.contains("use crate::ui::shell::Shell;"), "{main}");
+    assert!(main.contains("Shell::new(window, cx)"), "{main}");
+
+    let shell = std::fs::read_to_string(root.join("src/ui/shell.rs")).unwrap();
+    assert!(shell.contains("SidebarMenuItem::new(\"Home\")"), "{shell}");
+    assert!(shell.contains("SidebarMenuItem::new(\"Library\")"), "{shell}");
+
+    // Both pages stay views maxx can design: the shape is around them, not
+    // instead of them.
+    for module in ["home", "library"] {
+        View::load(&root.join(format!("src/ui/{module}.rs")))
+            .unwrap_or_else(|error| panic!("{module} must read back: {error}"));
+    }
+}
+
+#[test]
+fn the_settings_shape_brings_its_module_with_it() {
+    let root = scratch("maxx_template_settings");
+    scaffold::create_project(&root, "trial", Template::Settings).unwrap();
+
+    // The screen is written against the module, so the module has to be there
+    // — and the system module under it, which is what knows where the file
+    // goes.
+    assert!(root.join("src/settings.rs").exists());
+    assert!(root.join("src/system.rs").exists());
+    let file = projectfile::load(&root);
+    assert!(file.modules.contains_key("settings"), "the module was not recorded");
+    assert!(file.modules.contains_key("system"), "the module was not recorded");
+
+    let main = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    assert!(main.contains("mod settings;"), "{main}");
+    assert!(main.contains("Shell::new(window, cx)"), "{main}");
+
+    let screen = std::fs::read_to_string(root.join("src/ui/settings_screen.rs")).unwrap();
+    assert!(screen.contains("settings::save(&self.settings)"), "{screen}");
+    assert_eq!(projectfile::entry(&root).as_deref(), Some("shell"));
+
+    let cargo = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
+    assert!(cargo.contains("serde"), "the module's crates were not declared:\n{cargo}");
+}
+
+#[test]
+fn the_empty_shape_is_what_it_always_was() {
+    let root = scratch("maxx_template_empty");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+
+    assert!(!root.join("src/ui/shell.rs").exists(), "the empty shape holds no shell");
+    assert_eq!(std::fs::read_to_string(root.join("src/ui/mod.rs")).unwrap(), "pub mod home;\n");
+    assert_eq!(projectfile::entry(&root).as_deref(), Some("home"));
+}
+
+/// The deep proof, and the slow one: what maxx writes has to compile.
+///
+/// Ignored by default — it is a `cargo check` over some 750 crates, minutes on
+/// a cold cache — and run by hand after touching a template:
+/// `cargo test --test project -- --ignored`. What it catches that
+/// `examples/shapes.rs` cannot is the wiring: `main.rs`, `src/ui/mod.rs`, the
+/// settings module and its crates, all of it together.
+#[test]
+#[ignore = "builds two whole projects"]
+fn every_shape_compiles() {
+    for (name, template) in [
+        ("maxx_template_build_sidebar", Template::Sidebar),
+        ("maxx_template_build_settings", Template::Settings),
+    ] {
+        let root = scratch(name);
+        scaffold::create_project(&root, "trial", template).unwrap();
+
+        let status = std::process::Command::new("cargo")
+            .arg("check")
+            .current_dir(&root)
+            .status()
+            .expect("cargo must run");
+        assert!(status.success(), "{} does not compile", template.name());
+    }
 }
