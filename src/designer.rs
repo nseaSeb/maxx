@@ -1279,6 +1279,15 @@ fn node_element(
         .border_color(if is_selected { theme::accent() } else { theme::bg() })
         .rounded_sm()
         .cursor_pointer()
+        // The chrome carries it rather than the preview: the tooltip needs a
+        // stateful element, and this is the one that already has an `id`. A
+        // property that reaches the file and shows nothing on the canvas reads
+        // as a broken field.
+        .when_some(node_tooltip(node), |this, text| {
+            this.tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(text.clone()).build(window, cx)
+            })
+        })
         .child(preview(node, path, selected, root, cx))
         .on_click(cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
             // Every node wraps its children in a listener of its own, so
@@ -1563,6 +1572,12 @@ fn preview(
             .child(crate::tr("designer.rust_code"))
             .into_any_element(),
     }
+}
+
+/// The tooltip text a node carries, when maxx wrote it.
+fn node_tooltip(node: &Node) -> Option<SharedString> {
+    let source = node.call("tooltip")?.args.first()?.to_source();
+    registry::tooltip_text(&source).map(SharedString::from)
 }
 
 /// A tag in the variant the node carries.

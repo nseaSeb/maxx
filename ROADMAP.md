@@ -159,8 +159,17 @@ Par coût croissant, pas par ordre alphabétique.
   `relative()` et une barre en recouvrement, soit deux éléments pour un nœud :
   c'est le même manque que les emplacements multiples ci-dessus, et il se
   décidera avec eux.
-- **L'infobulle n'est pas un nœud** mais un décorateur (`.tooltip(…)`, qui
-  prend une fermeture) : sa place est une propriété de `COMMON`.
+- ~~**L'infobulle n'est pas un nœud**~~ — faite, et sa place n'était pas
+  `COMMON` : `.tooltip(…)` vit sur un élément **avec état**, donc gpui ne
+  l'offre qu'après `id`, exactement comme le défilement. Vérifié au
+  compilateur : ni `v_flex().tooltip(…)` ni `Label::new("x").tooltip(…)`
+  n'existent. Elle est donc une propriété de `Common::Element`, que seuls la
+  colonne, la ligne et l'espaceur portent — les trois entrées du catalogue qui
+  sont des éléments gpui.
+
+  Pour les autres, il faudrait envelopper le composant dans un `div` : un nœud
+  dessiné en deux éléments, soit le même manque que les emplacements multiples
+  ci-dessous. C'est là que ça se décidera.
 - **Les boîtes de dialogue non plus** : `dialog`, `sheet`, `popover`,
   `notification` sont présentés impérativement, jamais enfants de la vue. Leur
   place est du côté des gestionnaires — « ce bouton ouvre une boîte » — et donc

@@ -909,3 +909,44 @@ fn a_stateful_component_is_dropped_bound_to_a_field() {
         assert!(written.contains("(&self."), "{id}: {written}");
     }
 }
+
+/// A tooltip is written as the closure gpui takes, and read back out of it.
+#[test]
+fn a_tooltip_is_written_as_a_closure_after_the_id() {
+    use maxx::registry::{self, Kind, Target};
+
+    let prop = registry::Prop { label: "prop.tooltip", target: Target::Tooltip, kind: Kind::Text };
+    let mut node = Node::known("v_flex");
+    registry::write(&mut node, &prop, "Hint");
+
+    let written = render(&node, 0);
+    assert!(written.contains(".id("), "the id has to be there: {written}");
+    let id = written.find(".id(").unwrap();
+    let tooltip = written.find(".tooltip(").expect("the call must be written");
+    assert!(id < tooltip, "gpui offers the tooltip only after the id: {written}");
+    assert!(written.contains("Tooltip::new(\"Hint\").build(window, cx)"), "{written}");
+
+    // What was written comes back as the text, not as the closure.
+    assert_eq!(registry::read(&node, &prop).as_deref(), Some("Hint"));
+    assert_eq!(reparse(&written), written);
+
+    // And emptying it takes the call away again.
+    registry::write(&mut node, &prop, "");
+    assert!(!render(&node, 0).contains(".tooltip("), "the call must go");
+}
+
+/// A tooltip brings its type in, and it is not a prefix that says so.
+#[test]
+fn a_tooltip_carries_its_import() {
+    use maxx::registry::{self, Kind, Target};
+
+    let prop = registry::Prop { label: "prop.tooltip", target: Target::Tooltip, kind: Kind::Text };
+    let mut node = Node::known("v_flex");
+    registry::write(&mut node, &prop, "Hint");
+
+    assert!(
+        registry::imports(&node).contains(&"use gpui_component::tooltip::Tooltip;"),
+        "{:?}",
+        registry::imports(&node)
+    );
+}

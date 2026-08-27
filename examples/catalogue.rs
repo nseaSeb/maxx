@@ -36,6 +36,7 @@ use gpui_component::slider::{Slider, SliderState};
 use gpui_component::spinner::Spinner;
 use gpui_component::switch::Switch;
 use gpui_component::tag::{Tag, TagVariant};
+use gpui_component::tooltip::Tooltip;
 use gpui_component::{Icon, IconName};
 
 fn main() {
@@ -97,6 +98,10 @@ fn main() {
         .object_fit(ObjectFit::Fill)
         .object_fit(ObjectFit::ScaleDown)
         .object_fit(ObjectFit::None);
+
+    // A tooltip, in the only place gpui offers one: on a stateful element, so
+    // after `id` — the same order the scroll needs, and for the same reason.
+    let _ = div().id("tip").tooltip(|window, cx| Tooltip::new("Hint").build(window, cx));
 
     // Every component's own calls, on its own type — which is the half a
     // generic `Styled` check cannot answer.
