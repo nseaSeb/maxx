@@ -173,6 +173,12 @@ pub struct Workspace {
     views: Vec<View>,
     /// Index of the view being designed.
     active: Option<usize>,
+    /// The view that was in front before this one.
+    ///
+    /// A path and not an index: closing a tab shifts every index after it, and
+    /// an index kept across a close names whatever slid into its place — so
+    /// "previous file" would open some other file.
+    previous_view: Option<PathBuf>,
     /// Last error shown in the status bar.
     message: Option<SharedString>,
     /// Live text fields of the inspector, one per editable text property of the
@@ -274,6 +280,7 @@ impl Workspace {
             menu_synced: None,
             views: Vec::new(),
             active: None,
+            previous_view: None,
             message: (!outdated.is_empty()).then(|| {
                 SharedString::from(
                     t!("message.modules_outdated", modules = outdated.join(", ")).into_owned(),

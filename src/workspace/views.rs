@@ -35,12 +35,46 @@ impl Workspace {
         self.preferences = false;
         self.code = None;
         if index < self.views.len() {
+            // Where one comes from, so `⌃⇥` can go back to it. Only when it is
+            // another tab: activating the one already in front would make the
+            // gesture answer itself.
+            if let Some(current) = self.active.filter(|current| *current != index) {
+                self.previous_view = self.views.get(current).map(|view| view.path.clone());
+            }
             self.active = Some(index);
             self.selected = Some(self.views[index].path.clone());
             self.revision += 1;
             self.message = None;
             cx.notify();
         }
+    }
+
+    /// Brings the next tab forward, or the previous one.
+    ///
+    /// The strip is a ring: `⌘⌥→` on the last tab goes to the first, because
+    /// stopping there would do nothing exactly when there is somewhere to go.
+    pub fn step_view(&mut self, forward: bool, cx: &mut Context<Self>) {
+        let Some(current) = self.active else {
+            return;
+        };
+        let Some(next) = crate::tabs::step(current, self.views.len(), forward) else {
+            return;
+        };
+        self.activate_view(next, cx);
+    }
+
+    /// Goes back to the file one was on before.
+    ///
+    /// `⌃⇥`, and pressed twice it comes back — which is the whole use of it:
+    /// two files one is working between, without looking at the strip.
+    pub fn last_view(&mut self, cx: &mut Context<Self>) {
+        let paths: Vec<PathBuf> = self.views.iter().map(|view| view.path.clone()).collect();
+        let Some(index) = crate::tabs::position_of(&paths, self.previous_view.as_deref()) else {
+            self.message = Some(crate::tr("message.no_previous_view"));
+            cx.notify();
+            return;
+        };
+        self.activate_view(index, cx);
     }
 
     /// Closes the view at `index`. A view with unsaved edits is kept, with a
@@ -62,6 +96,11 @@ impl Workspace {
         // no tab left to leave it by.
         let path = view.path.clone();
         self.forget_code(|candidate| candidate == path);
+        // The file one came from is closing: there is nothing to go back to,
+        // and holding its path would send `⌃⇥` to a tab that is gone.
+        if self.previous_view.as_deref() == Some(path.as_path()) {
+            self.previous_view = None;
+        }
         self.views.remove(index);
         self.active = match self.active {
             Some(_) if self.views.is_empty() => None,

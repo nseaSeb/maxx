@@ -162,6 +162,10 @@ pub fn app_menus(cx: &App) -> Vec<Menu> {
             items: vec![
                 MenuItem::action(tr("menu.quick_open"), QuickOpen),
                 MenuItem::separator(),
+                MenuItem::action(tr("menu.next_tab"), NextTab),
+                MenuItem::action(tr("menu.previous_tab"), PreviousTab),
+                MenuItem::action(tr("menu.last_view"), LastView),
+                MenuItem::separator(),
                 MenuItem::action(tr("menu.reveal"), RevealInFinder),
                 MenuItem::action(tr("menu.open_terminal"), OpenTerminal),
                 MenuItem::action(

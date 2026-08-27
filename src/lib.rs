@@ -18,6 +18,7 @@ pub mod registry;
 pub mod run;
 pub mod scaffold;
 pub mod settings;
+pub mod tabs;
 pub mod theme;
 pub mod tools;
 pub mod view;
