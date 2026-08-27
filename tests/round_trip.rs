@@ -1085,3 +1085,75 @@ fn a_hand_written_tooltip_closure_is_left_alone() {
     let shown = registry::read(&node, &prop).expect("something is shown");
     assert!(shown.starts_with("|window, cx|"), "the source itself: {shown}");
 }
+
+/// A comment written in the managed region comes back out of it.
+///
+/// It used to disappear at the next save, silently: `syn` throws comments away
+/// and `codegen` rewrites the region from the model, so what the model did not
+/// hold was erased — on the developer's own words, which is the one thing an
+/// editor may never do.
+#[test]
+fn a_comment_survives_the_region() {
+    let source =
+        "v_flex()\n    // le titre de la page\n    .gap_2()\n    .child(Label::new(\"Nom\"))";
+    assert_eq!(reparse(source), source);
+}
+
+#[test]
+fn a_comment_survives_wherever_it_stands() {
+    // Above the chain, above a call, above a child, and after everything.
+    let source = "// tout en haut\nv_flex()\n    .gap_2()\n    // le nom\n    .child(Label::new(\"Nom\"))\n    // fin";
+    assert_eq!(reparse(source), source);
+}
+
+#[test]
+fn a_comment_inside_a_child_stays_inside_it() {
+    let source = "v_flex()\n    // un\n    // deux\n    .gap_2()\n    .child(\n        v_flex()\n            // dedans\n            .gap_1()\n            .child(Label::new(\"a\")),\n    )";
+    assert_eq!(reparse(source), source);
+}
+
+/// A block comment keeps the shape it was written in.
+#[test]
+fn a_block_comment_keeps_its_alignment() {
+    let source = "v_flex()\n    /* un bloc\n       sur deux lignes */\n    .gap_2()";
+    assert_eq!(reparse(source), source);
+}
+
+/// A chain that would fit on one line is broken when it carries a comment.
+#[test]
+fn a_commented_chain_is_never_written_inline() {
+    let source = "v_flex()\n    // court\n    .gap_2()";
+    let written = reparse(source);
+    assert!(written.contains('\n'), "a comment has nowhere to go inline: {written}");
+    assert_eq!(written, source);
+}
+
+/// What looks like a comment inside a string is not one.
+#[test]
+fn a_slash_slash_in_a_string_is_not_a_comment() {
+    let source = "v_flex().child(Label::new(\"https://exemple.org\"))";
+    assert_eq!(reparse(source), source);
+}
+
+/// A comment written inside an expression maxx keeps verbatim is not written
+/// twice.
+#[test]
+fn a_comment_inside_an_opaque_expression_is_left_where_it_is() {
+    let source = "v_flex().child(match self.state {\n    // le cas vide\n    0 => Label::new(\"a\"),\n    _ => Label::new(\"b\"),\n})";
+    let written = reparse(source);
+    assert_eq!(written.matches("le cas vide").count(), 1, "written twice: {written}");
+    // The layout of an opaque child is maxx's — it is re-laid-out like any
+    // other node — but its text is the developer's, comment included, and a
+    // second pass changes nothing more.
+    assert!(written.contains("// le cas vide"), "{written}");
+    assert_eq!(reparse(&written), written, "the second save must be a no-op");
+}
+
+/// A comment inside a closure argument stays in the closure.
+#[test]
+fn a_comment_inside_an_argument_is_not_lifted_out() {
+    let source = "v_flex()\n    .on_click(cx.listener(|_this, _, _, _cx| {\n        // rien pour l'instant\n    }))";
+    let written = reparse(source);
+    assert_eq!(written.matches("rien pour l'instant").count(), 1, "{written}");
+    assert_eq!(written, source);
+}

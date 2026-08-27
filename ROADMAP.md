@@ -55,6 +55,14 @@ Reste à aligner, par ordre de manque ressenti :
   navigation entre eux est encore pauvre : pas de `⌘⌥→`, pas de « fichier
   précédent ».
 
+## Ce qui passe avant le reste
+
+**Un commentaire écrit dans la zone gérée y reste** — fait. Il disparaissait au
+`⌘S` suivant, silencieusement, sur les mots du développeur : le seul défaut qui
+contredisait la promesse « un projet prêt à être codé », puisqu'il punissait
+exactement le geste que maxx cherche à rendre possible. Aucun composant de plus
+au catalogue ne rattrapait ça.
+
 ## Les quatre chantiers, dans l'ordre
 
 ### 1. Le démarrage — de zéro à la première fenêtre

@@ -18,20 +18,49 @@ const INDENT: &str = "    ";
 /// The result never carries leading indentation on its first line — the caller
 /// places it — and never a trailing newline.
 pub fn render(node: &Node, depth: usize) -> String {
-    render_with(node, depth, 0)
+    with_own_comments(node, render_with(node, depth, 0), &INDENT.repeat(depth))
 }
 
 /// Renders `node` for a block that a later step will indent by `offset`
 /// columns. Continuation lines start at column zero, and the line-width budget
 /// accounts for the indentation that will be added.
 pub fn render_for_splice(node: &Node, offset: usize) -> String {
-    render_with(node, 0, offset)
+    with_own_comments(node, render_with(node, 0, offset), "")
+}
+
+/// Puts the root's own comments above the chain.
+///
+/// Every other node has a parent to write them — the line above its `.child(`.
+/// The root has none, so the two entry points do it, and only they: doing it
+/// inside `render_with` would write a child's comments twice.
+fn with_own_comments(node: &Node, rendered: String, indent: &str) -> String {
+    if node.comments.is_empty() {
+        return rendered;
+    }
+    let mut out = String::new();
+    for comment in &node.comments {
+        for (index, line) in comment.lines().enumerate() {
+            if index == 0 {
+                out.push_str(line.trim_start());
+            } else {
+                out.push_str(line);
+            }
+            out.push('\n');
+            out.push_str(indent);
+        }
+    }
+    out.push_str(&rendered);
+    out
 }
 
 fn render_with(node: &Node, depth: usize, offset: usize) -> String {
-    let inline = render_inline(node);
-    if !inline.contains('\n') && offset + depth * INDENT.len() + inline.len() <= WIDTH {
-        return inline;
+    // A comment has nowhere to go on a single line: a chain carrying one is
+    // broken across lines however short it is.
+    if !node.has_comments() {
+        let inline = render_inline(node);
+        if !inline.contains('\n') && offset + depth * INDENT.len() + inline.len() <= WIDTH {
+            return inline;
+        }
     }
     render_block(node, depth, offset)
 }
@@ -77,6 +106,7 @@ fn render_block(node: &Node, depth: usize, offset: usize) -> String {
             }
             continue;
         }
+        write_comments(&mut out, &call.comments, &inner);
         out.push('\n');
         out.push_str(&inner);
         out.push('.');
@@ -89,11 +119,37 @@ fn render_block(node: &Node, depth: usize, offset: usize) -> String {
         write_child(&mut out, child, depth, offset, &inner);
     }
 
+    write_comments(&mut out, &node.trailing, &inner);
     out
+}
+
+/// Writes comment lines, each on its own line, at `indent`.
+///
+/// A block comment keeps its shape: every line after the first is written at
+/// the same column, which is where it was read from — the region is dedented on
+/// the way in and indented again on the way out.
+fn write_comments(out: &mut String, comments: &[String], indent: &str) {
+    for comment in comments {
+        for (index, line) in comment.lines().enumerate() {
+            out.push('\n');
+            if index == 0 {
+                out.push_str(indent);
+                out.push_str(line.trim_start());
+            } else {
+                // The lines of a block comment keep the column they were
+                // written in: aligning them on the chain would take the shape
+                // out of an ASCII drawing or a lined-up table.
+                out.push_str(line);
+            }
+        }
+    }
 }
 
 /// Writes one `.child(..)`, on its own line when the child does not fit.
 fn write_child(out: &mut String, child: &Node, depth: usize, offset: usize, inner: &str) {
+    // The child's own comments sit above the `.child(` that holds it: it is the
+    // parent that knows the column they belong in.
+    write_comments(out, &child.comments, inner);
     let rendered = render_with(child, depth + 1, offset);
     out.push('\n');
     out.push_str(inner);

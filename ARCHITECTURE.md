@@ -336,6 +336,24 @@ n'ouvre pas serait pire que pas d'enregistrement du tout. Et c'est le site de
 construction qui fait foi, pas la ligne `use` : un `main.rs` peut importer
 plusieurs vues, une seule est confiée à `Root`.
 
+**Les commentaires de la zone gérée sont dans le modèle.** `syn` les jette —
+ce ne sont pas des jetons —, et `codegen` réécrit la zone depuis le modèle :
+tout ce que le modèle ne porte pas est effacé au premier enregistrement. Le
+lecteur balaie donc le texte de la zone avant de le donner à `syn`, en sautant
+chaînes, chaînes brutes et littéraux de caractère, puis attribue chaque
+commentaire à **ce qui le suit** — le parcours de la chaîne se fait dans
+l'ordre du fichier, et une file de commentaires se vide à mesure. D'où trois
+places dans le modèle : au-dessus d'un appel (`Call::comments`), au-dessus d'un
+nœud (`Node::comments`, écrites par le parent qui connaît la colonne), et après
+le dernier appel (`Node::trailing`).
+
+Deux pièges que le mécanisme doit éviter et que les tests tiennent : un
+commentaire écrit **dans** un argument — une fermeture, un `match` gardé
+verbatim — est déjà dans le texte de cet argument, donc il est retiré de la
+file sans être gardé, sinon il serait écrit deux fois ; et une chaîne qui porte
+un commentaire n'est jamais rendue sur une seule ligne, un commentaire n'ayant
+nulle part où aller sur une ligne unique.
+
 **Deux appels ne vivent pas sur un élément ordinaire** : le défilement et
 l'infobulle. gpui ne les offre qu'à un élément *avec état*, c'est-à-dire une
 fois `id` posé — écrits dans l'autre ordre, ils ne compilent pas, dans le
