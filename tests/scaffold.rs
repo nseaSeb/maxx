@@ -3,6 +3,7 @@
 
 use std::path::PathBuf;
 
+use maxx::scaffold::Template;
 use maxx::{parser, scaffold, view::View, workspace};
 
 fn scratch(name: &str) -> PathBuf {
@@ -16,7 +17,7 @@ fn scratch(name: &str) -> PathBuf {
 #[test]
 fn a_generated_project_is_readable_by_maxx() {
     let root = scratch("maxx_scaffold_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     assert!(root.join("Cargo.toml").exists());
     assert!(root.join("src/main.rs").exists());
@@ -37,7 +38,7 @@ fn a_generated_project_is_readable_by_maxx() {
 #[test]
 fn adding_a_view_registers_it() {
     let root = scratch("maxx_scaffold_view_test");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     scaffold::create_view(&root, "my_screen").expect("the view must be created");
 
     let module = std::fs::read_to_string(root.join("src/ui/mod.rs")).unwrap();
@@ -52,7 +53,7 @@ fn adding_a_view_registers_it() {
 #[test]
 fn saving_a_text_input_adds_the_field_and_the_import() {
     let root = scratch("maxx_scaffold_input_test");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/ui/home.rs");
 
     let mut view = View::load(&path).unwrap();
@@ -75,7 +76,7 @@ fn saving_a_text_input_adds_the_field_and_the_import() {
 #[test]
 fn every_component_of_the_catalogue_is_written_out() {
     let root = scratch("maxx_kitchen_sink");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/ui/home.rs");
 
     let mut view = View::load(&path).unwrap();
@@ -100,7 +101,7 @@ fn every_component_of_the_catalogue_is_written_out() {
 #[test]
 fn saving_twice_produces_the_same_file() {
     let root = scratch("maxx_stable_save");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/ui/home.rs");
 
     let mut view = View::load(&path).unwrap();
@@ -128,10 +129,10 @@ fn two_text_fields_do_not_share_one_state() {
 #[test]
 fn an_existing_crate_is_not_overwritten() {
     let root = scratch("maxx_no_clobber");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     std::fs::write(root.join("src/ui/mod.rs"), "pub mod a_moi;\n").unwrap();
 
-    assert!(scaffold::create_project(&root, "trial").is_err());
+    assert!(scaffold::create_project(&root, "trial", Template::Empty).is_err());
     assert_eq!(std::fs::read_to_string(root.join("src/ui/mod.rs")).unwrap(), "pub mod a_moi;\n");
 }
 
@@ -145,7 +146,7 @@ fn a_folder_name_becomes_a_valid_crate_name() {
 #[test]
 fn a_button_action_writes_a_method_stub() {
     let root = scratch("maxx_handler");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/ui/home.rs");
 
     let mut view = View::load(&path).unwrap();
@@ -215,7 +216,7 @@ fn the_runner_reports_a_failure_instead_of_hanging() {
 #[test]
 fn style_properties_reach_the_generated_file() {
     let root = scratch("maxx_styles");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/ui/home.rs");
 
     let mut view = View::load(&path).unwrap();
@@ -270,7 +271,7 @@ fn an_uncatalogued_call_is_reported_as_such() {
 #[test]
 fn a_generated_project_shares_the_build_cache() {
     let root = scratch("maxx_cache_a");
-    scaffold::create_project(&root, "cache_a").unwrap();
+    scaffold::create_project(&root, "cache_a", Template::Empty).unwrap();
 
     // The path is compared after reading the TOML, never by substring: a Windows
     // path is written escaped there — `C:\\Users\\…` — and looking for it raw
@@ -293,7 +294,7 @@ fn a_generated_project_shares_the_build_cache() {
 #[test]
 fn a_state_field_is_declared_and_initialised() {
     let root = scratch("maxx_state");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/ui/home.rs");
 
     let mut view = View::load(&path).unwrap();
@@ -388,7 +389,7 @@ impl Render for Ecrit {
 #[test]
 fn an_outside_change_is_noticed() {
     let root = scratch("maxx_conflict");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/ui/home.rs");
 
     let view = View::load(&path).unwrap();
@@ -418,7 +419,7 @@ fn an_outside_change_is_noticed() {
 #[test]
 fn insertions_land_in_the_view_not_in_a_helper_type() {
     let root = scratch("maxx_anchor");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/ui/home.rs");
 
     // A helper type declared above the view, as a developer would.
@@ -454,7 +455,7 @@ fn insertions_land_in_the_view_not_in_a_helper_type() {
 #[test]
 fn a_state_field_is_refused_when_the_view_has_no_usable_shape() {
     let root = scratch("maxx_shape");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/ui/home.rs");
 
     // A view with no `Self { .. }` to initialize into.
@@ -474,7 +475,7 @@ fn a_state_field_is_refused_when_the_view_has_no_usable_shape() {
 #[test]
 fn a_wrapped_import_is_not_duplicated() {
     let root = scratch("maxx_wrapped");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/ui/home.rs");
 
     let source = std::fs::read_to_string(&path).unwrap().replace(
@@ -502,7 +503,7 @@ fn a_wrapped_import_is_not_duplicated() {
 #[test]
 fn a_helper_type_whose_name_starts_like_the_view_is_left_alone() {
     let root = scratch("maxx_prefix");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/ui/home.rs");
 
     let source = std::fs::read_to_string(&path).unwrap().replace(
@@ -524,7 +525,7 @@ fn a_helper_type_whose_name_starts_like_the_view_is_left_alone() {
 #[test]
 fn a_generated_project_has_a_menu_bar() {
     let root = scratch("maxx_menus");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/menus.rs");
 
     let main = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
@@ -563,7 +564,7 @@ fn a_generated_project_has_a_menu_bar() {
 #[test]
 fn an_unknown_menu_entry_is_carried_through() {
     let root = scratch("maxx_menus_opaque");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/menus.rs");
 
     let source = std::fs::read_to_string(&path).unwrap().replace(
@@ -591,7 +592,7 @@ fn an_unknown_menu_entry_is_carried_through() {
 #[test]
 fn saving_untouched_menus_changes_nothing() {
     let root = scratch("maxx_menus_noop");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/menus.rs");
     let before = std::fs::read_to_string(&path).unwrap();
 
@@ -611,7 +612,7 @@ fn saving_untouched_menus_changes_nothing() {
 #[test]
 fn a_menu_maxx_cannot_read_is_carried_through() {
     let root = scratch("maxx_menus_odd");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/menus.rs");
 
     let source = std::fs::read_to_string(&path).unwrap().replace(
@@ -636,7 +637,7 @@ fn a_menu_maxx_cannot_read_is_carried_through() {
 #[test]
 fn a_qualified_action_keeps_its_path() {
     let root = scratch("maxx_menus_path");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/menus.rs");
 
     let source = std::fs::read_to_string(&path).unwrap().replace(
@@ -667,7 +668,7 @@ fn a_view_named_menus_is_not_taken_for_the_menu_bar() {
 #[test]
 fn a_menu_action_points_at_its_handler() {
     let root = scratch("maxx_menu_goto");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/menus.rs");
 
     let mut menus = maxx::menufile::MenuFile::load(&path).unwrap();
@@ -697,7 +698,7 @@ fn a_menu_action_points_at_its_handler() {
 #[test]
 fn deleting_a_view_unregisters_it() {
     let root = scratch("maxx_delete_view_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
     scaffold::create_view(&root, "view_2").expect("the view must be created");
 
     let mod_path = root.join("src/ui/mod.rs");
@@ -720,7 +721,7 @@ fn deleting_a_view_unregisters_it() {
 #[test]
 fn the_entry_view_is_read_from_main_rs() {
     let root = scratch("maxx_entree_ancienne");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
 
     std::fs::rename(root.join("src/ui/home.rs"), root.join("src/ui/accueil.rs")).unwrap();
     std::fs::write(root.join("src/ui/mod.rs"), "pub mod accueil;\n").unwrap();
@@ -742,7 +743,7 @@ fn the_entry_view_is_read_from_main_rs() {
 #[test]
 fn the_project_skeleton_refuses_to_be_deleted() {
     let root = scratch("maxx_protege");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     for kept in ["Cargo.toml", "src/main.rs", "src/ui/mod.rs", "src/ui/home.rs"] {
         assert!(
             workspace::protected_entry(&root, &root.join(kept)).is_some(),
@@ -761,7 +762,7 @@ fn the_project_skeleton_refuses_to_be_deleted() {
 #[test]
 fn a_menu_bar_can_be_added_to_a_project_that_has_none() {
     let root = scratch("maxx_add_menu_bar_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     // A project older than the generated menu bar: neither the file, nor the
     // wiring in main.rs.
@@ -795,7 +796,7 @@ fn a_menu_bar_can_be_added_to_a_project_that_has_none() {
 #[test]
 fn wiring_the_menu_bar_keeps_the_header_of_main_rs_valid() {
     let root = scratch("maxx_menu_bar_header_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
     std::fs::remove_file(root.join("src/menus.rs")).unwrap();
     scaffold::remove_menu_bar(&root).unwrap();
 
@@ -822,7 +823,7 @@ fn wiring_the_menu_bar_keeps_the_header_of_main_rs_valid() {
 #[test]
 fn a_main_rs_it_cannot_wire_is_left_alone() {
     let root = scratch("maxx_menu_bar_refusal_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
     std::fs::remove_file(root.join("src/menus.rs")).unwrap();
     scaffold::remove_menu_bar(&root).unwrap();
 
@@ -844,7 +845,7 @@ fn a_main_rs_it_cannot_wire_is_left_alone() {
 #[test]
 fn the_wiring_follows_the_name_the_closure_gave_the_application() {
     let root = scratch("maxx_menu_bar_binding_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
     std::fs::remove_file(root.join("src/menus.rs")).unwrap();
     scaffold::remove_menu_bar(&root).unwrap();
 
@@ -869,7 +870,7 @@ fn the_wiring_follows_the_name_the_closure_gave_the_application() {
 #[test]
 fn the_menu_bar_is_unwired_whatever_the_application_is_called() {
     let root = scratch("maxx_menu_bar_unwire_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
     std::fs::remove_file(root.join("src/menus.rs")).unwrap();
     scaffold::remove_menu_bar(&root).unwrap();
 
@@ -894,7 +895,7 @@ fn the_menu_bar_is_unwired_whatever_the_application_is_called() {
 #[test]
 fn the_system_module_is_added_declared_and_compiles_on_its_own() {
     let root = scratch("maxx_system_module_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     // A main.rs starting with a module comment: the declaration must not go
     // ahead of it.
@@ -948,7 +949,7 @@ fn only_a_top_level_module_file_has_a_mod_line() {
 #[test]
 fn a_block_doc_comment_header_is_not_jumped_over() {
     let root = scratch("maxx_block_header_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     // `/*! … */` is an inner module comment: no item can come before it, and an
     // insertion on line 1 breaks the compilation.
@@ -974,7 +975,7 @@ fn a_block_doc_comment_header_is_not_jumped_over() {
 #[test]
 fn deleting_an_undeclared_file_leaves_main_rs_untouched() {
     let root = scratch("maxx_untouched_main_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     // Windows line endings: a pointless rewrite would convert them.
     let main_path = root.join("src/main.rs");
@@ -989,7 +990,7 @@ fn deleting_an_undeclared_file_leaves_main_rs_untouched() {
 #[test]
 fn the_shared_target_dir_survives_being_written_into_toml() {
     let root = scratch("maxx_toml_target_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     let config = std::fs::read_to_string(root.join(".cargo/config.toml")).unwrap();
     let parsed: toml::Value = toml::from_str(&config).unwrap_or_else(|error| {
@@ -1004,7 +1005,7 @@ fn the_shared_target_dir_survives_being_written_into_toml() {
 #[test]
 fn the_settings_module_brings_what_it_needs() {
     let root = scratch("maxx_settings_module_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     scaffold::add_settings_module(&root).expect("the settings must be added");
 
@@ -1040,7 +1041,7 @@ fn the_settings_module_brings_what_it_needs() {
 #[test]
 fn a_dropdown_declares_the_field_it_needs() {
     let root = scratch("maxx_select_field");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
     let path = root.join("src/ui/home.rs");
 
     let mut view = View::load(&path).expect("the view must read back");
@@ -1085,7 +1086,7 @@ fn a_dropdown_declares_the_field_it_needs() {
 #[test]
 fn a_handler_matches_the_component_it_hangs_on() {
     let root = scratch("maxx_gestionnaire_forme");
-    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
     let path = root.join("src/ui/home.rs");
 
     let mut view = View::load(&path).unwrap();
@@ -1113,7 +1114,7 @@ fn a_handler_matches_the_component_it_hangs_on() {
 #[test]
 fn an_image_is_brought_into_the_project() {
     let root = scratch("maxx_assets");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     let outside = std::env::temp_dir().join("maxx_outside_logo.png");
     std::fs::write(&outside, b"first").unwrap();
@@ -1138,7 +1139,7 @@ fn an_image_is_brought_into_the_project() {
 #[test]
 fn an_image_already_in_the_project_is_not_moved() {
     let root = scratch("maxx_assets_inside");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     let inside = root.join("pictures");
     std::fs::create_dir_all(&inside).unwrap();
@@ -1156,7 +1157,7 @@ fn an_image_already_in_the_project_is_not_moved() {
 #[test]
 fn a_file_that_is_not_an_image_is_refused() {
     let root = scratch("maxx_assets_refused");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     let outside = std::env::temp_dir().join("maxx_not_an_image.txt");
     std::fs::write(&outside, b"hello").unwrap();
@@ -1173,7 +1174,7 @@ fn a_file_that_is_not_an_image_is_refused() {
 #[test]
 fn an_assets_module_can_be_added_to_a_project() {
     let root = scratch("maxx_assets_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     scaffold::add_assets_module(&root).expect("the module must be added");
     assert!(root.join("src/assets.rs").exists());
@@ -1206,7 +1207,7 @@ fn an_assets_module_can_be_added_to_a_project() {
 #[test]
 fn a_project_with_its_own_build_script_is_told_rather_than_overwritten() {
     let root = scratch("maxx_assets_build_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     let theirs = "fn main() {\n    println!(\"cargo::rerun-if-changed=build.rs\");\n}\n";
     std::fs::write(root.join("build.rs"), theirs).expect("the build script must be written");
@@ -1223,7 +1224,7 @@ fn a_project_with_its_own_build_script_is_told_rather_than_overwritten() {
 #[test]
 fn the_window_module_wires_itself_into_main() {
     let root = scratch("maxx_window_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     scaffold::add_window_module(&root).expect("the module must be added");
     assert!(root.join("src/window.rs").exists());
@@ -1256,7 +1257,7 @@ fn the_window_module_wires_itself_into_main() {
 #[test]
 fn a_main_the_window_module_cannot_wire_is_left_alone() {
     let root = scratch("maxx_window_refusal_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     let theirs = "mod ui;\n\nfn main() {\n    println!(\"a window of my own\");\n}\n";
     std::fs::write(root.join("src/main.rs"), theirs).expect("main.rs must be written");
@@ -1275,7 +1276,7 @@ fn a_main_the_window_module_cannot_wire_is_left_alone() {
 #[test]
 fn a_wrapped_bounds_call_is_not_cut_in_half() {
     let root = scratch("maxx_window_wrapped_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     let main = std::fs::read_to_string(root.join("src/main.rs")).expect("main.rs must be there");
     let wrapped = main.replace(
@@ -1304,7 +1305,7 @@ fn a_wrapped_bounds_call_is_not_cut_in_half() {
 #[test]
 fn the_window_call_lands_in_the_closure_that_opens_the_window() {
     let root = scratch("maxx_window_closure_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     let main = "mod ui;\n\nuse gpui::{App, Application, Bounds, WindowOptions, prelude::*, px, size};\n\n\
          fn main() {\n    Application::new().run(|cx: &mut App| {\n        \
@@ -1334,7 +1335,7 @@ fn the_window_call_lands_in_the_closure_that_opens_the_window() {
 #[test]
 fn wiring_a_module_keeps_the_line_endings_it_found() {
     let root = scratch("maxx_crlf_test");
-    scaffold::create_project(&root, "trial").expect("the project must be created");
+    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
     let main = std::fs::read_to_string(root.join("src/main.rs")).expect("main.rs must be there");
     let crlf = main.replace('\n', "\r\n");

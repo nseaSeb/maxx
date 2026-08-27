@@ -22,6 +22,8 @@ actions!(
         // File menu
         NewWindow,
         NewProject,
+        NewSidebarProject,
+        NewSettingsProject,
         NewView,
         AddSystemModule,
         AddSettingsModule,
@@ -117,6 +119,8 @@ pub fn register_handlers(cx: &mut App) {
     });
     cx.on_action(open_folder);
     cx.on_action(new_project);
+    cx.on_action(new_sidebar_project);
+    cx.on_action(new_settings_project);
 
     cx.on_action(|action: &OpenRecent, cx: &mut App| {
         let path = crate::settings::state(cx).recent_projects.get(action.index).cloned();
@@ -394,6 +398,21 @@ fn open_folder(_: &OpenFolder, cx: &mut App) {
 
 /// Asks for a location, scaffolds a project there and opens it.
 fn new_project(_: &NewProject, cx: &mut App) {
+    scaffold_project(crate::scaffold::Template::Empty, cx);
+}
+
+/// The same, in the shape of a sidebar and the view of the moment.
+fn new_sidebar_project(_: &NewSidebarProject, cx: &mut App) {
+    scaffold_project(crate::scaffold::Template::Sidebar, cx);
+}
+
+/// The same again, with the settings module and a screen that reads it.
+fn new_settings_project(_: &NewSettingsProject, cx: &mut App) {
+    scaffold_project(crate::scaffold::Template::Settings, cx);
+}
+
+/// Asks for a location, writes `template` there and opens it.
+fn scaffold_project(template: crate::scaffold::Template, cx: &mut App) {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/".into());
     let path = cx.prompt_for_new_path(
         std::path::Path::new(&home),
@@ -409,7 +428,7 @@ fn new_project(_: &NewProject, cx: &mut App) {
                 .file_name()
                 .map(|name| name.to_string_lossy().into_owned())
                 .unwrap_or_else(|| "mon_app".into());
-            match crate::scaffold::create_project(&path, &name) {
+            match crate::scaffold::create_project(&path, &name, template) {
                 Ok(()) => {
                     workspace::open_folder(path, cx);
                     // The dependency tree costs minutes the first time; pay it

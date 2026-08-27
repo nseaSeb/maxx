@@ -8,6 +8,9 @@ use rust_i18n::t;
 use std::io;
 use std::path::Path;
 
+mod templates;
+pub use templates::{settings_screen_rs, shell_rs};
+
 /// Where an image dropped on a view is kept.
 ///
 /// Under `assets/`, because that is the name every framework gives it and the
@@ -82,8 +85,38 @@ fn slashed(path: &Path) -> String {
         .join("/")
 }
 
-/// Creates a runnable GPUI project at `root`.
-pub fn create_project(root: &Path, name: &str) -> io::Result<()> {
+/// The shape a new project is given.
+///
+/// Not screens to pick from a gallery: the three answer the question a desktop
+/// project asks on its first day, which is *what holds what*. A sidebar and a
+/// settings screen arrive here rather than in the component palette for that
+/// reason — they are not elements to drop on a canvas, they are what a canvas
+/// hangs from.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Template {
+    /// One window, one view, and nothing else to unlearn.
+    #[default]
+    Empty,
+    /// A sidebar on the left, the view of the moment on the right.
+    Sidebar,
+    /// The same, with the settings module and a screen that reads and writes
+    /// it.
+    Settings,
+}
+
+impl Template {
+    /// The name this shape carries in `maxx.toml` and in the tests.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Empty => "empty",
+            Self::Sidebar => "sidebar",
+            Self::Settings => "settings",
+        }
+    }
+}
+
+/// Creates a runnable GPUI project at `root`, in the shape `template` asks for.
+pub fn create_project(root: &Path, name: &str, template: Template) -> io::Result<()> {
     // Never write over an existing crate: `src/ui/mod.rs` and `src/main.rs`
     // would go with it.
     if root.join("Cargo.toml").exists() {
@@ -105,7 +138,62 @@ pub fn create_project(root: &Path, name: &str) -> io::Result<()> {
     std::fs::write(root.join("src/ui/mod.rs"), "pub mod home;\n")?;
     std::fs::write(root.join("src/ui/home.rs"), view_rs("Home", "home"))?;
     crate::projectfile::set_entry(root, "home")?;
-    Ok(())
+
+    match template {
+        Template::Empty => Ok(()),
+        Template::Sidebar => add_shell(root, &[("library", "Library", "Library")]),
+        Template::Settings => {
+            // The module first: the screen is written against it, and a screen
+            // whose module failed to arrive would not compile.
+            add_settings_module(root)?;
+            std::fs::write(
+                root.join("src/ui/settings_screen.rs"),
+                crate::scaffold::settings_screen_rs(),
+            )?;
+            declare_ui_module(root, "settings_screen")?;
+            add_shell(root, &[("settings_screen", "SettingsScreen", "Settings")])
+        }
+    }
+}
+
+/// Gives the project a shell: a sidebar, `home`, and whatever `pages` adds.
+///
+/// The window then opens on the shell rather than on a view — which is a fact
+/// about the project, so `set_entry_view` records it in `maxx.toml` on the way
+/// through.
+fn add_shell(root: &Path, pages: &[(&str, &str, &str)]) -> io::Result<()> {
+    for (module, type_name, _) in pages {
+        // A page maxx designs is created as a view; one it wrote whole, like
+        // the settings screen, is already on disk.
+        if !root.join(format!("src/ui/{module}.rs")).exists() {
+            std::fs::write(root.join(format!("src/ui/{module}.rs")), view_rs(type_name, module))?;
+            declare_ui_module(root, module)?;
+        }
+    }
+
+    let mut all = vec![("home", "Home", "Home")];
+    all.extend_from_slice(pages);
+    std::fs::write(root.join("src/ui/shell.rs"), crate::scaffold::shell_rs(&all))?;
+    declare_ui_module(root, "shell")?;
+    set_entry_view(root, "shell")
+}
+
+/// Declares `module` in `src/ui/mod.rs`, if it is not there already.
+///
+/// By textual insertion so the rest of the file — comments, ordering, anything
+/// the developer put there — is untouched.
+fn declare_ui_module(root: &Path, module: &str) -> io::Result<()> {
+    let mod_path = root.join("src/ui/mod.rs");
+    let mut source = std::fs::read_to_string(&mod_path).unwrap_or_default();
+    let line = format!("pub mod {module};\n");
+    if source.contains(&line) {
+        return Ok(());
+    }
+    if !source.is_empty() && !source.ends_with('\n') {
+        source.push('\n');
+    }
+    source.push_str(&line);
+    std::fs::write(&mod_path, source)
 }
 
 /// Adds a view to an existing project and registers it in `src/ui/mod.rs`.
@@ -119,20 +207,7 @@ pub fn create_view(root: &Path, module: &str) -> io::Result<()> {
         ));
     }
     std::fs::write(&file, view_rs(&type_name, module))?;
-
-    // Registered by textual insertion so the rest of `mod.rs` — comments,
-    // ordering, anything the developer put there — is untouched.
-    let mod_path = root.join("src/ui/mod.rs");
-    let mut source = std::fs::read_to_string(&mod_path).unwrap_or_default();
-    let line = format!("pub mod {module};\n");
-    if !source.contains(&line) {
-        if !source.is_empty() && !source.ends_with('\n') {
-            source.push('\n');
-        }
-        source.push_str(&line);
-        std::fs::write(&mod_path, source)?;
-    }
-    Ok(())
+    declare_ui_module(root, module)
 }
 
 /// Makes the view in `module` the one the window opens on.

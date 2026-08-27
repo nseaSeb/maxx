@@ -347,7 +347,7 @@ Ce qui reste :
   point : rien ne les édite dans maxx, ils se posent à la main dans le fichier,
   sauf la vue d'entrée qui a sa commande (*Fichier ▸ Ouvrir la fenêtre sur
   cette vue*, et le menu contextuel de l'explorateur, qui marque d'un point la
-  vue d'entrée).
+  vue d'entrée). Les formes de projet, elles, écrivent `entry` toutes seules.
 - **Des modules plus fins**, si l'usage le demande : aujourd'hui le module
   système arrive entier, sous `allow(dead_code)`, alors qu'un projet n'en veut
   peut-être que la corbeille.
