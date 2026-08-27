@@ -370,6 +370,51 @@ fn run(root: PathBuf, arguments: Vec<String>, sender: Sender<Message>) {
     let _ = sender.send(Message::Finished(ok));
 }
 
+/// The same source, laid out by `rustfmt`'s own defaults.
+///
+/// Not the project's `rustfmt`: its `rustfmt.toml` is the developer's, it may
+/// change, and what is wanted here is a *fixed* yardstick — one both sides of a
+/// comparison can be measured against years apart.
+///
+/// What it is for: maxx recognises a module it wrote by the bytes it left, and
+/// a `cargo fmt` changes those bytes. Measured on the templates, the default
+/// layout moves ten lines of `system.rs` and fifty-six of `theme.rs` — and not
+/// only whitespace, since `else {{ return }}` becomes `else {{ return; }}`. So
+/// the comparison is made on a layout neither side chose.
+///
+/// `None` when `rustfmt` is missing or refuses the source: the caller then
+/// falls back to comparing bytes, which is what maxx did before.
+pub fn formatted_default(source: &str) -> Option<String> {
+    // One directory per call: two threads sharing it — maxx checks several
+    // modules, the test suite runs in one process — would read back each
+    // other's file, or remove it under the other's feet.
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let count = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let directory = std::env::temp_dir().join(format!("maxx-shape-{}-{count}", std::process::id()));
+    std::fs::create_dir_all(&directory).ok()?;
+    // An empty configuration file, pointed at explicitly: without it `rustfmt`
+    // walks up from the file and could find one belonging to whatever holds the
+    // temporary directory.
+    let config = directory.join("rustfmt.toml");
+    std::fs::write(&config, "").ok()?;
+    let file = directory.join("shape.rs");
+    std::fs::write(&file, source).ok()?;
+
+    let status = Command::new("rustfmt")
+        .arg("--edition")
+        .arg("2024")
+        .arg("--config-path")
+        .arg(&config)
+        .arg(&file)
+        .stderr(Stdio::null())
+        .status()
+        .ok()?;
+
+    let formatted = status.success().then(|| std::fs::read_to_string(&file).ok()).flatten();
+    let _ = std::fs::remove_dir_all(&directory);
+    formatted
+}
+
 /// Moves `path` to the system's trash and answers where it landed.
 ///
 /// Never an erase: a wrong click must cost a trip to the file manager, not the

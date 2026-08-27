@@ -38,6 +38,41 @@ pub struct Module {
     /// — losing what the other modules had recorded.
     #[serde(alias = "empreinte")]
     pub fingerprint: String,
+    /// The fingerprint of the same file once `rustfmt`'s own defaults have laid
+    /// it out.
+    ///
+    /// Because the first one answers "are these the bytes maxx left", and a
+    /// `cargo fmt` — the most ordinary gesture there is — changes those bytes
+    /// without touching a line of code. Measured: the default layout moves ten
+    /// lines of `system.rs`, fifty-six of `theme.rs`, and turns
+    /// `else {{ return }}` into `else {{ return; }}`, so no cheap comparison
+    /// recovers it. Both sides go through the same formatter instead.
+    ///
+    /// Absent from a file written before this existed, and from one written on
+    /// a machine with no `rustfmt`: the comparison then falls back to the bytes
+    /// alone, which is what maxx did before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shape: Option<String>,
+}
+
+impl Module {
+    /// Whether `current` is still the file maxx wrote.
+    ///
+    /// The bytes first, because that costs nothing and answers most of the
+    /// time. Then the shape, which is what survives a project being formatted.
+    /// A comment the developer added shows in both — `rustfmt` keeps comments —
+    /// so it still counts as an edit, and maxx will not offer to write over it.
+    pub fn holds(&self, current: &str) -> bool {
+        if fingerprint(current) == self.fingerprint {
+            return true;
+        }
+        let Some(shape) = &self.shape else {
+            return false;
+        };
+        crate::run::formatted_default(current)
+            .map(|formatted| fingerprint(&formatted) == *shape)
+            .unwrap_or(false)
+    }
 }
 
 /// What maxx knows about the project itself.
@@ -228,7 +263,9 @@ pub fn arguments(root: &Path, subcommand: &str) -> Vec<String> {
 /// Records that a module was copied, with its version and its fingerprint.
 pub fn record(root: &Path, module: &str, version: u32, body: &str) -> std::io::Result<()> {
     let mut file = read(root)?;
-    file.modules.insert(module.to_string(), Module { version, fingerprint: fingerprint(body) });
+    let shape = crate::run::formatted_default(body).map(|formatted| fingerprint(&formatted));
+    file.modules
+        .insert(module.to_string(), Module { version, fingerprint: fingerprint(body), shape });
     save(root, &file)
 }
 

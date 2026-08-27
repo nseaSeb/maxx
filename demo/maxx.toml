@@ -20,12 +20,15 @@ entry = "home"
 
 [modules.assets]
 version = 1
-fingerprint = "73ef84ccda1d2602"
+fingerprint = "90cb5efc780a59f8"
+shape = "83f23e2e0d55246c"
 
 [modules.system]
 version = 1
 fingerprint = "c2efcda0672f77c9"
+shape = "f0c99d63652b3e64"
 
 [modules.window]
 version = 1
 fingerprint = "73935d644407d44a"
+shape = "73935d644407d44a"

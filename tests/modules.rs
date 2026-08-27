@@ -171,3 +171,63 @@ fn a_project_file_written_before_the_rename_still_reads() {
     assert_eq!(recorded.version, 1);
     assert_eq!(recorded.fingerprint, "9f760f0126a35c23");
 }
+
+/// A project formatted by its own developer is still a project maxx knows.
+///
+/// The defect this guards: maxx recognised a module it had written by the bytes
+/// it left, and `cargo fmt` — the most ordinary gesture there is — changes those
+/// bytes without touching a line of code. Measured on the templates, the
+/// default layout moves ten lines of `system.rs` and fifty-six of `theme.rs`.
+/// maxx then took the file for one the developer had edited and, silently,
+/// stopped offering the fixes it had for it.
+#[test]
+fn a_formatted_module_is_still_recognised() {
+    let root = scratch("maxx_modules_formatted");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::add_system_module(&root).expect("the module must be copied");
+
+    let path = root.join("src/system.rs");
+    let written = std::fs::read_to_string(&path).unwrap();
+    let recorded = projectfile::load(&root).modules.get("system").cloned().expect("recorded");
+    assert!(recorded.holds(&written), "the file maxx just wrote");
+
+    // What `cargo fmt` does to it, in the layout every project gets by default.
+    let formatted = maxx::run::formatted_default(&written).expect("rustfmt must run");
+    std::fs::write(&path, &formatted).unwrap();
+    assert_ne!(formatted, written, "this template is one the default layout moves");
+    assert!(recorded.holds(&formatted), "a formatted copy is not an edited copy");
+
+    // And what an edit does: a function of the developer's own, which maxx must
+    // never write over.
+    let edited = format!("{formatted}\npub fn mine() {{}}\n");
+    assert!(!recorded.holds(&edited), "an edited copy must stay the developer's");
+}
+
+/// A comment added by the developer counts as an edit.
+///
+/// `rustfmt` keeps comments, so the shape carries them too — which is what
+/// stops maxx from replacing a file someone annotated.
+#[test]
+fn a_comment_added_to_a_module_makes_it_the_developers() {
+    let root = scratch("maxx_modules_annotated");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::add_system_module(&root).unwrap();
+
+    let recorded = projectfile::load(&root).modules.get("system").cloned().expect("recorded");
+    let written = std::fs::read_to_string(root.join("src/system.rs")).unwrap();
+    let annotated = format!("// une note du développeur\n{written}");
+    assert!(!recorded.holds(&annotated));
+}
+
+/// A file written before the shape existed still answers.
+#[test]
+fn a_record_without_a_shape_falls_back_to_the_bytes() {
+    let body = scaffold::module_body("system").expect("template");
+    let old = projectfile::Module { version: 1, fingerprint: fingerprint(&body), shape: None };
+
+    assert!(old.holds(&body), "the bytes still answer");
+    // And without a shape there is nothing to fall back on: a formatted copy
+    // reads as an edited one, which is what maxx did before.
+    let formatted = maxx::run::formatted_default(&body).expect("rustfmt must run");
+    assert!(!old.holds(&formatted));
+}

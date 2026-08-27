@@ -390,6 +390,18 @@ câblage de `main.rs`, les crates déclarées, le module de réglages en entier 
 est dans `tests/project.rs::every_shape_compiles`, ignoré par défaut parce
 qu'il construit deux projets entiers.
 
+**L'empreinte ne peut pas être les octets seuls.** Un projet formaté par son
+développeur — `cargo fmt`, le geste le plus banal — n'est plus octet pour octet
+celui que maxx a écrit, alors qu'aucune ligne de code n'a bougé : la mise en
+page par défaut déplace dix lignes de `system.rs` et cinquante-six de
+`theme.rs`, et va jusqu'à écrire `else { return; }` là où le gabarit dit
+`else { return }`. maxx en concluait « modifié par le développeur » et
+s'arrêtait là, sans un mot. `maxx.toml` porte donc **deux** empreintes : les
+octets, et la forme — le même texte passé au `rustfmt` par défaut, la
+configuration du projet ignorée, parce que ce qu'il faut ici est un étalon fixe
+et non celui du moment. L'une ou l'autre suffit à reconnaître un fichier ; il
+faut que les deux échouent pour qu'il soit tenu pour édité.
+
 Le garde-fou qui fait tenir l'ensemble est dans `tests/modules.rs` : il retient
 l'empreinte de chaque gabarit à sa version courante. Modifier un gabarit fait
 échouer ce test, ce qui oblige à décider si la correction doit atteindre les

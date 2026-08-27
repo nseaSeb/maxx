@@ -549,7 +549,7 @@ pub fn outdated_modules(root: &Path) -> Vec<String> {
         let Ok(body) = std::fs::read_to_string(&path) else {
             continue;
         };
-        if crate::projectfile::fingerprint(&body) == recorded.fingerprint {
+        if recorded.holds(&body) {
             outdated.push((*module).to_string());
         }
     }
@@ -574,7 +574,7 @@ pub fn update_module(root: &Path, module: &str) -> io::Result<()> {
 
     let path = root.join(format!("src/{module}.rs"));
     let current = std::fs::read_to_string(&path)?;
-    if crate::projectfile::fingerprint(&current) != recorded.fingerprint {
+    if !recorded.holds(&current) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!("src/{module}.rs has been modified — maxx does not replace it"),
