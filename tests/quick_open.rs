@@ -22,6 +22,15 @@ fn labels(files: &[PathBuf]) -> Vec<String> {
     files.iter().map(|path| path.to_string_lossy().into_owned()).collect()
 }
 
+/// The same list as paths, which is how two separators are compared as one.
+///
+/// Windows writes `src\ui\home.rs`, and a `String` comparison against
+/// `src/ui/home.rs` fails there while the two name the same file. `Path`
+/// compares by components and knows better.
+fn as_paths(labels: &[String]) -> Vec<PathBuf> {
+    labels.iter().map(PathBuf::from).collect()
+}
+
 #[test]
 fn the_list_holds_the_project_and_not_what_the_tree_hides() {
     let root = scratch("maxx_quick_open");
@@ -34,11 +43,11 @@ fn the_list_holds_the_project_and_not_what_the_tree_hides() {
     let (files, _) = project::walk_files(&root);
     let labels = labels(&files);
 
-    assert!(labels.iter().any(|path| path == "src/ui/home.rs"), "{labels:?}");
-    assert!(labels.iter().any(|path| path == "Cargo.toml"), "{labels:?}");
-    assert!(!labels.iter().any(|path| path.starts_with("target")), "{labels:?}");
-    assert!(!labels.iter().any(|path| path.starts_with(".cargo")), "{labels:?}");
-    assert!(!labels.iter().any(|path| path.starts_with(".gitignore")), "{labels:?}");
+    assert!(files.contains(&PathBuf::from("src/ui/home.rs")), "{labels:?}");
+    assert!(files.contains(&PathBuf::from("Cargo.toml")), "{labels:?}");
+    assert!(!files.iter().any(|path| path.starts_with("target")), "{labels:?}");
+    assert!(!files.iter().any(|path| path.starts_with(".cargo")), "{labels:?}");
+    assert!(!files.iter().any(|path| path == std::path::Path::new(".gitignore")), "{labels:?}");
 }
 
 #[test]
@@ -56,9 +65,14 @@ fn the_whole_path_answers_the_query() {
 
     // Words in any order, and the directory counts: it is the question one
     // actually has.
-    assert_eq!(of("ui home"), vec!["src/ui/home.rs".to_string()]);
-    assert_eq!(of("home ui"), vec!["src/ui/home.rs".to_string()]);
-    assert!(of("shell").contains(&"src/ui/shell.rs".to_string()));
+    let home = vec![PathBuf::from("src/ui/home.rs")];
+    assert_eq!(as_paths(&of("ui home")), home);
+    assert_eq!(as_paths(&of("home ui")), home);
+    // Either slash, whichever the system writes: Windows lists
+    // `src\ui\home.rs`, and a hand coming from a Mac types `/`.
+    assert_eq!(as_paths(&of("ui/home")), home);
+    assert_eq!(as_paths(&of("ui\\home")), home);
+    assert!(as_paths(&of("shell")).contains(&PathBuf::from("src/ui/shell.rs")));
     assert!(of("").len() == labels.len(), "an empty query keeps everything");
     assert!(of("zzz").is_empty());
 }
