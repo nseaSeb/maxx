@@ -40,17 +40,17 @@ fn with_own_comments(node: &Node, rendered: String, indent: &str) -> String {
     let mut out = String::new();
     for comment in &node.comments {
         for (index, line) in comment.lines().enumerate() {
+            // The first line takes the column, the rest keep the one they were
+            // written in — the same rule `write_comments` follows, or a block
+            // comment would drift right on every save. What follows a comment
+            // always starts at the column, whichever line came last.
             if index == 0 {
                 out.push_str(line.trim_start());
-                out.push('\n');
-                out.push_str(indent);
             } else {
-                // Verbatim, and no indent added — the same rule `write_comments`
-                // follows. Indenting a continuation here would push it four
-                // columns further right on every save.
                 out.push_str(line);
-                out.push('\n');
             }
+            out.push('\n');
+            out.push_str(indent);
         }
     }
     out.push_str(&rendered);

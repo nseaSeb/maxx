@@ -910,13 +910,24 @@ fn pixel_literal(value: &str) -> Option<String> {
 /// `field` and `bar_id` come from the caller because neither can be decided
 /// from one node: a field no other component is bound to, and an element id no
 /// sibling is using.
-pub fn scrollbar_assembly(mut box_node: Node, bar_id: &str, field: &str) -> Node {
-    let horizontal = box_node.call("overflow_x_scroll").is_some();
+pub fn scrollbar_assembly(mut box_node: Node, ids: [&str; 2], field: &str) -> Node {
+    let [box_id, bar_id] = ids;
+
+    // The id first, and that is not a matter of taste: `overflow_*_scroll` and
+    // `track_scroll` live on a *stateful* element, which a `div` only becomes
+    // once it carries one. A chain that names them before the id does not
+    // compile — in the developer's project, on a line maxx wrote — and calls
+    // are emitted in the order they are set.
+    if box_node.call("id").is_none() {
+        box_node.set_call("id", Arg::Str(box_id.to_string()));
+    }
+
     // A bar over a box that does not scroll watches something that never
     // moves: the switch says "show the bar", and scrolling is what a bar is
     // for, so the box is made to scroll. The axis follows its own direction —
     // a row scrolls sideways.
-    if !horizontal && box_node.call("overflow_y_scroll").is_none() {
+    if box_node.call("overflow_x_scroll").is_none() && box_node.call("overflow_y_scroll").is_none()
+    {
         box_node.set_flag(
             if box_node.base.path() == Some("h_flex") {
                 "overflow_x_scroll"
@@ -927,13 +938,15 @@ pub fn scrollbar_assembly(mut box_node: Node, bar_id: &str, field: &str) -> Node
         );
     }
     let horizontal = box_node.call("overflow_x_scroll").is_some();
-    // And nothing scrolls inside a box whose height follows its content: it
+
+    // And nothing scrolls inside a box whose size follows its content: it
     // grows instead, and the window cuts it.
     let hold = if horizontal { "w_full" } else { "h_full" };
     let size = if horizontal { "w" } else { "h" };
     if box_node.call(size).is_none() && box_node.call("size_full").is_none() {
         box_node.set_flag(hold, true);
     }
+
     box_node.set_call("track_scroll", Arg::Verbatim(format!("&self.{field}")));
 
     let mut bar = Node::known("Scrollbar::new");
@@ -995,6 +1008,12 @@ pub fn unwrap_scrollbar(wrapper: &Node) -> Option<Node> {
     }
     let mut box_node = wrapper.children.first()?.clone();
     box_node.remove_call("track_scroll");
+    // What was written above the wrapper was written about this box: taking
+    // the wrapper away must not take the sentence with it.
+    let mut comments = wrapper.comments.clone();
+    comments.extend(box_node.comments);
+    box_node.comments = comments;
+    box_node.trailing.extend(wrapper.trailing.clone());
     Some(box_node)
 }
 
@@ -1184,13 +1203,31 @@ pub fn unique_element_id(root: &Node) -> String {
 
 /// The first `scroll…` name that `taken` does not hold.
 fn next_element_id(taken: &[String]) -> String {
-    let mut name = "scroll".to_string();
+    numbered("scroll", taken)
+}
+
+/// `name`, or `name_2`, `name_3` … — the first that `taken` does not hold.
+fn numbered(name: &str, taken: &[String]) -> String {
+    let mut candidate = name.to_string();
     let mut index = 2;
-    while taken.contains(&name) {
-        name = format!("scroll_{index}");
+    while taken.contains(&candidate) {
+        candidate = format!("{name}_{index}");
         index += 1;
     }
-    name
+    candidate
+}
+
+/// Two element ids no node of `root` answers to.
+///
+/// The visible scrollbar needs both at once: the box becomes stateful, and the
+/// bar is an element of its own. Asked together because the first is not in the
+/// tree yet when the second is chosen.
+pub fn unique_element_ids(root: &Node) -> [String; 2] {
+    let mut taken = element_ids(root);
+    let first = next_element_id(&taken);
+    taken.push(first.clone());
+    let second = next_element_id(&taken);
+    [first, second]
 }
 
 /// Every element id the tree answers to.
@@ -1511,38 +1548,70 @@ pub fn rebind_state_fields(subtree: &mut Node, root: &Node) {
     // the same one as a constructor argument. Renaming only the second leaves a
     // copy whose box scrolls in step with the original — it compiles, and it is
     // wrong only once it runs, which is the worst kind.
-    if !renamed.is_empty() {
-        subtree.walk_mut(&mut |node| {
-            for call in &mut node.calls {
-                for arg in &mut call.args {
-                    let Arg::Verbatim(source) = arg else { continue };
-                    for (old, fresh) in &renamed {
-                        if *source == format!("&self.{old}") {
-                            *source = format!("&self.{fresh}");
-                        }
-                    }
-                }
-            }
-        });
-    }
+    //
+    // Repaired where the pairing is made, wrapper by wrapper, and not by
+    // rewriting every `&self.…` of the subtree: two assemblies bound to the
+    // same field would then trade handles with each other.
+    let _ = renamed;
+    subtree.walk_mut(&mut |node| {
+        if !is_scrollbar_wrapper(node) {
+            return;
+        }
+        let Some(handle) = node.children.get(1).and_then(|overlay| {
+            overlay.children.first().and_then(|bar| match &bar.base {
+                Base::Known { args, .. } => args.first().map(|arg| arg.to_source()),
+                Base::Opaque(_) => None,
+            })
+        }) else {
+            return;
+        };
+        if let Some(box_node) = node.children.first_mut() {
+            box_node.set_call("track_scroll", Arg::Verbatim(handle));
+        }
+    });
 
     // Two siblings answering to the same element id share gpui's state for it:
     // a duplicated scrolling box would scroll where its twin scrolls.
     let mut ids = element_ids(root);
     subtree.walk_mut(&mut |node| {
-        let Some(current) =
-            node.call("id").and_then(|call| call.args.first()).and_then(|arg| arg.as_str())
-        else {
+        // Where the id sits differs: a `div` carries it in `.id(…)`, a button
+        // and a checkbox in the constructor. `element_ids` reads both, so the
+        // renaming has to reach both or the collision it found stays.
+        let call_id =
+            node.call("id").and_then(|call| call.args.first()).and_then(|arg| arg.as_str());
+        let base_slot = of(node).and_then(|spec| {
+            spec.props.iter().find_map(|prop| match (prop.target, prop.label) {
+                (Target::BaseArg(index), "prop.id") => Some(index),
+                _ => None,
+            })
+        });
+        let base_id = base_slot.and_then(|index| match &node.base {
+            Base::Known { args, .. } => args.get(index).and_then(|arg| arg.as_str()),
+            Base::Opaque(_) => None,
+        });
+
+        let Some(current) = call_id.or(base_id).map(str::to_string) else {
             return;
         };
-        let current = current.to_string();
         if !ids.contains(&current) {
             ids.push(current);
             return;
         }
-        let fresh = next_element_id(&ids);
+        // Named after the one it copies — `save_2` beside `save` — rather than
+        // handed a `scroll_2` that says nothing about what it is.
+        let fresh = numbered(&current, &ids);
         ids.push(fresh.clone());
-        node.set_call("id", Arg::Str(fresh));
+        match (call_id.is_some(), base_slot) {
+            (true, _) => node.set_call("id", Arg::Str(fresh)),
+            (false, Some(index)) => {
+                if let Base::Known { args, .. } = &mut node.base
+                    && let Some(slot) = args.get_mut(index)
+                {
+                    *slot = Arg::Str(fresh);
+                }
+            }
+            _ => {}
+        }
     });
 }
 

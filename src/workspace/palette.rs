@@ -12,7 +12,9 @@ use super::*;
 impl Workspace {
     /// Opens the command palette, or closes it when it is already open.
     pub fn toggle_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.command_input.is_some() {
+        // The same key closes what it opened; the *other* key switches lists
+        // rather than closing, which is what one means by pressing it.
+        if self.command_input.is_some() && self.palette_mode == PaletteMode::Commands {
             self.close_palette(cx);
             return;
         }
@@ -26,7 +28,7 @@ impl Workspace {
     /// The most used gesture of Zed, and the one maxx had nothing for: the tree
     /// is fine for looking around and hopeless for going somewhere known.
     pub fn quick_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.command_input.is_some() {
+        if self.command_input.is_some() && self.palette_mode == PaletteMode::Files {
             self.close_palette(cx);
             return;
         }
@@ -134,6 +136,28 @@ impl Workspace {
                 let _ = handle.update(cx, |_, window, cx| window.dispatch_action(action, cx));
             }
         });
+    }
+
+    /// How many lines the palette draws at once.
+    ///
+    /// `⌘P` on a large project matches thousands of files, and an element per
+    /// match is built on opening and again on every keystroke — the height of
+    /// the box only clips them, it does not spare the work. A window that
+    /// follows the highlight costs the same whatever the project holds.
+    pub(crate) const PALETTE_WINDOW: usize = 60;
+
+    /// The slice of the matching lines the palette draws, and where it starts.
+    ///
+    /// Around the highlight rather than from the top: a highlight moved past
+    /// the window would otherwise be a highlight nobody can see.
+    pub(crate) fn palette_window(&self, matching: &[usize]) -> (usize, Vec<usize>) {
+        if matching.len() <= Self::PALETTE_WINDOW {
+            return (0, matching.to_vec());
+        }
+        let half = Self::PALETTE_WINDOW / 2;
+        let last = matching.len() - Self::PALETTE_WINDOW;
+        let start = self.command_index.saturating_sub(half).min(last);
+        (start, matching[start..start + Self::PALETTE_WINDOW].to_vec())
     }
 
     /// Where in the open list the lines the query keeps are.

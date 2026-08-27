@@ -197,8 +197,21 @@ impl Node {
         if call.comments.is_empty() {
             return;
         }
-        match self.calls.get_mut(index) {
-            Some(next) => {
+        // A child slot is not a call and carries nothing: what lands on one is
+        // never written, which is the very loss this exists to prevent. The
+        // child it stands for takes the comment instead.
+        let slots_before = self.calls[..index].iter().filter(|c| c.name == CHILD_SLOT).count();
+        match self.calls.get(index).map(|next| next.name == CHILD_SLOT) {
+            Some(true) => match self.children.get_mut(slots_before) {
+                Some(child) => {
+                    let mut moved = call.comments;
+                    moved.extend(std::mem::take(&mut child.comments));
+                    child.comments = moved;
+                }
+                None => self.trailing.extend(call.comments),
+            },
+            Some(false) => {
+                let next = &mut self.calls[index];
                 let mut moved = call.comments;
                 moved.extend(std::mem::take(&mut next.comments));
                 next.comments = moved;

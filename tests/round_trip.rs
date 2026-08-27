@@ -964,8 +964,9 @@ fn the_scrollbar_is_a_sibling_of_the_box_it_watches() {
     box_node.set_call("id", Arg::Str("scroller".into()));
     box_node.set_flag("overflow_y_scroll", true);
     box_node.push_child(Node::known("Label::new"));
+    // The box already answers to a name, so the one offered is not spent.
 
-    let wrapper = registry::scrollbar_assembly(box_node, "bar", "scroll");
+    let wrapper = registry::scrollbar_assembly(box_node, ["box", "bar"], "scroll");
     let written = render(&wrapper, 0);
 
     assert!(registry::is_scrollbar_wrapper(&wrapper), "{written}");
@@ -991,7 +992,7 @@ fn the_scrollbar_is_a_sibling_of_the_box_it_watches() {
 fn the_bar_follows_the_axis_the_box_scrolls_on() {
     let mut row = Node::known("h_flex");
     row.set_flag("overflow_x_scroll", true);
-    let wrapper = maxx::registry::scrollbar_assembly(row, "bar", "scroll");
+    let wrapper = maxx::registry::scrollbar_assembly(row, ["box", "bar"], "scroll");
     let written = render(&wrapper, 0);
     assert!(written.contains("ScrollbarAxis::Horizontal"), "{written}");
     // And the wrapper holds the width rather than the height.
@@ -1005,7 +1006,7 @@ fn a_wrapper_the_developer_touched_is_not_unwrapped() {
 
     let mut box_node = Node::known("v_flex");
     box_node.set_flag("overflow_y_scroll", true);
-    let mut wrapper = registry::scrollbar_assembly(box_node, "bar", "scroll");
+    let mut wrapper = registry::scrollbar_assembly(box_node, ["box", "bar"], "scroll");
 
     // A node dropped beside the bar: the shape is no longer the one maxx
     // wrote, so it stays whole.
@@ -1022,7 +1023,7 @@ fn a_wrapper_the_developer_touched_is_not_unwrapped() {
 #[test]
 fn the_scrollbar_asks_the_view_for_a_handle() {
     let node = Node::known("v_flex");
-    let wrapper = maxx::registry::scrollbar_assembly(node, "bar", "scroll");
+    let wrapper = maxx::registry::scrollbar_assembly(node, ["box", "bar"], "scroll");
     let imports = maxx::registry::imports(&wrapper);
     assert!(imports.contains(&"use gpui_component::scroll::Scrollbar;"), "{imports:?}");
     // The axis type comes with the axis, not with the bar.
@@ -1216,7 +1217,7 @@ fn a_copied_assembly_gets_a_handle_of_its_own() {
 
     let mut box_node = Node::known("v_flex");
     box_node.set_flag("overflow_y_scroll", true);
-    let wrapper = registry::scrollbar_assembly(box_node, "scroll", "field");
+    let wrapper = registry::scrollbar_assembly(box_node, ["box", "scroll"], "field");
 
     let mut root = Node::known("v_flex");
     root.push_child(wrapper.clone());
@@ -1237,13 +1238,90 @@ fn a_copied_assembly_gets_a_handle_of_its_own() {
 /// The bar is only ever put over a box that scrolls.
 #[test]
 fn a_bar_makes_its_box_scroll() {
-    let wrapper = maxx::registry::scrollbar_assembly(Node::known("v_flex"), "bar", "scroll");
+    let wrapper =
+        maxx::registry::scrollbar_assembly(Node::known("v_flex"), ["box", "bar"], "scroll");
     let box_node = &wrapper.children[0];
     assert!(box_node.call("overflow_y_scroll").is_some(), "a bar over a still box watches nothing");
     assert!(box_node.call("h_full").is_some(), "and a box that grows scrolls nothing");
 
     // A row scrolls sideways, and takes the width instead.
-    let row = maxx::registry::scrollbar_assembly(Node::known("h_flex"), "bar", "scroll");
+    let row = maxx::registry::scrollbar_assembly(Node::known("h_flex"), ["box", "bar"], "scroll");
     assert!(row.children[0].call("overflow_x_scroll").is_some());
     assert!(row.children[0].call("w_full").is_some());
+}
+
+/// A box that did not scroll gets everything it needs, id included.
+#[test]
+fn a_bar_makes_its_box_stateful() {
+    let wrapper =
+        maxx::registry::scrollbar_assembly(Node::known("v_flex"), ["scroll", "bar"], "handle");
+    let written = render(&wrapper, 0);
+    let box_node = &wrapper.children[0];
+
+    // `overflow_y_scroll` and `track_scroll` both live on a stateful element,
+    // which a `div` only becomes once it carries an id: written without one,
+    // the generated project does not compile.
+    assert!(box_node.call("id").is_some(), "{written}");
+    let id = written.find(".id(").expect("the id must be written");
+    let scroll = written.find(".overflow_y_scroll()").expect("the box must scroll");
+    let track = written.find(".track_scroll(").expect("the box must be tracked");
+    assert!(id < scroll && id < track, "the id comes first: {written}");
+    assert_eq!(reparse(&written), written);
+}
+
+/// Two assemblies bound to the same field do not trade handles.
+#[test]
+fn two_pasted_assemblies_keep_their_own_handles() {
+    use maxx::registry;
+
+    let make = || {
+        let mut box_node = Node::known("v_flex");
+        box_node.set_flag("overflow_y_scroll", true);
+        registry::scrollbar_assembly(box_node, ["scroll", "bar"], "field")
+    };
+
+    let mut root = Node::known("v_flex");
+    root.push_child(make());
+    let mut copy = make();
+    registry::rebind_state_fields(&mut copy, &root);
+    root.push_child(copy);
+
+    let written = render(&root, 0);
+    // Each wrapper holds one handle, named twice: the box that scrolls and the
+    // bar that watches it. A sweep over every `&self.…` of the subtree would
+    // have made the first box track the second's handle.
+    for field in ["&self.field)", "&self.field_2)"] {
+        assert_eq!(written.matches(field).count(), 2, "{field}: {written}");
+    }
+}
+
+/// A comment above a call maxx removes lands on the child below it, not in a
+/// slot that writes nothing.
+#[test]
+fn a_comment_above_a_removed_call_reaches_the_child_under_it() {
+    use maxx::registry::{self, Kind, Prop, Target};
+
+    let source = "v_flex()\n    // garde-moi\n    .gap_4()\n    .child(Label::new(\"x\"))";
+    let (mut node, _) = parser::parse(&file_with(source)).expect("parse");
+    let flag = Prop { label: "prop.gap", target: Target::Flag("gap_4"), kind: Kind::Bool };
+    registry::write(&mut node, &flag, "false");
+
+    let written = render(&node, 0);
+    assert!(!written.contains(".gap_4()"), "{written}");
+    assert!(written.contains("// garde-moi"), "the comment fell into a slot: {written}");
+    assert_eq!(reparse(&written), written);
+}
+
+/// The wrapper's own comments come back with the box when the bar is removed.
+#[test]
+fn unwrapping_keeps_what_was_written_above_the_wrapper() {
+    use maxx::registry;
+
+    let mut box_node = Node::known("v_flex");
+    box_node.set_flag("overflow_y_scroll", true);
+    let mut wrapper = registry::scrollbar_assembly(box_node, ["scroll", "bar"], "field");
+    wrapper.comments = vec!["// la liste des vues".into()];
+
+    let back = registry::unwrap_scrollbar(&wrapper).expect("maxx wrote this wrapper");
+    assert_eq!(back.comments, vec!["// la liste des vues".to_string()]);
 }

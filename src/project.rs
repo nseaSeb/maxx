@@ -89,6 +89,10 @@ pub fn walk_files(root: &Path) -> Vec<PathBuf> {
             } else if let Ok(relative) = path.strip_prefix(root) {
                 out.push(relative.to_path_buf());
                 if out.len() >= MAX_QUICK_OPEN_FILES {
+                    // Sorted on this way out too: a project at the ceiling
+                    // would otherwise get the list in the order the disk
+                    // happened to hand it over.
+                    out.sort();
                     return out;
                 }
             }
