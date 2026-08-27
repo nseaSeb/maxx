@@ -35,18 +35,28 @@ impl Workspace {
         self.preferences = false;
         self.code = None;
         if index < self.views.len() {
-            // Where one comes from, so `⌃⇥` can go back to it. Only when it is
-            // another tab: activating the one already in front would make the
-            // gesture answer itself.
-            if let Some(current) = self.active.filter(|current| *current != index) {
-                self.previous_view = self.views.get(current).map(|view| view.path.clone());
-            }
-            self.active = Some(index);
+            self.focus_view(index);
             self.selected = Some(self.views[index].path.clone());
             self.revision += 1;
             self.message = None;
             cx.notify();
         }
+    }
+
+    /// Brings the view at `index` forward, remembering where one came from.
+    ///
+    /// Every way in goes through here — the tab strip, the project tree, the
+    /// menu, `⌘P` — because `⌃⇥` is only useful between the two files one is
+    /// actually working between, and those are rarely reached by clicking
+    /// tabs. Written straight to `self.active` anywhere else, the trace is
+    /// never taken and the gesture answers "nowhere to go back to".
+    fn focus_view(&mut self, index: usize) {
+        // Only when it is another view: coming back to the one already in
+        // front would make the gesture answer itself.
+        if let Some(current) = self.active.filter(|current| *current != index) {
+            self.previous_view = self.views.get(current).map(|view| view.path.clone());
+        }
+        self.active = Some(index);
     }
 
     /// Brings the next tab forward, or the previous one.
@@ -146,14 +156,14 @@ impl Workspace {
             // Already open: just bring its tab forward.
             if let Some(index) = self.views.iter().position(|view| view.path == path) {
                 self.code = None;
-                self.active = Some(index);
+                self.focus_view(index);
                 self.revision += 1;
             } else {
                 match View::load(&path) {
                     Ok(view) => {
                         self.code = None;
                         self.views.push(view);
-                        self.active = Some(self.views.len() - 1);
+                        self.focus_view(self.views.len() - 1);
                         self.revision += 1;
                     }
                     // A `.rs` without a managed region is not a broken view: it

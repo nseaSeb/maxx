@@ -1512,7 +1512,7 @@ pub fn rebind_state_fields(subtree: &mut Node, root: &Node) {
     // of the same subtree must not be given the same one either.
     let mut taken = state_fields(root);
 
-    fn walk(node: &mut Node, taken: &mut Vec<String>, renamed: &mut Vec<(String, String)>) {
+    fn walk(node: &mut Node, taken: &mut Vec<String>) {
         if of(node).is_some_and(|spec| spec.state.is_some())
             && let Base::Known { args, .. } = &mut node.base
         {
@@ -1525,9 +1525,6 @@ pub fn rebind_state_fields(subtree: &mut Node, root: &Node) {
                 _ => {
                     let name = next_field(taken);
                     taken.push(name.clone());
-                    if let Some(old) = current {
-                        renamed.push((old, name.clone()));
-                    }
                     let arg = Arg::Verbatim(format!("&self.{name}"));
                     match args.first_mut() {
                         Some(slot) => *slot = arg,
@@ -1537,11 +1534,10 @@ pub fn rebind_state_fields(subtree: &mut Node, root: &Node) {
             }
         }
         for child in &mut node.children {
-            walk(child, taken, renamed);
+            walk(child, taken);
         }
     }
-    let mut renamed = Vec::new();
-    walk(subtree, &mut taken, &mut renamed);
+    walk(subtree, &mut taken);
 
     // A field is not always bound where it is declared: a scrolling box holds
     // its handle in `track_scroll(&self.…)`, and the bar that watches it holds
@@ -1552,7 +1548,6 @@ pub fn rebind_state_fields(subtree: &mut Node, root: &Node) {
     // Repaired where the pairing is made, wrapper by wrapper, and not by
     // rewriting every `&self.…` of the subtree: two assemblies bound to the
     // same field would then trade handles with each other.
-    let _ = renamed;
     subtree.walk_mut(&mut |node| {
         if !is_scrollbar_wrapper(node) {
             return;

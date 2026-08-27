@@ -40,10 +40,18 @@ impl Workspace {
         // Walked at opening rather than held and refreshed: a list built on
         // every keystroke would walk the disk for nothing, and one kept between
         // openings would offer a file that has since been deleted.
-        let files = crate::project::walk_files(&project.root);
+        let (files, capped) = crate::project::walk_files(&project.root);
         self.open_palette(crate::tr("palette.file_hint"), window, cx);
         self.palette_mode = PaletteMode::Files;
         self.palette_files = files;
+        // A list that stops without a word is a list that looks complete: the
+        // file one is looking for may simply not be in it.
+        if capped {
+            self.message = Some(SharedString::from(
+                t!("message.files_capped", count = crate::project::MAX_QUICK_OPEN_FILES)
+                    .into_owned(),
+            ));
+        }
     }
 
     /// The half the two share: the box, its listeners, and the focus.
@@ -175,6 +183,17 @@ impl Workspace {
         let labels: Vec<String> =
             self.palette_files.iter().map(|path| path.to_string_lossy().into_owned()).collect();
         crate::palette::matching_labels(labels.iter().map(String::as_str), &query)
+    }
+
+    /// What the palette says when nothing answers the query.
+    ///
+    /// Two lists, two sentences: told there is "no command by that name" while
+    /// looking for a file, one starts wondering what one typed.
+    pub(crate) fn palette_nothing(&self) -> SharedString {
+        match self.palette_mode {
+            PaletteMode::Files => crate::tr("palette.no_file"),
+            PaletteMode::Commands => crate::tr("palette.nothing"),
+        }
     }
 
     /// The file at `position` of the quick-open list, when that is what is

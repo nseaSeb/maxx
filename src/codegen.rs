@@ -42,17 +42,18 @@ fn with_own_comments(node: &Node, rendered: String, indent: &str) -> String {
         for (index, line) in comment.lines().enumerate() {
             // The first line takes the column, the rest keep the one they were
             // written in — the same rule `write_comments` follows, or a block
-            // comment would drift right on every save. What follows a comment
-            // always starts at the column, whichever line came last.
+            // comment would drift right by one level on every save.
             if index == 0 {
                 out.push_str(line.trim_start());
             } else {
                 out.push_str(line);
             }
             out.push('\n');
-            out.push_str(indent);
         }
     }
+    // The column belongs to what comes after the comments, once: pushed after
+    // every line, it would land in front of a continuation as well.
+    out.push_str(indent);
     out.push_str(&rendered);
     out
 }
