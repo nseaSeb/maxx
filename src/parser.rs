@@ -142,9 +142,7 @@ fn string_ranges(source: &str) -> Vec<std::ops::Range<usize>> {
                 index = source[index..].find('\n').map_or(bytes.len(), |offset| index + offset + 1);
             }
             b'/' if bytes.get(index + 1) == Some(&b'*') => {
-                index = source[index + 2..]
-                    .find("*/")
-                    .map_or(bytes.len(), |offset| index + 2 + offset + 2);
+                index = block_comment_end(source, index);
             }
             b'r' => match raw_string_end(source, index) {
                 Some(end) => {

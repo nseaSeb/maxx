@@ -384,6 +384,8 @@ impl Workspace {
     pub(crate) fn render_command_palette(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let input = self.command_input()?.clone();
         let matching = self.matching_lines(cx);
+        let total = matching.len();
+        let (offset, matching) = self.palette_window(&matching);
         let selected = self.command_index();
 
         // Gathered rather than lazy: the closure would carry `cx`, which the
@@ -392,6 +394,7 @@ impl Workspace {
             .into_iter()
             .enumerate()
             // A line is a command or a file, and one list is open at a time.
+            .map(|(index, position)| (index + offset, position))
             .filter_map(|(index, position)| {
                 let file = self.palette_file(position);
                 let command = self.command_at(position);
@@ -458,6 +461,21 @@ impl Workspace {
                                     .text_xs()
                                     .text_color(theme::text_muted())
                                     .child(crate::tr("palette.nothing")),
+                            )
+                        })
+                        // What is drawn is a window onto the matches, so the
+                        // count is said: a list that stops without a word looks
+                        // like a list that found nothing more.
+                        .when(total > rows.len(), |this| {
+                            this.child(
+                                div()
+                                    .px_3()
+                                    .pb_1()
+                                    .text_xs()
+                                    .text_color(theme::text_muted())
+                                    .child(SharedString::from(
+                                        t!("palette.more", count = total - rows.len()).into_owned(),
+                                    )),
                             )
                         })
                         .child(

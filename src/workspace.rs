@@ -127,8 +127,6 @@ pub fn read_active<R>(cx: &App, f: impl FnOnce(&Workspace) -> R) -> Option<R> {
     Some(f(workspace.read(cx)))
 }
 
-/// Root view of a window. A workspace without a project shows the welcome
-/// screen and can be reused by the next `Open Folder…`.
 /// What the palette is offering while it is open.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum PaletteMode {
@@ -138,6 +136,8 @@ pub enum PaletteMode {
     Files,
 }
 
+/// Root view of a window. A workspace without a project shows the welcome
+/// screen and can be reused by the next `Open Folder…`.
 pub struct Workspace {
     project: Option<Project>,
     entries: Vec<Entry>,

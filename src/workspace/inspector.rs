@@ -513,7 +513,9 @@ impl Workspace {
         // A bar over a box that no longer scrolls is a bar watching something
         // that never moves: turning the scroll off takes it down with it.
         if matches!(prop.target, registry::Target::Scrollable(_)) && value != "true" {
-            self.toggle_scrollbar(false, cx);
+            // The checkpoint above already covers this: one gesture, one step
+            // back.
+            self.set_scrollbar(false, false, cx);
         }
         cx.notify();
     }
@@ -529,6 +531,15 @@ impl Workspace {
     /// developer clicked, and its properties are the ones the inspector was
     /// showing.
     fn toggle_scrollbar(&mut self, on: bool, cx: &mut Context<Self>) {
+        self.set_scrollbar(on, true, cx);
+    }
+
+    /// The same, saying whether this is a gesture of its own.
+    ///
+    /// Turning the scroll off takes the bar down with it — one gesture — and a
+    /// checkpoint per write would make the first `⌘Z` restore a state nobody
+    /// ever saw: a wrapper and a bar around a box that no longer scrolls.
+    fn set_scrollbar(&mut self, on: bool, record: bool, cx: &mut Context<Self>) {
         let Some(view) = self.view() else {
             return;
         };
@@ -542,18 +553,24 @@ impl Workspace {
         }
 
         if on {
-            let bar_id = registry::unique_element_id(&view.root);
+            // Two, not one: the box becomes a stateful element — that is what
+            // `overflow_*_scroll` and `track_scroll` need — and the bar is an
+            // element of its own.
+            let [box_id, bar_id] = registry::unique_element_ids(&view.root);
             let field = registry::unique_input_field(&view.root);
-            self.checkpoint();
+            if record {
+                self.checkpoint();
+            }
             let view = self.view_mut().expect("just borrowed");
             // The root has no parent to be replaced in, so it is replaced
             // itself: the wrapper becomes the view's outermost element.
             if selected.is_empty() {
-                let assembly = registry::scrollbar_assembly(view.root.clone(), &bar_id, &field);
+                let assembly =
+                    registry::scrollbar_assembly(view.root.clone(), [&box_id, &bar_id], &field);
                 view.root = assembly;
                 view.selected = vec![0];
             } else if let Some(box_node) = view.root.remove(&selected) {
-                let assembly = registry::scrollbar_assembly(box_node, &bar_id, &field);
+                let assembly = registry::scrollbar_assembly(box_node, [&box_id, &bar_id], &field);
                 view.root.insert(&selected, assembly);
                 let mut inside = selected.clone();
                 inside.push(0);
@@ -576,7 +593,9 @@ impl Workspace {
             return;
         };
 
-        self.checkpoint();
+        if record {
+            self.checkpoint();
+        }
         let view = self.view_mut().expect("just borrowed");
         if parent_path.is_empty() {
             view.root = unwrapped;

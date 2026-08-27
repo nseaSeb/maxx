@@ -653,6 +653,9 @@ palette.file_hint:
 palette.hint:
   en: "Search a command"
   fr: "Chercher une commande"
+palette.more:
+  en: "and %{count} more"
+  fr: "et %{count} de plus"
 palette.nothing:
   en: "no command by that name"
   fr: "aucune commande de ce nom"
