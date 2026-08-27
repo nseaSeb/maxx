@@ -71,10 +71,15 @@ pub const MAX_QUICK_OPEN_FILES: usize = 5_000;
 /// The same exclusions the panel uses — dotfiles, `target`, `node_modules` —
 /// because a file maxx hides in the tree is a file nobody is looking for in the
 /// palette either.
-pub fn walk_files(root: &Path) -> Vec<PathBuf> {
+pub fn walk_files(root: &Path) -> (Vec<PathBuf>, bool) {
     let mut out = Vec::new();
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(directory) = stack.pop() {
+    // Breadth first, and that decides what a capped list holds: depth first
+    // dives into whichever directory the disk happened to hand over last, so a
+    // large project could reach the ceiling without `src/` ever being read —
+    // and the sorted list would look complete. Nearest to the root first is at
+    // least the part one is most likely looking for.
+    let mut stack = std::collections::VecDeque::from([root.to_path_buf()]);
+    while let Some(directory) = stack.pop_front() {
         let Ok(entries) = std::fs::read_dir(&directory) else {
             continue;
         };
@@ -85,7 +90,7 @@ pub fn walk_files(root: &Path) -> Vec<PathBuf> {
             }
             let path = entry.path();
             if entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
-                stack.push(path);
+                stack.push_back(path);
             } else if let Ok(relative) = path.strip_prefix(root) {
                 out.push(relative.to_path_buf());
                 if out.len() >= MAX_QUICK_OPEN_FILES {
@@ -93,13 +98,13 @@ pub fn walk_files(root: &Path) -> Vec<PathBuf> {
                     // would otherwise get the list in the order the disk
                     // happened to hand it over.
                     out.sort();
-                    return out;
+                    return (out, true);
                 }
             }
         }
     }
     out.sort();
-    out
+    (out, false)
 }
 
 /// Reads the direct children of `dir`, hiding dotfiles and build output.

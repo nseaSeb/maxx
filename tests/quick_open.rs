@@ -31,7 +31,7 @@ fn the_list_holds_the_project_and_not_what_the_tree_hides() {
     std::fs::create_dir_all(root.join("target/debug")).unwrap();
     std::fs::write(root.join("target/debug/trial"), "binary").unwrap();
 
-    let files = project::walk_files(&root);
+    let (files, _) = project::walk_files(&root);
     let labels = labels(&files);
 
     assert!(labels.iter().any(|path| path == "src/ui/home.rs"), "{labels:?}");
@@ -45,7 +45,7 @@ fn the_list_holds_the_project_and_not_what_the_tree_hides() {
 fn the_whole_path_answers_the_query() {
     let root = scratch("maxx_quick_open_query");
     scaffold::create_project(&root, "trial", Template::Sidebar).unwrap();
-    let files = project::walk_files(&root);
+    let (files, _) = project::walk_files(&root);
     let labels = labels(&files);
     let of = |query: &str| -> Vec<String> {
         matching_labels(labels.iter().map(String::as_str), query)
@@ -71,9 +71,33 @@ fn a_project_of_its_own_size_is_walked_whole() {
         std::fs::write(root.join(format!("src/file_{index}.rs")), "").unwrap();
     }
 
-    let files = project::walk_files(&root);
+    let (files, _) = project::walk_files(&root);
     assert_eq!(files.len(), 50);
     // And the list is bounded, so a vendored dependency tree cannot freeze the
     // window on the one gesture that has to feel instant.
     assert!(files.len() <= project::MAX_QUICK_OPEN_FILES);
+}
+
+#[test]
+fn a_capped_list_takes_the_nearest_files_and_says_so() {
+    let root = scratch("maxx_quick_open_capped");
+    // Deeper than the ceiling allows, so the walk has to choose what it keeps.
+    let deep = root.join("vendor/a/b/c");
+    std::fs::create_dir_all(&deep).unwrap();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    for index in 0..(project::MAX_QUICK_OPEN_FILES + 10) {
+        std::fs::write(deep.join(format!("file_{index}.rs")), "").unwrap();
+    }
+    std::fs::write(root.join("src/home.rs"), "").unwrap();
+
+    let (files, capped) = project::walk_files(&root);
+    assert!(capped, "the caller has to be able to say the list stops short");
+    assert_eq!(files.len(), project::MAX_QUICK_OPEN_FILES);
+    // Breadth first: what sits near the root is what one is looking for, and a
+    // depth-first walk could fill the whole list from `vendor/a/b/c` without
+    // ever reading `src/` — while the sorted result looked complete.
+    assert!(
+        files.iter().any(|path| path == std::path::Path::new("src/home.rs")),
+        "the shallow file must be in a capped list"
+    );
 }

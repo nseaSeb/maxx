@@ -49,3 +49,31 @@ fn the_way_back_follows_the_file_and_not_its_place() {
     assert_eq!(tabs::position_of(&gone, Some(&previous)), None);
     assert_eq!(tabs::position_of(&views, None), None);
 }
+
+/// Every way of opening a file leaves a trace to come back to.
+///
+/// The gesture is only useful between the two files one is actually working
+/// between, and those are rarely reached by clicking tabs: the tree, the menu
+/// and `⌘P` all have to record where one came from. When they did not, `⌃⇥`
+/// answered "nowhere to go back to" in exactly its own use case.
+#[test]
+fn the_trace_is_left_by_every_way_in() {
+    let source = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/workspace/views.rs"),
+    )
+    .expect("src/workspace/views.rs");
+
+    // `focus_view` is the one place that writes it, so nothing else may set
+    // `self.active` — a second way in is a way in that forgets.
+    let writes: Vec<&str> = source
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("self.active = Some("))
+        .collect();
+    assert_eq!(
+        writes.len(),
+        1,
+        "only `focus_view` may bring a view forward, or the trace is lost: {writes:?}"
+    );
+    assert!(source.contains("fn focus_view(&mut self, index: usize)"));
+}

@@ -385,13 +385,50 @@ fn run(root: PathBuf, arguments: Vec<String>, sender: Sender<Message>) {
 /// `None` when `rustfmt` is missing or refuses the source: the caller then
 /// falls back to comparing bytes, which is what maxx did before.
 pub fn formatted_default(source: &str) -> Option<String> {
+    // Measured once per text, and asked for repeatedly: `outdated_modules` runs
+    // when a window is built and again when a project is opened, and the answer
+    // for a given source cannot change inside one run of maxx. Without this,
+    // opening a project after a maxx upgrade waits on one `rustfmt` per
+    // outdated module, twice, before the window is drawn.
+    static SEEN: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, Option<String>>>,
+    > = std::sync::OnceLock::new();
+    let cache = SEEN.get_or_init(Default::default);
+    if let Ok(seen) = cache.lock()
+        && let Some(known) = seen.get(source)
+    {
+        return known.clone();
+    }
+
+    let formatted = format_with_defaults(source);
+    if let Ok(mut seen) = cache.lock() {
+        seen.insert(source.to_string(), formatted.clone());
+    }
+    formatted
+}
+
+/// The `rustfmt` run itself, and the temporary files it needs.
+///
+/// Everything is cleaned up on the way out, whichever way out it is: `rustfmt`
+/// missing is the ordinary case on a machine that has never built Rust from
+/// source, and it is asked once per module per project opened — a directory
+/// left behind each time would fill the temporary folder for nothing.
+fn format_with_defaults(source: &str) -> Option<String> {
     // One directory per call: two threads sharing it — maxx checks several
     // modules, the test suite runs in one process — would read back each
     // other's file, or remove it under the other's feet.
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let count = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let directory = std::env::temp_dir().join(format!("maxx-shape-{}-{count}", std::process::id()));
-    std::fs::create_dir_all(&directory).ok()?;
+
+    let formatted = format_inside(&directory, source);
+    let _ = std::fs::remove_dir_all(&directory);
+    formatted
+}
+
+/// Lays `source` out inside `directory`, which the caller removes.
+fn format_inside(directory: &Path, source: &str) -> Option<String> {
+    std::fs::create_dir_all(directory).ok()?;
     // An empty configuration file, pointed at explicitly: without it `rustfmt`
     // walks up from the file and could find one belonging to whatever holds the
     // temporary directory.
@@ -410,9 +447,7 @@ pub fn formatted_default(source: &str) -> Option<String> {
         .status()
         .ok()?;
 
-    let formatted = status.success().then(|| std::fs::read_to_string(&file).ok()).flatten();
-    let _ = std::fs::remove_dir_all(&directory);
-    formatted
+    status.success().then(|| std::fs::read_to_string(&file).ok()).flatten()
 }
 
 /// Moves `path` to the system's trash and answers where it landed.

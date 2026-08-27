@@ -578,6 +578,9 @@ message.no_menu_bar:
 message.no_previous_view:
   en: "no file to go back to"
   fr: "aucun fichier où revenir"
+message.files_capped:
+  en: "only the first %{count} files of the project are listed"
+  fr: "seuls les %{count} premiers fichiers du projet sont listés"
 message.no_project:
   en: "no project open"
   fr: "aucun projet ouvert"
@@ -666,8 +669,11 @@ palette.hint:
   en: "Search a command"
   fr: "Chercher une commande"
 palette.more:
-  en: "and %{count} more"
-  fr: "et %{count} de plus"
+  en: "%{count} other matches"
+  fr: "%{count} autres correspondances"
+palette.no_file:
+  en: "no file by that name"
+  fr: "aucun fichier de ce nom"
 palette.nothing:
   en: "no command by that name"
   fr: "aucune commande de ce nom"

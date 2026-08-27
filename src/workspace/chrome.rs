@@ -386,6 +386,7 @@ impl Workspace {
         let matching = self.matching_lines(cx);
         let total = matching.len();
         let (offset, matching) = self.palette_window(&matching);
+        let drawn = matching.len();
         let selected = self.command_index();
 
         // Gathered rather than lazy: the closure would carry `cx`, which the
@@ -460,22 +461,7 @@ impl Workspace {
                                     .pb_2()
                                     .text_xs()
                                     .text_color(theme::text_muted())
-                                    .child(crate::tr("palette.nothing")),
-                            )
-                        })
-                        // What is drawn is a window onto the matches, so the
-                        // count is said: a list that stops without a word looks
-                        // like a list that found nothing more.
-                        .when(total > rows.len(), |this| {
-                            this.child(
-                                div()
-                                    .px_3()
-                                    .pb_1()
-                                    .text_xs()
-                                    .text_color(theme::text_muted())
-                                    .child(SharedString::from(
-                                        t!("palette.more", count = total - rows.len()).into_owned(),
-                                    )),
+                                    .child(self.palette_nothing()),
                             )
                         })
                         .child(
@@ -485,7 +471,24 @@ impl Workspace {
                                 .overflow_y_scroll()
                                 .pb_2()
                                 .children(rows),
-                        ),
+                        )
+                        // Under the list, because that is where a reader
+                        // arrives at its end: written above, it read as a
+                        // heading for the lines that follow. And it says
+                        // "others", not "more below" — the window follows the
+                        // highlight, so what is hidden may be on either side.
+                        .when(total > drawn, |this| {
+                            this.child(
+                                div()
+                                    .px_3()
+                                    .pb_2()
+                                    .text_xs()
+                                    .text_color(theme::text_muted())
+                                    .child(SharedString::from(
+                                        t!("palette.more", count = total - drawn).into_owned(),
+                                    )),
+                            )
+                        }),
                 )
                 .into_any_element(),
         )
