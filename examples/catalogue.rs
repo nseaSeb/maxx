@@ -109,15 +109,24 @@ fn main() {
     // positioned parent — `Scrollbar` is not `Styled`, so the `div` is what
     // places it.
     let handle = ScrollHandle::new();
-    let _ = div().id("scroller").relative().overflow_y_scroll().track_scroll(&handle).child(
-        div()
-            .absolute()
-            .top_0()
-            .left_0()
-            .right_0()
-            .bottom_0()
-            .child(Scrollbar::new(&handle).id("bar").axis(ScrollbarAxis::Vertical)),
-    );
+    // The bar is a *sibling* of the box that scrolls, under a `relative`
+    // wrapper: `Div::prepaint` moves every child of a scrolling element by the
+    // scroll offset, an absolutely positioned one included, so a bar written
+    // inside the box travels with the content and leaves the screen. This is
+    // the shape `gpui-component` mounts its own with.
+    let _ = div()
+        .relative()
+        .h_full()
+        .child(div().id("scroller").overflow_y_scroll().track_scroll(&handle))
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .right_0()
+                .bottom_0()
+                .child(Scrollbar::new(&handle).id("bar").axis(ScrollbarAxis::Vertical)),
+        );
     let _ = Scrollbar::new(&handle).axis(ScrollbarAxis::Horizontal);
     let _ = Scrollbar::new(&handle).axis(ScrollbarAxis::Both);
 

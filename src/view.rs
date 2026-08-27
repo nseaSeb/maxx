@@ -396,10 +396,16 @@ fn ensure_state_field(source: String, field: &str, state: &registry::StateSpec) 
         // this initializer asks for one: a slider's state does not, and a
         // parameter renamed for nothing leaves an unused-variable warning in
         // the project maxx just wrote.
-        source = source.replace(
-            "pub fn new(_window: &mut Window, _cx: &mut Context<Self>)",
-            "pub fn new(_window: &mut Window, cx: &mut Context<Self>)",
-        );
+        // Both are renamed only if this initializer asks for them: a
+        // `ScrollHandle` is a plain value, built with neither, and a parameter
+        // renamed for nothing leaves an unused-variable warning in the project
+        // maxx just wrote.
+        if state.initializer.contains("cx") {
+            source = source.replace(
+                "pub fn new(_window: &mut Window, _cx: &mut Context<Self>)",
+                "pub fn new(_window: &mut Window, cx: &mut Context<Self>)",
+            );
+        }
         if state.initializer.contains("window") {
             source = source
                 .replace("pub fn new(_window: &mut Window,", "pub fn new(window: &mut Window,");

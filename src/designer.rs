@@ -1407,7 +1407,7 @@ fn preview(
         Some("v_flex") | Some("h_flex") => {
             let base = if node.base.path() == Some("v_flex") { v_flex() } else { h_flex() };
             let vertical = node.base.path() == Some("v_flex");
-            apply(base, &node.calls)
+            apply_placement(apply(base, &node.calls), &node.calls)
                 .min_h(px(16.))
                 .children(children_with_zones(node, path, selected, vertical, root, cx))
                 .into_any_element()
@@ -1468,7 +1468,7 @@ fn preview(
         Some("div") if node.children.is_empty() => {
             apply(div(), &node.calls).h(px(20.)).into_any_element()
         }
-        Some("div") => apply(div(), &node.calls)
+        Some("div") => apply_placement(apply(div(), &node.calls), &node.calls)
             .children(children_with_zones(node, path, selected, true, root, cx))
             .into_any_element(),
         Some("Button::new") => Button::new(SharedString::from(format!("preview-{path:?}")))
@@ -1684,6 +1684,27 @@ fn call_bool(node: &Node, name: &str) -> bool {
         .and_then(|call| call.args.first())
         .map(|arg| arg.to_source() == "true")
         .unwrap_or(false)
+}
+
+/// Applies the placement calls, so a pinned overlay is drawn pinned.
+///
+/// Without them the bar maxx writes into the corner of a box shows on the
+/// canvas as an ordinary child at the end of the column — the canvas showing a
+/// layout the file does not have.
+fn apply_placement<E: Styled>(element: E, calls: &[crate::model::Call]) -> E {
+    let mut element = element;
+    for call in calls {
+        element = match call.name.as_str() {
+            "absolute" => element.absolute(),
+            "relative" => element.relative(),
+            "top_0" => element.top_0(),
+            "left_0" => element.left_0(),
+            "right_0" => element.right_0(),
+            "bottom_0" => element.bottom_0(),
+            _ => element,
+        };
+    }
+    element
 }
 
 /// Applies the style calls the preview knows how to show.

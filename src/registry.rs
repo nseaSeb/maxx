@@ -893,56 +893,87 @@ fn pixel_literal(value: &str) -> Option<String> {
     Some(format!("px({})", float_literal(value)?))
 }
 
-/// Gives `node` a visible scrollbar: the handle, the overlay, and the bar.
+/// Wraps `box_node` in what a visible scrollbar needs, and answers the wrapper.
+///
+/// The shape is not a choice: in gpui, `Div::prepaint` moves **every** child by
+/// the scroll offset — an absolutely positioned one included — so a bar drawn
+/// inside the box that scrolls travels with the content and leaves the screen.
+/// `gpui-component` mounts its own the only way that works, and this is it: a
+/// `relative` wrapper holding two children, the box that scrolls and, over it,
+/// the bar.
+///
+/// Nothing of the box moves into anything: it keeps its style, its gap, its
+/// children and its id. That is what the wrapper buys — the alternative, moving
+/// the layout onto an inner element, is what makes `overflow_y_scrollbar()`
+/// lose the container's `gap` and alignment.
 ///
 /// `field` and `bar_id` come from the caller because neither can be decided
 /// from one node: a field no other component is bound to, and an element id no
-/// sibling is using. The same reason the scroll's own id is assigned there.
-pub fn attach_scrollbar(node: &mut Node, bar_id: &str, field: &str) {
-    if node.call("track_scroll").is_some() {
-        return;
-    }
-    // The bar is drawn over the box, so the box has to be the origin it is
-    // positioned against.
-    node.set_flag("relative", true);
-    node.set_call("track_scroll", Arg::Verbatim(format!("&self.{field}")));
+/// sibling is using.
+pub fn scrollbar_assembly(mut box_node: Node, bar_id: &str, field: &str) -> Node {
+    let horizontal = box_node.call("overflow_x_scroll").is_some();
+    box_node.set_call("track_scroll", Arg::Verbatim(format!("&self.{field}")));
 
     let mut bar = Node::known("Scrollbar::new");
     if let Base::Known { args, .. } = &mut bar.base {
         *args = vec![Arg::Verbatim(format!("&self.{field}"))];
     }
     bar.set_call("id", Arg::Str(bar_id.to_string()));
-    bar.set_call("axis", Arg::Verbatim("ScrollbarAxis::Vertical".into()));
+    // The axis the box actually scrolls on: a vertical bar over a row is a bar
+    // that tracks nothing.
+    bar.set_call(
+        "axis",
+        Arg::Verbatim(
+            if horizontal { "ScrollbarAxis::Horizontal" } else { "ScrollbarAxis::Vertical" }
+                .to_string(),
+        ),
+    );
 
     // The overlay: `Scrollbar` is not `Styled`, so what positions it is the
-    // `div` around it — the shape `gpui-component` mounts its own with.
+    // `div` around it.
     let mut overlay = Node::known("div");
     for flag in ["absolute", "top_0", "left_0", "right_0", "bottom_0"] {
         overlay.set_flag(flag, true);
     }
     overlay.push_child(bar);
 
-    node.push_child(overlay);
+    let mut wrapper = Node::known("div");
+    wrapper.set_flag("relative", true);
+    // The wrapper takes the size the box was holding: it is what stands in the
+    // parent's layout now, and a box that grows with its content scrolls
+    // nothing.
+    wrapper.set_flag(if horizontal { "w_full" } else { "h_full" }, true);
+    wrapper.push_child(box_node);
+    wrapper.push_child(overlay);
+    wrapper
 }
 
-/// Takes the bar away again, leaving the box scrolling as it was.
+/// Whether `node` is a wrapper maxx wrote around a scrolling box.
 ///
-/// Only what maxx recognises as its own: the handle, and an overlay whose one
-/// child is a `Scrollbar`. A `relative` is left behind for the same reason the
-/// scroll leaves its `h_full` — maxx cannot tell its own from the developer's.
-fn detach_scrollbar(node: &mut Node) {
-    node.remove_call("track_scroll");
-    let overlay = node.children.iter().position(|child| {
-        child.base.path() == Some("div")
-            && child.call("absolute").is_some()
-            && child.children.iter().any(|inner| inner.base.path() == Some("Scrollbar::new"))
-    });
-    if let Some(index) = overlay {
-        // Through the model, so the slot that placed the child among the calls
-        // goes with it: left behind, the next child written would take its
-        // place in the chain.
-        node.remove(&[index]);
+/// Recognised by shape, and strictly: a `div` that is `relative`, holding
+/// exactly the box and an overlay whose only child is a `Scrollbar`. Anything
+/// the developer added to either goes through this test — and fails it, which
+/// is the point: what maxx did not write, maxx does not take away.
+pub fn is_scrollbar_wrapper(node: &Node) -> bool {
+    if node.base.path() != Some("div") || node.call("relative").is_none() {
+        return false;
     }
+    let [_, overlay] = node.children.as_slice() else {
+        return false;
+    };
+    overlay.base.path() == Some("div")
+        && overlay.call("absolute").is_some()
+        && matches!(overlay.children.as_slice(), [bar] if bar.base.path() == Some("Scrollbar::new"))
+}
+
+/// Takes the wrapper apart and answers the box it held, bar removed.
+pub fn unwrap_scrollbar(wrapper: &Node) -> Option<Node> {
+    if !is_scrollbar_wrapper(wrapper) {
+        return None;
+    }
+    let mut box_node = wrapper.children.first()?.clone();
+    box_node.remove_call("track_scroll");
+    Some(box_node)
 }
 
 /// The text of a tooltip closure, when it is one maxx wrote.
@@ -952,10 +983,13 @@ fn detach_scrollbar(node: &mut Node) {
 /// half-read.
 pub fn tooltip_text(source: &str) -> Option<String> {
     let (_, rest) = source.split_once("Tooltip::new(\"")?;
-    let (text, _) = rest.split_once("\")")?;
-    // An escape in there means the literal cannot be read back by splitting on
-    // a quote: the source is shown instead of a text cut in the wrong place.
-    (!text.contains('\\')).then(|| text.to_string())
+    // Read as a literal and not split on the first quote: a tooltip saying
+    // `He said "hi"` carries an escaped one, and cutting there gives half a
+    // text — which the inspector would then write back, truncated.
+    let (text, after) = crate::model::read_literal(rest)?;
+    // And it has to be the closure maxx writes, not something of the
+    // developer's that merely holds a `Tooltip::new`.
+    after.starts_with(").build(window, cx)").then_some(text)
 }
 
 /// A whole number, as a `usize` literal — or nothing, for anything else.
@@ -1660,14 +1694,12 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
                 args.push(arg);
             }
         }
-        // Written by `attach_scrollbar`, which the inspector calls with the
-        // names only the whole tree can give: an element id no sibling uses,
-        // and a field no other component is bound to.
-        Target::Scrollbar => {
-            if value != "true" {
-                detach_scrollbar(node);
-            }
-        }
+        // Nothing here: this one is not a call on a node but a shape around it,
+        // so it is written by `Workspace::toggle_scrollbar`, which has the tree
+        // — the parent to wrap into, an element id no sibling uses, a field no
+        // other component is bound to. `read` below answers from the node all
+        // the same, because the handle it carries is the honest evidence.
+        Target::Scrollbar => {}
         Target::Tooltip => {
             if value.trim().is_empty() {
                 node.remove_call("tooltip");

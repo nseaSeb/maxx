@@ -350,10 +350,21 @@ impl Workspace {
             return;
         };
         let selected = view.selected.clone();
+        // A tooltip lives on a stateful element, so it needs an id — and an id
+        // has to be unique among siblings, which no node can know. Read here,
+        // where the tree is, exactly like the scroll's.
+        let tooltip_id = matches!(prop.target, crate::registry::Target::Tooltip)
+            .then(|| crate::registry::unique_element_id(&view.root));
         if let Some(node) = view.root.at_mut(&selected) {
             let current = crate::registry::read(node, prop);
             if current.as_deref() == Some(value) {
                 return;
+            }
+            if let Some(id) = tooltip_id
+                && !value.trim().is_empty()
+                && node.call("id").is_none()
+            {
+                node.set_call("id", crate::model::Arg::Str(id));
             }
             crate::registry::write(node, prop, value);
         }
@@ -479,13 +490,13 @@ impl Workspace {
         // here, before the catalogue writes the rest.
         let scroll_id = matches!(prop.target, registry::Target::Scrollable(_))
             .then(|| registry::unique_element_id(&view.root));
-        // The bar needs two names no node can decide on its own: an element id
-        // no sibling uses, and a field no other component is bound to. Both are
-        // read here, where the whole tree is.
-        let bar =
-            (matches!(prop.target, registry::Target::Scrollbar) && value == "true").then(|| {
-                (registry::unique_element_id(&view.root), registry::unique_input_field(&view.root))
-            });
+        // The bar is not a call on the node but a shape around it, so it is not
+        // the catalogue's to write: it needs the parent, and two names only the
+        // whole tree can give.
+        if matches!(prop.target, registry::Target::Scrollbar) {
+            self.toggle_scrollbar(value == "true", cx);
+            return;
+        }
         if view.root.at(&selected).is_some() {
             self.checkpoint();
             let view = self.view_mut().expect("just borrowed");
@@ -496,12 +507,81 @@ impl Workspace {
                 {
                     node.set_call("id", crate::model::Arg::Str(id));
                 }
-                if let Some((bar_id, field)) = bar {
-                    registry::attach_scrollbar(node, &bar_id, &field);
-                }
                 registry::write(node, prop, value);
             }
         }
+        cx.notify();
+    }
+
+    /// Puts a visible scrollbar around the selected box, or takes it away.
+    ///
+    /// The one property that changes the shape of the tree rather than a call:
+    /// a bar has to be a *sibling* of the box under a `relative` parent, since
+    /// gpui moves every child of a scrolling element — an absolute one included
+    /// — by the scroll offset. So maxx wraps, and unwraps.
+    ///
+    /// The selection follows the box, not the wrapper: it is the box the
+    /// developer clicked, and its properties are the ones the inspector was
+    /// showing.
+    fn toggle_scrollbar(&mut self, on: bool, cx: &mut Context<Self>) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        let selected = view.selected.clone();
+        let Some(node) = view.root.at(&selected) else {
+            return;
+        };
+        let already = node.call("track_scroll").is_some();
+        if on == already {
+            return;
+        }
+
+        if on {
+            let bar_id = registry::unique_element_id(&view.root);
+            let field = registry::unique_input_field(&view.root);
+            self.checkpoint();
+            let view = self.view_mut().expect("just borrowed");
+            // The root has no parent to be replaced in, so it is replaced
+            // itself: the wrapper becomes the view's outermost element.
+            if selected.is_empty() {
+                let assembly = registry::scrollbar_assembly(view.root.clone(), &bar_id, &field);
+                view.root = assembly;
+                view.selected = vec![0];
+            } else if let Some(box_node) = view.root.remove(&selected) {
+                let assembly = registry::scrollbar_assembly(box_node, &bar_id, &field);
+                view.root.insert(&selected, assembly);
+                let mut inside = selected.clone();
+                inside.push(0);
+                view.selected = inside;
+            }
+            self.revision += 1;
+            cx.notify();
+            return;
+        }
+
+        // Off: the box is inside the wrapper, so what has to go is one level
+        // up — and only if it is a wrapper maxx wrote. A `track_scroll` the
+        // developer put there by hand is theirs, and stays.
+        let Some((_, parent_path)) = selected.split_last() else {
+            return;
+        };
+        let parent_path = parent_path.to_vec();
+        let Some(unwrapped) = view.root.at(&parent_path).and_then(registry::unwrap_scrollbar)
+        else {
+            return;
+        };
+
+        self.checkpoint();
+        let view = self.view_mut().expect("just borrowed");
+        if parent_path.is_empty() {
+            view.root = unwrapped;
+            view.selected = Vec::new();
+        } else {
+            view.root.remove(&parent_path);
+            view.root.insert(&parent_path, unwrapped);
+            view.selected = parent_path;
+        }
+        self.revision += 1;
         cx.notify();
     }
 
