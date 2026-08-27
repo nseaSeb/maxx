@@ -197,3 +197,160 @@ fn the_file_keeps_its_sections_in_an_order_toml_accepts() {
     let read: ProjectFile = toml::from_str(&written).expect("maxx must read its own file");
     assert_eq!(read, file);
 }
+
+/// A `main.rs` that names its view in full instead of importing it.
+fn qualify_entry(root: &std::path::Path) {
+    let main_path = root.join("src/main.rs");
+    let source = std::fs::read_to_string(&main_path)
+        .unwrap()
+        .replace("use crate::ui::home::Home;\n", "")
+        .replace("Home::new(window, cx)", "crate::ui::home::Home::new(window, cx)");
+    std::fs::write(&main_path, source).unwrap();
+}
+
+#[test]
+fn a_view_named_in_full_is_replaced_whole() {
+    let root = scratch("maxx_project_entry_qualified");
+    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_view(&root, "second").unwrap();
+    qualify_entry(&root);
+
+    scaffold::set_entry_view(&root, "second").expect("the entry must move");
+
+    let main = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    // Replacing only the last segment would leave the old module holding the
+    // new type, which does not compile.
+    assert!(!main.contains("crate::ui::home::Second"), "{main}");
+    assert!(main.contains("Second::new(window, cx)"), "{main}");
+    // And the import has to arrive, since the call no longer carries the path.
+    assert_eq!(
+        main.matches("use crate::ui::second::Second;").count(),
+        1,
+        "the import is missing or written twice:\n{main}"
+    );
+}
+
+#[test]
+fn a_view_already_imported_is_not_imported_twice() {
+    let root = scratch("maxx_project_entry_twice");
+    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_view(&root, "second").unwrap();
+
+    // A `main.rs` naming several views, which is the case the doc anticipates.
+    let main_path = root.join("src/main.rs");
+    let source = std::fs::read_to_string(&main_path).unwrap().replace(
+        "use crate::ui::home::Home;",
+        "use crate::ui::home::Home;\nuse crate::ui::second::Second;",
+    );
+    std::fs::write(&main_path, source).unwrap();
+
+    scaffold::set_entry_view(&root, "second").expect("the entry must move");
+
+    let main = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    assert_eq!(
+        main.matches("use crate::ui::second::Second;").count(),
+        1,
+        "a second import is E0252:\n{main}"
+    );
+    assert!(!main.contains("use crate::ui::home::Home;"), "{main}");
+    assert!(main.contains("Second::new(window, cx)"), "{main}");
+}
+
+#[test]
+fn setting_the_same_view_twice_changes_nothing() {
+    let root = scratch("maxx_project_entry_idempotent");
+    scaffold::create_project(&root, "trial").unwrap();
+
+    scaffold::set_entry_view(&root, "home").unwrap();
+    let once = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    scaffold::set_entry_view(&root, "home").unwrap();
+    let twice = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+
+    assert_eq!(once, twice);
+    assert!(twice.contains("use crate::ui::home::Home;"), "{twice}");
+}
+
+#[test]
+fn the_entry_is_the_view_handed_to_root() {
+    let root = scratch("maxx_project_entry_root");
+    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_view(&root, "second").unwrap();
+
+    // A `main.rs` that builds something else before its root view: the first
+    // `::new(window, cx)` of the file is not the window's view.
+    let main_path = root.join("src/main.rs");
+    let source = std::fs::read_to_string(&main_path).unwrap().replace(
+        "                let view = cx.new(|cx| Home::new(window, cx));",
+        "                let toolbar = cx.new(|cx| Toolbar::new(window, cx));\n\
+                 let _ = &toolbar;\n\
+                 let view = cx.new(|cx| Home::new(window, cx));",
+    );
+    std::fs::write(&main_path, source).unwrap();
+
+    scaffold::set_entry_view(&root, "second").expect("the entry must move");
+
+    let main = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    assert!(main.contains("Toolbar::new(window, cx)"), "the toolbar was rewritten:\n{main}");
+    assert!(main.contains("let view = cx.new(|cx| Second::new(window, cx));"), "{main}");
+}
+
+#[test]
+fn a_view_type_is_the_one_that_renders() {
+    let root = scratch("maxx_project_entry_helper");
+    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_view(&root, "second").unwrap();
+
+    // A helper declared above the view, as a file maxx did not write may well
+    // do: importing and building it would not compile.
+    let path = root.join("src/ui/second.rs");
+    let source = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("pub struct Second {}", "pub struct Row {}\n\npub struct Second {}");
+    std::fs::write(&path, source).unwrap();
+
+    scaffold::set_entry_view(&root, "second").unwrap();
+
+    let main = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    assert!(main.contains("use crate::ui::second::Second;"), "{main}");
+    assert!(!main.contains("Row"), "{main}");
+}
+
+#[test]
+fn a_file_that_does_not_parse_is_never_written_over() {
+    let root = scratch("maxx_project_broken_file");
+    scaffold::create_project(&root, "trial").unwrap();
+    projectfile::record(&root, "system", 1, "body").unwrap();
+
+    // One missing bracket, hand-written: rewriting from an empty file would
+    // erase every module record the project holds.
+    let broken = format!(
+        "{}\n[run]\nfeatures = [\"demo\"\n",
+        std::fs::read_to_string(projectfile::path(&root)).unwrap()
+    );
+    std::fs::write(projectfile::path(&root), &broken).unwrap();
+
+    let error = projectfile::set_entry(&root, "home").expect_err("a broken file is an error");
+    assert!(error.to_string().contains("maxx.toml"), "{error}");
+    projectfile::record(&root, "theme", 1, "body").expect_err("and so is recording a module");
+    assert_eq!(std::fs::read_to_string(projectfile::path(&root)).unwrap(), broken);
+}
+
+#[test]
+fn a_main_with_two_views_and_no_root_is_left_alone() {
+    let root = scratch("maxx_project_entry_ambiguous");
+    scaffold::create_project(&root, "trial").unwrap();
+    scaffold::create_view(&root, "second").unwrap();
+
+    // Two candidates and nothing naming the one the window opens on: rewriting
+    // either would be a guess, and `maxx.toml` would record it as a fact.
+    std::fs::write(
+        root.join("src/main.rs"),
+        "fn main() {\n    \
+         let first = Home::new(window, cx);\n    \
+         let second = Other::new(window, cx);\n}\n",
+    )
+    .unwrap();
+
+    scaffold::set_entry_view(&root, "second").expect_err("this cannot be guessed");
+    assert_eq!(projectfile::entry(&root).as_deref(), Some("home"), "the record must not move");
+}

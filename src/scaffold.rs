@@ -143,16 +143,16 @@ pub fn create_view(root: &Path, module: &str) -> io::Result<()> {
 /// be worse than no record at all.
 ///
 /// The construction site is the truth here, not the `use` line: `main.rs` may
-/// import several views, and only one of them is handed to `Root`. Whatever
-/// type is built with `::new(window, cx)` is the entry, and that is the one
-/// replaced.
+/// import several views, and only one of them is handed to `Root`. What is
+/// hard about it is that maxx has to be sure it has found the right one, and
+/// [`entry_site`] refuses rather than guesses.
 pub fn set_entry_view(root: &Path, module: &str) -> io::Result<()> {
     let file = root.join(format!("src/ui/{module}.rs"));
     let view_source = std::fs::read_to_string(&file)?;
     let Some(type_name) = declared_type(&view_source) else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("{}: no `pub struct` to open the window on", file.display()),
+            format!("{}: no view type to open the window on", file.display()),
         ));
     };
 
@@ -160,61 +160,137 @@ pub fn set_entry_view(root: &Path, module: &str) -> io::Result<()> {
     let source = std::fs::read_to_string(&main_path)?;
     let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
 
-    let Some((built, current)) = lines
-        .iter()
-        .enumerate()
-        .find_map(|(index, line)| entry_type(line).map(|found| (index, found)))
-    else {
+    let Some((built, current)) = entry_site(&lines) else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "src/main.rs: no view built with `::new(window, cx)` —              change the view the window opens on by hand",
+            "src/main.rs: maxx cannot tell which view the window opens on — \
+             change it by hand",
         ));
     };
 
-    // The import first: a `use` line for a type the file no longer builds is
-    // a warning, and one for a type it does build is what makes it compile.
-    let import = format!("use crate::ui::{module}::{type_name};");
-    match lines.iter().position(|line| is_import_of(line, &current)) {
-        Some(index) => lines[index] = import,
-        // A project whose `main.rs` names the view in full, or imports it
-        // through a `use crate::ui::*`: the import goes in rather than being
-        // guessed at.
-        None => lines.insert(header_end(&lines), import),
-    }
-
+    // The call first, and the imports after: inserting a line above `built`
+    // would move the very line about to be rewritten. `current` is the path as
+    // `main.rs` writes it, which may be qualified in full — replacing only its
+    // last segment would leave `crate::ui::home::Other::new(…)`, an old module
+    // holding a new type.
     lines[built] = lines[built].replace(&format!("{current}::new("), &format!("{type_name}::new("));
+
+    let import = format!("use crate::ui::{module}::{type_name};");
+    let current_type = last_segment(&current);
+    let existing = lines.iter().position(|line| is_import_of(line, current_type));
+    let already = lines.iter().any(|line| line.trim() == import);
+    match (existing, already) {
+        // The view was already the entry: nothing to add, and nothing to take
+        // away.
+        (Some(index), true) if lines[index].trim() == import => {}
+        // The new view was imported already, by a `main.rs` that names several:
+        // the old import goes, and writing it a second time would be `E0252`.
+        (Some(index), true) => {
+            lines.remove(index);
+        }
+        (Some(index), false) => lines[index] = import,
+        (None, true) => {}
+        // A `main.rs` that names the view in full, or imports it through a
+        // `use crate::ui::*`: the import goes in rather than being guessed at.
+        (None, false) => lines.insert(header_end(&lines), import),
+    }
 
     std::fs::write(&main_path, joined(&lines, &source))?;
     crate::projectfile::set_entry(root, module)
 }
 
-/// The type a view file declares, i.e. its first `pub struct`.
+/// The type a view file declares.
 ///
-/// Read rather than derived from the module name: a view adopted from a
-/// project maxx did not write is called whatever its author called it, and
-/// `to_type_name` would answer a type that does not exist.
+/// The one that implements `Render`, and its first `pub struct` failing that:
+/// read rather than derived from the module name, because a view adopted from
+/// a project maxx did not write is called whatever its author called it, and
+/// `to_type_name` would answer a type that does not exist. A file may well
+/// declare a helper struct above the view — `impl Render for` is what tells
+/// them apart.
 fn declared_type(source: &str) -> Option<String> {
-    source.lines().find_map(|line| {
-        let rest = line.trim_start().strip_prefix("pub struct ")?;
-        let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
-        (!name.is_empty()).then_some(name)
+    let rendered = source
+        .lines()
+        .find_map(|line| leading_identifier(line.trim_start().strip_prefix("impl Render for ")?));
+    rendered.or_else(|| {
+        source
+            .lines()
+            .find_map(|line| leading_identifier(line.trim_start().strip_prefix("pub struct ")?))
     })
 }
 
+/// The line that builds the view the window opens on, and the type it names.
+///
+/// One candidate is the answer. Several — a `main.rs` that builds a toolbar
+/// before its root view — and only the entity handed to `Root::new` is the
+/// entry: rewriting the first `::new(window, cx)` in the file would change a
+/// line nobody opens a window with, and `maxx.toml` would then claim an entry
+/// the code does not open. When that cannot be read either, nothing is
+/// touched.
+fn entry_site(lines: &[String]) -> Option<(usize, String)> {
+    let mut candidates = lines
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| entry_type(line).map(|found| (index, found)));
+
+    let first = candidates.next()?;
+    let rest: Vec<(usize, String)> = candidates.collect();
+    if rest.is_empty() {
+        return Some(first);
+    }
+
+    let root_view = lines.iter().find_map(|line| root_argument(line))?;
+    std::iter::once(first).chain(rest).find(|(index, _)| binds(&lines[*index], &root_view))
+}
+
+/// The name `Root::new` is handed as its view.
+fn root_argument(line: &str) -> Option<String> {
+    let (_, after) = line.split_once("Root::new(")?;
+    let argument = after.split([',', ')']).next()?.trim();
+    leading_identifier(argument)
+}
+
+/// Whether `line` is the `let` that binds `name`.
+fn binds(line: &str, name: &str) -> bool {
+    let Some(rest) = line.trim_start().strip_prefix("let ") else {
+        return false;
+    };
+    let rest = rest.trim_start().strip_prefix("mut ").unwrap_or(rest);
+    leading_identifier(rest).is_some_and(|bound| bound == name)
+}
+
 /// The type `line` builds the window's view from, if it does.
+///
+/// The whole path as written, `crate::ui::home::Home` as readily as `Home`:
+/// what is replaced has to be replaced whole.
 fn entry_type(line: &str) -> Option<String> {
     let (before, _) = line.split_once("::new(window, cx)")?;
     let name: String = before
         .chars()
         .rev()
-        .take_while(|c| c.is_alphanumeric() || *c == '_')
+        .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == ':')
         .collect::<Vec<_>>()
         .into_iter()
         .rev()
         .collect();
+    let name = name.trim_start_matches(':').to_string();
     // `Self::new(window, cx)` inside an `impl` is not a view being opened, and
     // a bare `::new(` belongs to something else entirely.
-    (!name.is_empty() && name != "Self").then_some(name)
+    (!name.is_empty() && last_segment(&name) != "Self").then_some(name)
+}
+
+/// The last segment of a path, which is the type it names.
+fn last_segment(path: &str) -> &str {
+    path.rsplit("::").next().unwrap_or(path)
+}
+
+/// The identifier `text` starts with, if it starts with one.
+///
+/// A prefix, where [`identifier`] validates a whole name: what is read here is
+/// the head of a line — `Home {`, `home::Home;` — and what follows it is not
+/// the caller's business.
+fn leading_identifier(text: &str) -> Option<String> {
+    let name: String = text.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+    (!name.is_empty()).then_some(name)
 }
 
 /// Whether `line` is the `use` that brings `type_name` in from `crate::ui`.

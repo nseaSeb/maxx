@@ -412,6 +412,42 @@ impl Workspace {
 
     /// Puts maxx's markers around the expression a hand-written `render`
     /// returns, then opens the view.
+    pub fn adopt_view(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = self
+            .selected
+            .clone()
+            .filter(|path| path.extension().is_some_and(|extension| extension == "rs"))
+        else {
+            self.message = Some(crate::tr("message.select_rs_file"));
+            cx.notify();
+            return;
+        };
+
+        let source = match std::fs::read_to_string(&path) {
+            Ok(source) => source,
+            Err(error) => {
+                self.message = Some(SharedString::from(error.to_string()));
+                cx.notify();
+                return;
+            }
+        };
+
+        match crate::parser::adopt(&source) {
+            Ok(adopted) => match std::fs::write(&path, &adopted) {
+                Ok(()) => {
+                    self.message = None;
+                    self.select_file(path, cx);
+                    if self.message.is_none() {
+                        self.message = Some(crate::tr("message.view_adopted"));
+                    }
+                }
+                Err(error) => self.message = Some(SharedString::from(error.to_string())),
+            },
+            Err(error) => self.message = Some(SharedString::from(error.to_string())),
+        }
+        cx.notify();
+    }
+
     /// Makes the selected view the one the project's window opens on.
     ///
     /// The explorer's selection, not the active tab: this is a property of the
@@ -452,9 +488,8 @@ impl Workspace {
 
         match crate::scaffold::set_entry_view(&root, &module) {
             Ok(()) => {
-                self.message = Some(SharedString::from(
-                    t!("message.entry_set", name = module).into_owned(),
-                ));
+                self.message =
+                    Some(SharedString::from(t!("message.entry_set", name = module).into_owned()));
                 // The reader may be showing the very `main.rs` that just
                 // changed under it.
                 let main = root.join("src/main.rs");
@@ -462,42 +497,6 @@ impl Workspace {
                 // The explorer marks the entry view, and it has just moved.
                 self.refresh_entries();
             }
-            Err(error) => self.message = Some(SharedString::from(error.to_string())),
-        }
-        cx.notify();
-    }
-
-    pub fn adopt_view(&mut self, cx: &mut Context<Self>) {
-        let Some(path) = self
-            .selected
-            .clone()
-            .filter(|path| path.extension().is_some_and(|extension| extension == "rs"))
-        else {
-            self.message = Some(crate::tr("message.select_rs_file"));
-            cx.notify();
-            return;
-        };
-
-        let source = match std::fs::read_to_string(&path) {
-            Ok(source) => source,
-            Err(error) => {
-                self.message = Some(SharedString::from(error.to_string()));
-                cx.notify();
-                return;
-            }
-        };
-
-        match crate::parser::adopt(&source) {
-            Ok(adopted) => match std::fs::write(&path, &adopted) {
-                Ok(()) => {
-                    self.message = None;
-                    self.select_file(path, cx);
-                    if self.message.is_none() {
-                        self.message = Some(crate::tr("message.view_adopted"));
-                    }
-                }
-                Err(error) => self.message = Some(SharedString::from(error.to_string())),
-            },
             Err(error) => self.message = Some(SharedString::from(error.to_string())),
         }
         cx.notify();
