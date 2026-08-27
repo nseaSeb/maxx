@@ -510,6 +510,11 @@ impl Workspace {
                 registry::write(node, prop, value);
             }
         }
+        // A bar over a box that no longer scrolls is a bar watching something
+        // that never moves: turning the scroll off takes it down with it.
+        if matches!(prop.target, registry::Target::Scrollable(_)) && value != "true" {
+            self.toggle_scrollbar(false, cx);
+        }
         cx.notify();
     }
 

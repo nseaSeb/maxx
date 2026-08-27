@@ -181,7 +181,29 @@ impl Node {
     /// Removes the first call with this name, if any.
     pub fn remove_call(&mut self, name: &str) {
         if let Some(index) = self.calls.iter().position(|call| call.name == name) {
-            self.calls.remove(index);
+            self.take_call(index);
+        }
+    }
+
+    /// Removes the call at `index`, keeping whatever was written above it.
+    ///
+    /// A comment belongs to the developer, and the call it stands above belongs
+    /// to maxx: flipping a switch in the inspector may take the call away, but
+    /// taking the sentence with it is erasing something nobody asked to erase.
+    /// It moves down onto the next call, or to the end of the chain when there
+    /// is none.
+    fn take_call(&mut self, index: usize) {
+        let call = self.calls.remove(index);
+        if call.comments.is_empty() {
+            return;
+        }
+        match self.calls.get_mut(index) {
+            Some(next) => {
+                let mut moved = call.comments;
+                moved.extend(std::mem::take(&mut next.comments));
+                next.comments = moved;
+            }
+            None => self.trailing.extend(call.comments),
         }
     }
 
@@ -190,10 +212,16 @@ impl Node {
         let existing = self.calls.iter().position(|call| call.name == name);
         match (existing, on) {
             (None, true) => self.calls.push(Call::bare(name)),
-            (Some(index), false) => {
-                self.calls.remove(index);
-            }
+            (Some(index), false) => self.take_call(index),
             _ => {}
+        }
+    }
+
+    /// Runs `f` on this node and every node under it, to change them.
+    pub fn walk_mut(&mut self, f: &mut impl FnMut(&mut Node)) {
+        f(self);
+        for child in &mut self.children {
+            child.walk_mut(f);
         }
     }
 
