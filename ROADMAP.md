@@ -40,12 +40,17 @@ Déjà aligné :
 | Thème | clair / sombre / système | fait, des rôles et non des couleurs |
 | Format à l'enregistrement | par défaut | fait, `rustfmt` sur le fichier |
 | Fichier lu, pas édité | — | le lecteur de code, `⌘E` pour retourner la vue |
+| Ouverture rapide | `⌘P` | `⌘P`, la même boîte que la palette, sur les fichiers |
 
 Reste à aligner, par ordre de manque ressenti :
 
-- **`⌘P`, l'ouverture rapide de fichier.** C'est le geste le plus utilisé de
-  Zed, et maxx n'a que l'arborescence. La palette existe déjà et sait chercher
-  par mots dans le désordre : c'est la même boîte, sur une autre liste.
+- ~~**`⌘P`, l'ouverture rapide de fichier.**~~ — fait, et c'était bien la même
+  boîte : `⌘K` la remplit de la barre de menus aplatie, `⌘P` des fichiers du
+  projet. Le clavier, la surbrillance, le clic, la sortie sont écrits une fois
+  et servent les deux — c'est ce qui les fait répondre pareil. La recherche
+  porte sur le **chemin entier**, donc `ui home` trouve `src/ui/home.rs`, et la
+  liste se construit à l'ouverture : bornée, elle ne peut pas figer la fenêtre
+  sur le geste qui doit être instantané.
 - **Le glisser-déposer d'une entrée entre deux menus** — fait —, et le
   glisser-déposer dans l'arbre de structure — fait aussi. Il reste à décider
   si le canvas doit accepter un dépôt venant de l'arbre, et l'inverse.

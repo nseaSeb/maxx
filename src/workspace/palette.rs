@@ -1,4 +1,9 @@
-//! The command palette: opening it, moving through it, running a line.
+//! The palette: opening it, moving through it, running a line.
+//!
+//! Two lists, one box. `⌘K` fills it with the menu bar, flattened; `⌘P` fills
+//! it with the project's files. Everything else — the keymap, the highlight,
+//! the click, the way out — is written once and serves both, which is what
+//! keeps them answering the same way.
 
 use gpui::Focusable as _;
 
@@ -11,7 +16,42 @@ impl Workspace {
             self.close_palette(cx);
             return;
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder(crate::tr("palette.hint")));
+        self.open_palette(crate::tr("palette.hint"), window, cx);
+        self.palette_mode = PaletteMode::Commands;
+        self.commands = crate::palette::commands(cx);
+    }
+
+    /// Opens the quick-open list, `⌘P`: the project's files, by name.
+    ///
+    /// The most used gesture of Zed, and the one maxx had nothing for: the tree
+    /// is fine for looking around and hopeless for going somewhere known.
+    pub fn quick_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.command_input.is_some() {
+            self.close_palette(cx);
+            return;
+        }
+        let Some(project) = self.project.as_ref() else {
+            self.message = Some(crate::tr("message.no_project"));
+            cx.notify();
+            return;
+        };
+        // Walked at opening rather than held and refreshed: a list built on
+        // every keystroke would walk the disk for nothing, and one kept between
+        // openings would offer a file that has since been deleted.
+        let files = crate::project::walk_files(&project.root);
+        self.open_palette(crate::tr("palette.file_hint"), window, cx);
+        self.palette_mode = PaletteMode::Files;
+        self.palette_files = files;
+    }
+
+    /// The half the two share: the box, its listeners, and the focus.
+    fn open_palette(
+        &mut self,
+        placeholder: SharedString,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
         // The box is rebuilt on every opening rather than emptied: a palette
         // that reopens on the last query would answer a question nobody asked
         // twice.
@@ -26,7 +66,8 @@ impl Workspace {
         })
         .detach();
         window.focus(&input.read(cx).focus_handle(cx));
-        self.commands = crate::palette::commands(cx);
+        self.commands = Vec::new();
+        self.palette_files = Vec::new();
         self.command_input = Some(input);
         self.command_index = 0;
         cx.notify();
@@ -36,6 +77,7 @@ impl Workspace {
     pub fn close_palette(&mut self, cx: &mut Context<Self>) {
         if self.command_input.take().is_some() {
             self.commands = Vec::new();
+            self.palette_files = Vec::new();
             cx.notify();
         }
     }
@@ -46,7 +88,7 @@ impl Workspace {
     /// line to the first loses the reader's place for the sake of a gesture
     /// nobody was making.
     pub fn move_palette(&mut self, down: bool, cx: &mut Context<Self>) {
-        let count = self.matching_commands(cx).len();
+        let count = self.matching_lines(cx).len();
         if count == 0 {
             return;
         }
@@ -64,11 +106,28 @@ impl Workspace {
     /// the window's own update, and several of maxx's commands open a window or
     /// borrow the workspace again — the same rule `defer_active` exists for.
     pub fn run_palette(&mut self, cx: &mut Context<Self>) {
-        let matching = self.matching_commands(cx);
-        let Some(position) = matching.get(self.command_index) else {
+        let matching = self.matching_lines(cx);
+        let Some(position) = matching.get(self.command_index).copied() else {
             return;
         };
-        let action = self.commands[*position].action.boxed_clone();
+
+        // A file is opened here and now: there is no action to dispatch, and
+        // nothing to defer — `select_file` is the workspace's own.
+        if self.palette_mode == PaletteMode::Files
+            && let Some(relative) = self.palette_files.get(position).cloned()
+        {
+            let root = self.project.as_ref().map(|project| project.root.clone());
+            self.close_palette(cx);
+            if let Some(root) = root {
+                self.select_file(root.join(relative), cx);
+            }
+            return;
+        }
+
+        let Some(command) = self.commands.get(position) else {
+            return;
+        };
+        let action = command.action.boxed_clone();
         self.close_palette(cx);
         cx.defer(move |cx: &mut App| {
             if let Some(handle) = cx.active_window() {
@@ -77,14 +136,32 @@ impl Workspace {
         });
     }
 
-    /// Where in [`Self::commands`] the lines the query keeps are.
-    pub(crate) fn matching_commands(&self, cx: &App) -> Vec<usize> {
+    /// Where in the open list the lines the query keeps are.
+    pub(crate) fn matching_lines(&self, cx: &App) -> Vec<usize> {
         let query = self
             .command_input
             .as_ref()
             .map(|input| input.read(cx).value().to_string())
             .unwrap_or_default();
-        crate::palette::matching(&self.commands, &query)
+        if self.palette_mode == PaletteMode::Commands {
+            return crate::palette::matching(&self.commands, &query);
+        }
+        // The whole relative path is searched, not just the name: `ui home`
+        // finds `src/ui/home.rs`, which is the question one actually has.
+        let labels: Vec<String> =
+            self.palette_files.iter().map(|path| path.to_string_lossy().into_owned()).collect();
+        crate::palette::matching_labels(labels.iter().map(String::as_str), &query)
+    }
+
+    /// The file at `position` of the quick-open list, when that is what is
+    /// open.
+    pub(crate) fn palette_file(&self, position: usize) -> Option<SharedString> {
+        if self.palette_mode != PaletteMode::Files {
+            return None;
+        }
+        self.palette_files
+            .get(position)
+            .map(|path| SharedString::from(path.to_string_lossy().into_owned()))
     }
 
     /// The command at `position` of the list the palette was opened on.

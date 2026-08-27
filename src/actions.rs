@@ -52,6 +52,7 @@ actions!(
         SelectAll,
         ToggleTheme,
         TogglePalette,
+        QuickOpen,
         PaletteUp,
         PaletteDown,
         PaletteClose,
@@ -174,6 +175,9 @@ pub fn register_handlers(cx: &mut App) {
     });
     cx.on_action(|_: &TogglePalette, cx: &mut App| {
         with_active_workspace(cx, |workspace, window, cx| workspace.toggle_palette(window, cx));
+    });
+    cx.on_action(|_: &QuickOpen, cx: &mut App| {
+        with_active_workspace(cx, |workspace, window, cx| workspace.quick_open(window, cx));
     });
     cx.on_action(|_: &PaletteUp, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.move_palette(false, cx));
@@ -343,6 +347,7 @@ pub fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-ctrl-up", MoveMenuUp, None),
         KeyBinding::new("cmd-ctrl-down", MoveMenuDown, None),
         KeyBinding::new("cmd-k", TogglePalette, None),
+        KeyBinding::new("cmd-p", QuickOpen, None),
         // These three hold in the palette only: `escape`, `up` and `down` taken
         // globally would be taken away from the rest of the interface.
         KeyBinding::new("escape", PaletteClose, Some("Palette")),

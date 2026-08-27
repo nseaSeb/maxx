@@ -419,6 +419,9 @@ menu.project_panel:
 menu.quit:
   en: "Quit maxx"
   fr: "Quitter maxx"
+menu.quick_open:
+  en: "Open a file…"
+  fr: "Ouvrir un fichier…"
 menu.redo:
   en: "Redo"
   fr: "Rétablir"
@@ -644,6 +647,9 @@ message.view_unsaved_close:
 message.view_unsaved_close_project:
   en: "view not saved — ⌘S before closing the project"
   fr: "vue non enregistrée — ⌘S avant de fermer le projet"
+palette.file_hint:
+  en: "Open a file by name"
+  fr: "Ouvrir un fichier par son nom"
 palette.hint:
   en: "Search a command"
   fr: "Chercher une commande"

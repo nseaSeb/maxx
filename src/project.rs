@@ -59,6 +59,45 @@ pub struct Entry {
     pub depth: usize,
 }
 
+/// Beyond this, the quick-open list stops growing.
+///
+/// Not a limit anyone reaches by hand: it is the guard against a project that
+/// holds a vendored dependency tree, where walking everything would freeze the
+/// window on `⌘P` — the one gesture that has to feel instant.
+pub const MAX_QUICK_OPEN_FILES: usize = 5_000;
+
+/// Every file of the project, relative to its root, for the quick-open list.
+///
+/// The same exclusions the panel uses — dotfiles, `target`, `node_modules` —
+/// because a file maxx hides in the tree is a file nobody is looking for in the
+/// palette either.
+pub fn walk_files(root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(directory) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') || name == "target" || name == "node_modules" {
+                continue;
+            }
+            let path = entry.path();
+            if entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+                stack.push(path);
+            } else if let Ok(relative) = path.strip_prefix(root) {
+                out.push(relative.to_path_buf());
+                if out.len() >= MAX_QUICK_OPEN_FILES {
+                    return out;
+                }
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
 /// Reads the direct children of `dir`, hiding dotfiles and build output.
 ///
 /// Directories sort before files, then alphabetically, case-insensitively.

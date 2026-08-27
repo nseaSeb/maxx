@@ -160,6 +160,8 @@ pub fn app_menus(cx: &App) -> Vec<Menu> {
         Menu {
             name: tr("menu.go"),
             items: vec![
+                MenuItem::action(tr("menu.quick_open"), QuickOpen),
+                MenuItem::separator(),
                 MenuItem::action(tr("menu.reveal"), RevealInFinder),
                 MenuItem::action(tr("menu.open_terminal"), OpenTerminal),
                 MenuItem::action(

@@ -129,6 +129,15 @@ pub fn read_active<R>(cx: &App, f: impl FnOnce(&Workspace) -> R) -> Option<R> {
 
 /// Root view of a window. A workspace without a project shows the welcome
 /// screen and can be reused by the next `Open Folder…`.
+/// What the palette is offering while it is open.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum PaletteMode {
+    /// The menu bar, flattened: `⌘K`.
+    Commands,
+    /// The project's files: `⌘P`.
+    Files,
+}
+
 pub struct Workspace {
     project: Option<Project>,
     entries: Vec<Entry>,
@@ -195,6 +204,18 @@ pub struct Workspace {
     /// the system which editors are installed, which is not a thing to do on
     /// every keystroke.
     commands: Vec<crate::palette::Command>,
+    /// The files `⌘P` is offering, relative to the project root.
+    ///
+    /// Beside the commands rather than instead of them: the palette is one
+    /// box, one keymap and one list on screen, and what changes between `⌘K`
+    /// and `⌘P` is only what fills it.
+    palette_files: Vec<std::path::PathBuf>,
+    /// Which of the two the open palette is showing.
+    ///
+    /// Said rather than guessed from an empty list: a project holding no file
+    /// at all would otherwise fall back to the commands, and `⌘P` would answer
+    /// a question nobody asked.
+    palette_mode: PaletteMode,
     /// Which line of the command palette is highlighted.
     command_index: usize,
     /// Index into `view::STATE_TYPES` for the field about to be added.
@@ -269,6 +290,8 @@ impl Workspace {
             palette_filter: None,
             command_input: None,
             commands: Vec::new(),
+            palette_files: Vec::new(),
+            palette_mode: PaletteMode::Commands,
             command_index: 0,
             state_type: 0,
             edit_snapshot: None,
