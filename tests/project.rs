@@ -446,3 +446,52 @@ fn every_shape_compiles() {
         assert!(status.success(), "{} does not compile", template.name());
     }
 }
+
+/// The whole catalogue, dropped into one view, compiled for real.
+///
+/// Ignored like its neighbour above, and run by hand after touching the
+/// tables: `cargo test --test project -- --ignored`. `examples/catalogue.rs`
+/// proves each call exists on its type; this proves the rest — the `use` lines
+/// maxx writes, the state fields it declares on the view, the initializers it
+/// gives them, and the handler stubs — which no amount of table reading can
+/// answer.
+#[test]
+#[ignore = "builds a whole project"]
+fn every_component_of_the_catalogue_compiles_where_maxx_puts_it() {
+    let root = scratch("maxx_catalogue_build");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+
+    let path = root.join("src/ui/home.rs");
+    let mut view = View::load(&path).expect("the fresh view must read back");
+    for spec in maxx::registry::CATALOGUE {
+        let mut node =
+            maxx::registry::instantiate(spec.id).unwrap_or_else(|| panic!("{}", spec.id));
+        // The same rename the workspace does on a drop: two entities sharing
+        // one field compile but mirror each other, and the second field would
+        // never be declared.
+        if spec.state.is_some()
+            && let maxx::model::Base::Known { args, .. } = &mut node.base
+        {
+            let field = maxx::registry::unique_input_field(&view.root);
+            *args = vec![maxx::model::Arg::Verbatim(format!("&self.{field}"))];
+        }
+        let end = view.root.children.len();
+        assert!(view.root.insert(&[end], node), "{} must go into the view", spec.id);
+    }
+    view.save().expect("the view must be written");
+
+    let output = std::process::Command::new("cargo")
+        .arg("check")
+        .current_dir(&root)
+        .output()
+        .expect("cargo must run");
+    let report = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "the catalogue does not compile:\n{report}");
+    // And it compiles clean: an import written for a call the node does not
+    // make is a warning in a project maxx has just written, which is the
+    // developer being handed maxx's untidiness.
+    assert!(
+        !report.contains("warning:"),
+        "what maxx wrote does not compile without warnings:\n{report}"
+    );
+}

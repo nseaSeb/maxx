@@ -97,6 +97,7 @@ impl Workspace {
                     | Kind::Number
                     | Kind::Color
                     | Kind::Ratio
+                    | Kind::Count
                     | Kind::Path
             ) || !crate::registry::editable(&node, prop)
             {
@@ -618,8 +619,10 @@ impl Workspace {
         };
 
         // Two inputs sharing `&self.champ` compile but mirror each other at
-        // runtime, so each one gets its own field.
-        if id == "input" {
+        // runtime, so each one gets its own field. The same holds for every
+        // component backed by an entity — a dropdown, a slider, a colour
+        // picker: they are not values but state the view owns.
+        if registry::by_id(id).is_some_and(|spec| spec.state.is_some()) {
             let field = registry::unique_input_field(&view.root);
             if let crate::model::Base::Known { args, .. } = &mut node.base {
                 *args = vec![crate::model::Arg::Verbatim(format!("&self.{field}"))];

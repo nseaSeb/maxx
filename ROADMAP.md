@@ -122,16 +122,29 @@ quoi éditer `[run]` autrement qu'à la main.
 
 Par coût croissant, pas par ordre alphabétique.
 
-- **Gratuits, la machinerie existe.** `Slider` et `ColorPicker` prennent une
-  `&Entity<…State>` : c'est exactement le `StateSpec` du champ texte et de la
-  liste déroulante. `Skeleton` et `Spinner` sont un `new()` sans argument.
-  Quatre lignes de table.
-- **`Kind::Enum`, une pièce pour trois usages.** L'icône, les variantes de la
-  pastille, celles du bouton. C'est la seule sorte d'argument qui manque au
-  catalogue tel qu'il est.
-- **Une entrée qui refuse `COMMON`.** `Badge` n'implémente pas `Styled` : les
-  propriétés communes ne compilent pas dessus. Un drapeau sur `Spec`, et le
-  problème est nommé une fois pour toutes.
+- ~~**Gratuits, la machinerie existe.**~~ — faits, et pas tout à fait gratuits :
+  `Slider` et `ColorPicker` ont bien demandé le `StateSpec` du champ texte,
+  mais ils ont révélé que `Select` se posait sans liaison — `Select::new()` ne
+  compile pas — parce que la règle était écrite `id == "input"` et non « ce
+  composant a un état ». Un `SliderState` n'a pas non plus besoin de `window`,
+  d'où un `_window` renommé pour rien et un avertissement dans le projet.
+- ~~**`Kind::Enum`, une pièce pour trois usages.**~~ — fait, mais ce n'était pas
+  une pièce, c'en était deux : les variantes du bouton étaient déjà une famille
+  de méthodes, celles de la pastille passent par `with_variant` — une méthode,
+  et non les constructeurs `Tag::primary()` qui changeraient la base du nœud —
+  et l'icône a demandé la vraie nouveauté, `Target::VariantArg` : une variante
+  en **argument du constructeur**, `Icon::new(IconName::Check)`, qui n'a pas
+  d'état vide puisque le composant ne compile pas sans elle. Vingt-deux icônes
+  offertes sur les quatre-vingt-huit, chacune dessinée sur le canvas.
+- ~~**Une entrée qui refuse `COMMON`.**~~ — faite, et elles sont deux : `Badge`
+  comme prévu, et `Spinner`, qui n'implémente pas `Styled` non plus. Le
+  `Common::None` existait déjà ; ce sont ses deux premiers usages.
+
+  Au passage, ce lot a corrigé ce que maxx laissait dans les projets : les
+  traits n'étaient importés que sur la vue du composant, donc un bouton sans
+  variante emportait un `ButtonVariants` inutilisé. Les `use` d'un trait sont
+  désormais conditionnés à l'appel qui les demande (`Spec::extra_imports`), et
+  `tests/project.rs` exige que le projet compile **sans un avertissement**.
 - **Les emplacements multiples.** `Accordion`, `Collapsible`, `form`, `tab`,
   `description_list` sont des conteneurs à *deux* contenus — un titre et un
   corps — là où `Node` n'a qu'une liste d'enfants. C'est le seul manque

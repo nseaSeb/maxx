@@ -871,3 +871,41 @@ fn a_second_default_argument_is_not_written_as_the_first() {
     let rendered = maxx::codegen::render(&alert, 0);
     assert!(!rendered.contains("PathBuf::from"), "{rendered}");
 }
+
+/// Every component the palette offers reads back exactly as it was dropped.
+///
+/// The catalogue writes three shapes of constructor argument — a string, a
+/// binding on the view, an enumeration variant — and only the first is what a
+/// naive encoder produces. An icon written as `Icon::new("IconName::Check")`
+/// would round-trip perfectly here and fail to compile in the project.
+#[test]
+fn every_component_dropped_reads_back_as_it_was_written() {
+    for spec in maxx::registry::CATALOGUE {
+        let node = maxx::registry::instantiate(spec.id)
+            .unwrap_or_else(|| panic!("{} must instantiate", spec.id));
+        let written = render(&node, 0);
+        assert_eq!(reparse(&written), written, "{}", spec.id);
+    }
+}
+
+#[test]
+fn an_icon_carries_its_variant_as_a_path() {
+    let node = maxx::registry::instantiate("icon").expect("the icon is in the catalogue");
+    let written = render(&node, 0);
+    assert!(written.contains("Icon::new(IconName::Check)"), "{written}");
+    // The quoted form compiles nowhere: `Icon::new` takes something that
+    // converts into an `Icon`, and a string does not.
+    assert!(!written.contains("\"IconName"), "{written}");
+}
+
+#[test]
+fn a_stateful_component_is_dropped_bound_to_a_field() {
+    // Not the text input alone: a dropdown, a slider and a colour picker are
+    // entities the view owns too, and one written as `Select::new()` does not
+    // compile.
+    for id in ["input", "select", "slider", "color_picker"] {
+        let node = maxx::registry::instantiate(id).unwrap_or_else(|| panic!("{id}"));
+        let written = render(&node, 0);
+        assert!(written.contains("(&self."), "{id}: {written}");
+    }
+}
