@@ -145,20 +145,51 @@ Par coût croissant, pas par ordre alphabétique.
   variante emportait un `ButtonVariants` inutilisé. Les `use` d'un trait sont
   désormais conditionnés à l'appel qui les demande (`Spec::extra_imports`), et
   `tests/project.rs` exige que le projet compile **sans un avertissement**.
-- **Les emplacements multiples.** `Accordion`, `Collapsible`, `form`, `tab`,
-  `description_list` sont des conteneurs à *deux* contenus — un titre et un
-  corps — là où `Node` n'a qu'une liste d'enfants. C'est le seul manque
-  structurel du modèle, et il vaut d'être décidé plutôt que contourné.
-- **La barre de défilement visible.** `prop.scroll` écrit `.id()` +
-  `.overflow_y_scroll()` : ça défile à la molette et ne montre rien.
-  `ScrollableElement::overflow_y_scrollbar()` de gpui-component est un seul
-  appel chaîné, sans état ni `id` — mais il ne convient pas, et c'est vérifié à
-  l'écran : `Scrollable::render` déplace le style vers son enveloppe et l'élément
-  qui porte les enfants retombe sur `Display::Block`, donc **le `gap` et
-  l'alignement du conteneur sont perdus**. La forme juste est une enveloppe
-  `relative()` et une barre en recouvrement, soit deux éléments pour un nœud :
-  c'est le même manque que les emplacements multiples ci-dessus, et il se
-  décidera avec eux.
+- ~~**Les emplacements multiples.**~~ — décidé : **non**, et la mesure est la
+  raison. `Accordion`, `Collapsible`, `form`, `description_list` prennent bien
+  un élément en argument (`.title(…)`, `.content(…)`, `.label(…)`) là où `Node`
+  n'a qu'une liste d'enfants. On pouvait le modéliser : le marqueur
+  `CHILD_SLOT` existe déjà, un emplacement nommé se serait écrit `"\0title"`,
+  et `children` serait resté plat — donc `Path` intact, donc rien à réécrire
+  ailleurs. Coût estimé honnête, autour de quatre cents lignes réparties sur le
+  modèle, le parseur, le codegen, le canvas et les zones de dépôt.
+
+  Ce que ça aurait acheté, mesuré et non supposé : le **glisser-déposer** de
+  quatre composants de queue. Le code, lui, on l'a déjà — un `Accordion` écrit
+  à la main, fermeture comprise, revient du parseur à l'octet près :
+
+  ```rust
+  Accordion::new("a").item(|item| item.title(Label::new("T")).child(Label::new("B")))
+  ```
+
+  Payer la première vraie complication du modèle — deux sortes d'enfants, qui
+  fuiraient dans la suppression, le copier-coller, l'annulation — pour un
+  confort de dépôt sur quatre entrées rares, non. « Le `.rs` est la vérité » va
+  jusque-là : ce qui ne se dépose pas s'écrit, et maxx ne le casse pas. À
+  rouvrir si l'usage le réclame.
+
+  Deux faits qui ont fermé la question au passage : `Accordion` (le groupe)
+  prend ses items par `.item(|item| …)`, **une fermeture**, donc restait hors
+  de portée dans tous les cas ; et `form` s'atteint par `v_form()`, le module
+  `form` étant privé.
+- ~~**La barre de défilement visible.**~~ — faite, et sans le mécanisme qu'on
+  croyait nécessaire. Ce n'était pas « deux éléments pour un nœud » : c'est
+  **deux nœuds**, ce que l'arbre sait déjà porter. Une propriété *Barre
+  visible* sur la colonne et la ligne écrit d'un coup ce que la composition
+  demande — `relative()`, `track_scroll(&self.…)`, et par-dessus un `div`
+  positionné qui tient le `Scrollbar` lié au **même** `ScrollHandle`, la forme
+  avec laquelle `gpui-component` monte les siennes.
+
+  Un seul interrupteur pour cinq écritures, à rebours de toutes les autres
+  propriétés, et c'est le but : assembler ça à la main demanderait trois
+  entrées du catalogue et un nom de champ tapé deux fois — c'est-à-dire de
+  savoir ce que maxx sait. Ce qui est écrit reste du Rust ordinaire : deux
+  nœuds de l'arbre, qu'on édite et qu'on supprime comme les autres.
+
+  `ScrollableElement::overflow_y_scrollbar()` reste écarté pour la raison
+  vérifiée à l'écran : `Scrollable::render` déplace le style vers son
+  enveloppe, l'élément qui porte les enfants retombe sur `Display::Block`, et
+  le `gap` comme l'alignement du conteneur sont perdus.
 - ~~**L'infobulle n'est pas un nœud**~~ — faite, et sa place n'était pas
   `COMMON` : `.tooltip(…)` vit sur un élément **avec état**, donc gpui ne
   l'offre qu'après `id`, exactement comme le défilement. Vérifié au

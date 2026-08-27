@@ -950,3 +950,72 @@ fn a_tooltip_carries_its_import() {
         registry::imports(&node)
     );
 }
+
+/// The visible scrollbar: one switch, and what it writes reads back.
+#[test]
+fn the_scrollbar_switch_writes_a_tree_that_reads_back() {
+    use maxx::registry::{self, Kind, Target};
+
+    let prop =
+        registry::Prop { label: "prop.scrollbar", target: Target::Scrollbar, kind: Kind::Bool };
+    let mut node = Node::known("v_flex");
+    node.set_call("id", Arg::Str("scroller".into()));
+    registry::attach_scrollbar(&mut node, "bar", "scroll");
+    registry::write(&mut node, &prop, "true");
+
+    let written = render(&node, 0);
+    assert!(written.contains(".relative()"), "{written}");
+    assert!(written.contains(".track_scroll(&self.scroll)"), "{written}");
+    assert!(written.contains("Scrollbar::new(&self.scroll)"), "{written}");
+    assert!(written.contains("ScrollbarAxis::Vertical"), "{written}");
+    assert_eq!(reparse(&written), written);
+    assert_eq!(registry::read(&node, &prop).as_deref(), Some("true"));
+
+    // The bar and the box share one handle, or the bar follows nothing.
+    assert_eq!(written.matches("&self.scroll").count(), 2, "{written}");
+
+    // And the switch turned off takes back what maxx wrote, leaving the box
+    // scrolling as it was.
+    registry::write(&mut node, &prop, "false");
+    let written = render(&node, 0);
+    assert!(!written.contains("track_scroll"), "{written}");
+    assert!(!written.contains("Scrollbar::new"), "{written}");
+    assert_eq!(registry::read(&node, &prop).as_deref(), Some("false"));
+}
+
+/// The handle is a field of the view, and it is not an entity.
+///
+/// Its `use` line does not come through `registry::imports` — that one answers
+/// what the *tree* needs — but through the state field the view declares, which
+/// is where `Entity<InputState>` comes from too.
+#[test]
+fn the_scrollbar_asks_the_view_for_a_handle() {
+    let mut node = Node::known("v_flex");
+    maxx::registry::attach_scrollbar(&mut node, "bar", "scroll");
+    let imports = maxx::registry::imports(&node);
+    assert!(imports.contains(&"use gpui_component::scroll::Scrollbar;"), "{imports:?}");
+    // The axis type comes with the axis, not with the bar.
+    assert!(imports.contains(&"use gpui_component::scroll::ScrollbarAxis;"), "{imports:?}");
+    let bare = Node::known("Scrollbar::new");
+    assert!(
+        !maxx::registry::imports(&bare).contains(&"use gpui_component::scroll::ScrollbarAxis;"),
+        "a bar with no axis must not carry the type"
+    );
+
+    let state = maxx::registry::by_id("scrollbar").expect("the entry exists").state.expect("state");
+    assert_eq!(state.ty, "ScrollHandle", "a handle is a value, not an entity");
+    assert_eq!(state.initializer, "ScrollHandle::new()");
+    assert!(state.imports.contains(&"use gpui::ScrollHandle;"), "{:?}", state.imports);
+}
+
+/// What the palette offers is what can stand on its own.
+#[test]
+fn the_palette_does_not_offer_what_only_a_property_writes() {
+    let scrollbar = maxx::registry::by_id("scrollbar").expect("the entry exists for the reader");
+    assert!(!scrollbar.palette, "a bar dropped alone has no handle and draws nothing");
+    // Every other entry is droppable: an entry nobody can reach and no property
+    // writes would be dead weight.
+    for spec in maxx::registry::CATALOGUE {
+        assert!(spec.palette || spec.id == "scrollbar", "{} is offered by nothing", spec.id);
+    }
+}

@@ -58,6 +58,13 @@ fn every_call_the_catalogue_writes_is_compiled_in_the_example() {
                     }
                 }
                 Target::Scrollable(name) => expect(format!(".{name}()"), prop.label),
+                // Everything the switch writes, on the two types it writes it on.
+                Target::Scrollbar => {
+                    expect(".track_scroll(".into(), prop.label);
+                    expect(".relative()".into(), prop.label);
+                    expect("Scrollbar::new(".into(), prop.label);
+                    expect("ScrollbarAxis::Vertical".into(), prop.label);
+                }
                 // The closure gpui takes, and the type it builds inside it.
                 Target::Tooltip => {
                     expect(".tooltip(".into(), prop.label);

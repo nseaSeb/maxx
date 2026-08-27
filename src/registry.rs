@@ -34,6 +34,19 @@ pub enum Target {
     /// the component does not compile — so the empty choice does not exist
     /// here.
     VariantArg(usize, &'static [&'static str]),
+    /// The visible scrollbar: `relative()`, `track_scroll(&self.…)`, and the
+    /// overlay that carries the bar.
+    ///
+    /// One switch and five things happen, which is the opposite of how every
+    /// other property works — and it is the point. A visible bar in
+    /// `gpui-component` is not a call: it is a handle shared between the box
+    /// that scrolls and a bar drawn over it, inside a positioned parent. Asking
+    /// the developer to assemble that by hand from three catalogue entries and
+    /// a field name typed twice is asking them to know what maxx knows.
+    ///
+    /// What is written stays ordinary Rust: two nodes of the tree, editable and
+    /// deletable like any other.
+    Scrollbar,
     /// A tooltip, written as the closure gpui takes:
     /// `.tooltip(|window, cx| Tooltip::new("…").build(window, cx))`.
     ///
@@ -156,6 +169,13 @@ pub struct Spec {
     pub extra_imports: &'static [(&'static [&'static str], &'static str)],
     /// Whether this component accepts children.
     pub container: bool,
+    /// Whether the palette offers it.
+    ///
+    /// An entry is two things at once: what the palette drops, and what the
+    /// reader recognises. The scrollbar is only the second — dropped on its
+    /// own it draws nothing, because it needs a handle and a positioned parent
+    /// that the property on the box writes for it.
+    pub palette: bool,
     /// Constructor arguments used when the component is first dropped.
     pub default_args: &'static [&'static str],
     /// No-argument calls set when the component is first dropped.
@@ -251,6 +271,10 @@ const TAG_VARIANTS: &[&str] = &[
     "TagVariant::Info",
 ];
 
+/// Which bars a scrollbar draws.
+const SCROLLBAR_AXES: &[&str] =
+    &["ScrollbarAxis::Vertical", "ScrollbarAxis::Horizontal", "ScrollbarAxis::Both"];
+
 /// The direction a slider runs in.
 const SLIDER_AXES: &[&str] = &["horizontal", "vertical"];
 
@@ -336,6 +360,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::v_flex;"],
         extra_imports: &[],
         container: true,
+        palette: true,
         default_args: &[],
         default_calls: &[],
         props: &[
@@ -348,6 +373,7 @@ pub const CATALOGUE: &[Spec] = &[
                 target: Target::Scrollable("overflow_y_scroll"),
                 kind: Kind::Bool,
             },
+            Prop { label: "prop.scrollbar", target: Target::Scrollbar, kind: Kind::Bool },
         ],
         common: Common::Element,
         handler: None,
@@ -360,6 +386,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::h_flex;"],
         extra_imports: &[],
         container: true,
+        palette: true,
         default_args: &[],
         default_calls: &[],
         props: &[
@@ -372,6 +399,7 @@ pub const CATALOGUE: &[Spec] = &[
                 target: Target::Scrollable("overflow_x_scroll"),
                 kind: Kind::Bool,
             },
+            Prop { label: "prop.scrollbar", target: Target::Scrollbar, kind: Kind::Bool },
         ],
         common: Common::Element,
         handler: None,
@@ -384,6 +412,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::label::Label;"],
         extra_imports: &[],
         container: false,
+        palette: true,
         default_args: &["Label"],
         default_calls: &[],
         props: &[Prop { label: "prop.text", target: Target::BaseArg(0), kind: Kind::Text }],
@@ -398,6 +427,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::input::Input;"],
         extra_imports: &[],
         container: false,
+        palette: true,
         default_args: &[],
         default_calls: &[],
         props: &[Prop { label: "prop.bound_field", target: Target::BaseArg(0), kind: Kind::Field }],
@@ -416,6 +446,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::select::Select;"],
         extra_imports: &[],
         container: false,
+        palette: true,
         default_args: &[],
         default_calls: &[],
         props: &[Prop { label: "prop.bound_field", target: Target::BaseArg(0), kind: Kind::Field }],
@@ -448,6 +479,7 @@ pub const CATALOGUE: &[Spec] = &[
             (&["disabled"], "use gpui_component::Disableable;"),
         ],
         container: false,
+        palette: true,
         default_args: &["button"],
         default_calls: &[],
         props: &[
@@ -469,6 +501,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::checkbox::Checkbox;"],
         extra_imports: &[],
         container: false,
+        palette: true,
         default_args: &["checkbox"],
         default_calls: &[],
         props: &[
@@ -488,6 +521,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::switch::Switch;"],
         extra_imports: &[],
         container: false,
+        palette: true,
         default_args: &["switch"],
         default_calls: &[],
         props: &[
@@ -507,6 +541,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::group_box::GroupBox;"],
         extra_imports: &[],
         container: true,
+        palette: true,
         default_args: &[],
         default_calls: &[],
         props: &[Prop { label: "prop.title", target: Target::Method("title"), kind: Kind::Text }],
@@ -521,6 +556,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::divider::Divider;"],
         extra_imports: &[],
         container: false,
+        palette: true,
         default_args: &[],
         default_calls: &[],
         props: &[Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text }],
@@ -535,6 +571,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::radio::Radio;"],
         extra_imports: &[(&["disabled"], "use gpui_component::Disableable;")],
         container: false,
+        palette: true,
         default_args: &["radio"],
         default_calls: &[],
         props: &[
@@ -557,6 +594,7 @@ pub const CATALOGUE: &[Spec] = &[
         // `Link` is a `ParentElement`: its text is a child, not an argument. A
         // label dropped inside it is what writes it.
         container: true,
+        palette: true,
         default_args: &["link"],
         default_calls: &[],
         props: &[
@@ -575,6 +613,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::alert::Alert;"],
         extra_imports: &[],
         container: false,
+        palette: true,
         default_args: &["alert", "Message"],
         default_calls: &[],
         props: &[
@@ -593,6 +632,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::tag::Tag;"],
         extra_imports: &[(&["with_variant"], "use gpui_component::tag::TagVariant;")],
         container: true,
+        palette: true,
         default_args: &[],
         default_calls: &[],
         props: &[
@@ -619,6 +659,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::progress::Progress;"],
         extra_imports: &[],
         container: false,
+        palette: true,
         default_args: &[],
         default_calls: &[],
         props: &[Prop { label: "prop.value", target: Target::Method("value"), kind: Kind::Ratio }],
@@ -633,6 +674,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui::img;"],
         extra_imports: &[],
         container: false,
+        palette: true,
         default_args: &["assets/images/image.png"],
         // A photograph is two thousand pixels wide, and a view is five hundred:
         // dropped as it is, the first image pushes everything else off the
@@ -664,6 +706,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::slider::Slider;"],
         extra_imports: &[],
         container: false,
+        palette: true,
         default_args: &[],
         default_calls: &[],
         props: &[
@@ -691,6 +734,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::color_picker::ColorPicker;"],
         extra_imports: &[],
         container: false,
+        palette: true,
         default_args: &[],
         default_calls: &[],
         props: &[
@@ -712,6 +756,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::skeleton::Skeleton;"],
         extra_imports: &[],
         container: false,
+        palette: true,
         default_args: &[],
         // A placeholder with no height of its own is a placeholder nobody sees.
         default_calls: &["h_4"],
@@ -731,6 +776,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::spinner::Spinner;"],
         extra_imports: &[],
         container: false,
+        palette: true,
         default_args: &[],
         default_calls: &[],
         props: &[],
@@ -749,6 +795,7 @@ pub const CATALOGUE: &[Spec] = &[
         // It wraps what it marks — an icon, a button — rather than standing on
         // its own.
         container: true,
+        palette: true,
         default_args: &[],
         default_calls: &[],
         props: &[
@@ -770,6 +817,7 @@ pub const CATALOGUE: &[Spec] = &[
         imports: &["use gpui_component::{Icon, IconName};"],
         extra_imports: &[],
         container: false,
+        palette: true,
         default_args: &["IconName::Check"],
         default_calls: &[],
         props: &[
@@ -788,12 +836,49 @@ pub const CATALOGUE: &[Spec] = &[
         state: None,
     },
     Spec {
+        id: "scrollbar",
+        label: "component.scrollbar",
+        base: "Scrollbar::new",
+        imports: &["use gpui_component::scroll::Scrollbar;"],
+        // The axis is a variant, so its type is needed only once one is
+        // written: a bar left on the default would carry an unused import.
+        extra_imports: &[(&["axis"], "use gpui_component::scroll::ScrollbarAxis;")],
+        container: false,
+        // Written by the box's own property, never dropped: alone, with no
+        // handle and no positioned parent, it draws nothing.
+        palette: false,
+        default_args: &[],
+        default_calls: &[],
+        props: &[
+            Prop { label: "prop.bound_field", target: Target::BaseArg(0), kind: Kind::Field },
+            Prop { label: "prop.id", target: Target::Method("id"), kind: Kind::Text },
+            Prop {
+                label: "prop.axis",
+                target: Target::Variant("axis", SCROLLBAR_AXES),
+                kind: Kind::Choice,
+            },
+        ],
+        // Not `Styled`: it is an element of its own, which is why it is drawn
+        // inside a positioned `div` rather than positioned itself.
+        common: Common::None,
+        handler: None,
+        // A `ScrollHandle` is a plain value, not an entity: the box that
+        // scrolls and the bar drawn over it must share the same one, which is
+        // what makes the bar follow the content.
+        state: Some(StateSpec {
+            ty: "ScrollHandle",
+            imports: &["use gpui::ScrollHandle;"],
+            initializer: "ScrollHandle::new()",
+        }),
+    },
+    Spec {
         id: "spacer",
         label: "component.spacer",
         base: "div",
         imports: &["use gpui::div;"],
         extra_imports: &[],
         container: false,
+        palette: true,
         default_args: &[],
         default_calls: &[],
         props: &[Prop { label: "prop.flex", target: Target::Flag("flex_1"), kind: Kind::Bool }],
@@ -806,6 +891,58 @@ pub const CATALOGUE: &[Spec] = &[
 /// `120` becomes `px(120.)`, `12.5` becomes `px(12.5)`.
 fn pixel_literal(value: &str) -> Option<String> {
     Some(format!("px({})", float_literal(value)?))
+}
+
+/// Gives `node` a visible scrollbar: the handle, the overlay, and the bar.
+///
+/// `field` and `bar_id` come from the caller because neither can be decided
+/// from one node: a field no other component is bound to, and an element id no
+/// sibling is using. The same reason the scroll's own id is assigned there.
+pub fn attach_scrollbar(node: &mut Node, bar_id: &str, field: &str) {
+    if node.call("track_scroll").is_some() {
+        return;
+    }
+    // The bar is drawn over the box, so the box has to be the origin it is
+    // positioned against.
+    node.set_flag("relative", true);
+    node.set_call("track_scroll", Arg::Verbatim(format!("&self.{field}")));
+
+    let mut bar = Node::known("Scrollbar::new");
+    if let Base::Known { args, .. } = &mut bar.base {
+        *args = vec![Arg::Verbatim(format!("&self.{field}"))];
+    }
+    bar.set_call("id", Arg::Str(bar_id.to_string()));
+    bar.set_call("axis", Arg::Verbatim("ScrollbarAxis::Vertical".into()));
+
+    // The overlay: `Scrollbar` is not `Styled`, so what positions it is the
+    // `div` around it — the shape `gpui-component` mounts its own with.
+    let mut overlay = Node::known("div");
+    for flag in ["absolute", "top_0", "left_0", "right_0", "bottom_0"] {
+        overlay.set_flag(flag, true);
+    }
+    overlay.push_child(bar);
+
+    node.push_child(overlay);
+}
+
+/// Takes the bar away again, leaving the box scrolling as it was.
+///
+/// Only what maxx recognises as its own: the handle, and an overlay whose one
+/// child is a `Scrollbar`. A `relative` is left behind for the same reason the
+/// scroll leaves its `h_full` — maxx cannot tell its own from the developer's.
+fn detach_scrollbar(node: &mut Node) {
+    node.remove_call("track_scroll");
+    let overlay = node.children.iter().position(|child| {
+        child.base.path() == Some("div")
+            && child.call("absolute").is_some()
+            && child.children.iter().any(|inner| inner.base.path() == Some("Scrollbar::new"))
+    });
+    if let Some(index) = overlay {
+        // Through the model, so the slot that placed the child among the calls
+        // goes with it: left behind, the next child written would take its
+        // place in the chain.
+        node.remove(&[index]);
+    }
 }
 
 /// The text of a tooltip closure, when it is one maxx wrote.
@@ -962,6 +1099,10 @@ pub fn covers(spec: &'static Spec, name: &str) -> bool {
         // without anyone seeing it go.
         Target::Scrollable(method) => method == name,
         Target::Tooltip => name == "tooltip",
+        // The handle only. `relative` is left visible among the other calls:
+        // maxx writes it, but it cannot prove it wrote *this* one, and hiding
+        // a call it might then delete is how a hand-written line disappears.
+        Target::Scrollbar => name == "track_scroll",
     })
 }
 
@@ -1384,6 +1525,7 @@ pub fn read(node: &Node, prop: &Prop) -> Option<String> {
         Target::Variant(name, _) => {
             node.call(name).and_then(|call| call.args.first()).map(|arg| arg.to_source())
         }
+        Target::Scrollbar => Some(node.call("track_scroll").is_some().to_string()),
         Target::Tooltip => {
             let source = node.call("tooltip")?.args.first()?.to_source();
             Some(tooltip_text(&source).unwrap_or(source))
@@ -1516,6 +1658,14 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
                 args[index] = arg;
             } else {
                 args.push(arg);
+            }
+        }
+        // Written by `attach_scrollbar`, which the inspector calls with the
+        // names only the whole tree can give: an element id no sibling uses,
+        // and a field no other component is bound to.
+        Target::Scrollbar => {
+            if value != "true" {
+                detach_scrollbar(node);
             }
         }
         Target::Tooltip => {
