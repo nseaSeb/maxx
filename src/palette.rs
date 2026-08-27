@@ -114,12 +114,21 @@ fn shortcuts() -> Vec<(&'static str, SharedString)> {
 /// when the palette opens and only narrowed as the query changes — a `Command`
 /// carries a boxed action and is not worth rebuilding per keystroke.
 pub fn matching(commands: &[Command], query: &str) -> Vec<usize> {
+    matching_labels(commands.iter().map(|command| command.label.as_ref()), query)
+}
+
+/// The same, over plain labels.
+///
+/// What the quick-open list needs: its lines are paths, not commands, and the
+/// question asked of them is exactly the one asked of a command — do all the
+/// words appear, in any order. Two matchers would drift; `⌘P` and `⌘K` answer
+/// the same way because they are the same function.
+pub fn matching_labels<'a>(labels: impl Iterator<Item = &'a str>, query: &str) -> Vec<usize> {
     let words: Vec<String> = query.split_whitespace().map(fold).filter(|w| !w.is_empty()).collect();
-    commands
-        .iter()
+    labels
         .enumerate()
-        .filter(|(_, command)| {
-            let label = fold(&command.label);
+        .filter(|(_, label)| {
+            let label = fold(label);
             words.iter().all(|word| label.contains(word.as_str()))
         })
         .map(|(index, _)| index)

@@ -383,7 +383,7 @@ impl Workspace {
     /// here and nothing anywhere else — the keymap binds them to that name.
     pub(crate) fn render_command_palette(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let input = self.command_input()?.clone();
-        let matching = self.matching_commands(cx);
+        let matching = self.matching_lines(cx);
         let selected = self.command_index();
 
         // Gathered rather than lazy: the closure would carry `cx`, which the
@@ -391,8 +391,19 @@ impl Workspace {
         let rows: Vec<_> = matching
             .into_iter()
             .enumerate()
-            .filter_map(|(index, position)| self.command_at(position).map(|c| (index, c)))
-            .map(|(index, command)| {
+            // A line is a command or a file, and one list is open at a time.
+            .filter_map(|(index, position)| {
+                let file = self.palette_file(position);
+                let command = self.command_at(position);
+                match (file, command) {
+                    (Some(path), _) => Some((index, path, None)),
+                    (None, Some(command)) => {
+                        Some((index, command.label.clone(), command.shortcut.clone()))
+                    }
+                    (None, None) => None,
+                }
+            })
+            .map(|(index, label, shortcut)| {
                 h_flex()
                     .id(SharedString::from(format!("command-{index}")))
                     .items_center()
@@ -404,8 +415,8 @@ impl Workspace {
                     .cursor_pointer()
                     .when(index == selected, |this| this.bg(theme::selected_bg()))
                     .hover(|this| this.bg(theme::hover_bg()))
-                    .child(div().flex_1().child(command.label.clone()))
-                    .when_some(command.shortcut.clone(), |this, keys| {
+                    .child(div().flex_1().child(label))
+                    .when_some(shortcut, |this, keys| {
                         this.child(div().text_xs().text_color(theme::text_muted()).child(keys))
                     })
                     .on_click(cx.listener(move |this, _, _, cx| {
