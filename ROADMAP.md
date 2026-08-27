@@ -259,10 +259,21 @@ Rien de technique, et c'est ce qui décide de tout le reste.
 
 - **Un GIF dans le README.** Pour un outil visuel, l'élément à plus fort
   rendement de tout ce document. `demo/` est fait pour ça.
-- **Des binaires attachés aux versions.** La CI est déjà en matrice sur les
-  trois systèmes ; il manque un travail déclenché par une étiquette. C'est ce
-  qui évite à l'utilisateur Linux d'avoir à installer Vulkan, Wayland et
+- ~~**Des binaires attachés aux versions.**~~ — fait, et ce point était périmé :
+  `.github/workflows/release.yml` part sur une étiquette `v*`, vérifie les
+  trois systèmes (`fmt`, clippy, tests, puis une construction en release que la
+  CI ordinaire ne fait jamais), nomme les binaires par système, emballe le
+  `.app` sur macOS, contrôle ce que `cargo package` emporterait — `build.rs` et
+  `Cargo.lock` présents, `demo/` absent — et attache le tout à la version par
+  `gh`. C'est ce qui évite à l'utilisateur Linux d'installer Vulkan, Wayland et
   fontconfig pour un `cargo install`.
+
+  La matrice et les noms de sortie sont **déclarés**, et non déduits de la
+  machine : ce qui est détecté se limite à ce qui ne peut pas être écrit, le
+  système du runner pour choisir un nom et l'étiquette pour la version. Le jour
+  où `macos-latest` change d'architecture, une sortie « automatique » changerait
+  de cible sans que personne l'ait demandé ; une matrice déclarée casse
+  bruyamment, ce qu'on veut d'un portail de publication.
 - **crates.io**, ensuite, surtout pour réserver le nom.
 - **Un essai humain sur Linux et sur Windows.** La CI prouve que ça compile ;
   aucun test n'ouvre de fenêtre.

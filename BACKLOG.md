@@ -311,9 +311,11 @@ ressortir sur trois. Ce qui est garanti est le contenu, pas la colonne.
 
 - ~~Chemin personnel codé en dur dans un test~~ — fait : la référence est
   `demo/`, versionnée, et `tests/demo.rs` la vérifie par chemin relatif.
-- **README en retard sur l'interface** : rien sur ＋ / 🗑 et le clic droit dans
-  l'explorateur, sur `Affichage > Barre de menus du projet`, sur
-  `Édition > Ajouter un menu`, ni sur la fenêtre À propos.
+- ~~**README en retard sur l'interface**~~ — rattrapé : les trois formes de
+  projet, `⌘P`, la navigation entre onglets, ＋ / 🗑 et le menu contextuel de
+  l'arborescence, ce que `maxx.toml` porte désormais (l'entrée, `[run]`, les
+  deux empreintes), et ce que la zone gérée garde — les expressions opaques et
+  les commentaires.
 - **Une capture ou un GIF dans le README.** Pour un outil visuel, c'est
   l'élément à plus fort rendement de toute cette liste. La démo de `demo/` est
   faite pour ça : c'est elle qu'il faut photographier.

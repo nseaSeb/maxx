@@ -54,7 +54,9 @@ That is what makes the round trip safe:
   region is found by scanning the text between `// maxx:begin` and
   `// maxx:end`, and saving touches only that byte range. The rest of the file —
   imports, `impl`, methods, comments, formatting — is untouched by construction,
-  not by care.
+  not by care;
+- inside the region, where `syn` does look, the comments are read out of the
+  text first and carried by the tree, so they come back out of it.
 
 The corollary: what you write by hand in Zed is read back by maxx, and what maxx
 writes is Rust you could have written yourself.
@@ -66,8 +68,16 @@ cargo run              # welcome screen
 cargo run -- <path>    # open a project directly
 ```
 
-`File > New project…` creates a complete project, `File > New view…` adds a view
-and registers it in `src/ui/mod.rs`.
+`File > New project` creates a complete project in one of three shapes, and
+`File > New view…` adds a view and registers it in `src/ui/mod.rs`.
+
+The shapes answer the question a desktop project asks on its first day, which is
+not which component to drop but what holds what. *Empty* is one window and one
+view. *Sidebar and content* writes `src/ui/shell.rs` — a sidebar on the left, the
+view of the moment on the right — and the pages it holds stay views maxx
+designs. *With settings* is the same, plus the settings module and a screen that
+reads and writes it. The shell is ordinary Rust, written once: adding a page is
+four lines the compiler asks for one by one.
 
 On the canvas: click to select, drag to move, double-click a button to give it
 an action. Columns resize by their handle, and their width is remembered. `⌘S`
@@ -86,8 +96,16 @@ copied here pastes into Zed, and an expression written there pastes back.
 In the project panel, a view opens on the canvas and every other file — a
 `Cargo.toml`, a `README.md`, a `main.rs` with no managed region — opens in the
 code reader: syntax highlighting, line numbers, selection and copy, and no
-writing. Right-click gives *View the code* for any file; editing stays in your
-editor, one `⌘⌥Z` away.
+writing. The panel's header carries ＋ and 🗑 for a new view and for deleting
+what is selected, and a right-click on any row offers the same, plus *View the
+code*, *Reveal in Finder*, *Open in your editor* and *Open the window on this
+view*. Editing stays in your editor, one `⌘⌥Z` away.
+
+`⌘P` opens a file by name. It is the palette's box on another list: type words
+in any order, and the whole path answers — `ui home` finds `src/ui/home.rs`.
+Between open views, `⌘⌥→` and `⌘⌥←` walk the tab strip as a ring, and `⌃⇥` goes
+back to the file you were on before, twice to come back — which is the use one
+actually has for it.
 
 `⌘E` turns the view being designed over. What it shows is not the file on disk
 but the Rust `⌘S` would write, rendered from the tree as it stands — so the
@@ -200,10 +218,24 @@ a dependency on maxx: what is copied is yours.
 - **The palette** — `src/theme.rs`, light and dark from the start.
 
 What was copied is recorded in `maxx.toml`, to be committed with the project:
-which module, in which version, and the fingerprint it had on the way out. When
+which module, in which version, and the fingerprints it had on the way out. When
 a newer version exists, maxx says so when the project opens, and
 `File > Add to project > Update modules` lays it down. A file you have edited is
 never replaced — it is reported, and that is all.
+
+Two fingerprints, and that is not belt and braces. The first is the bytes maxx
+wrote; the second is the same text laid out by `rustfmt`'s own defaults, your
+`rustfmt.toml` ignored. Without the second, a `cargo fmt` — the most ordinary
+gesture there is — made every module unrecognisable and maxx stopped offering
+its fixes, silently. A comment you add still counts as an edit: `rustfmt` keeps
+comments, so both fingerprints move.
+
+The same file carries the project itself. `[project] entry` says which view the
+window opens on — *Open the window on this view* in the File menu and in the
+project panel's right-click writes it, and `main.rs` with it — and `[run]` says
+how it is launched: `profile`, `features`, `default-features`, and the arguments
+handed to the application after `--`. Every key is optional, and a project that
+sets none is launched exactly as before.
 
 ### The settings
 
@@ -281,6 +313,19 @@ focus, and again before every save, maxx compares:
   an editor does for an unmodified buffer;
 * both sides changed — the write is refused, the status bar says so, and
   `File > Reload view` (⌘⇧R) or `File > Overwrite file` settles it.
+
+## What you write inside the region
+
+The markers delimit what maxx owns, and it rewrites that from its own tree on
+every save. Two things survive that rewrite because the tree carries them:
+**an expression maxx does not understand**, kept byte for byte — a `match`, a
+closure, a call of your own — and **your comments**, above a call, above a
+child, at the head of the chain or after the last call.
+
+The layout is maxx's: one builder call per line, and a child written on one line
+may come back on three. What is guaranteed is the text, not the column. Two
+places still move: a comment at the end of a line, and one written between the
+parentheses of a call, both come back above the call they belong to.
 
 ## Opening a view maxx did not write
 
