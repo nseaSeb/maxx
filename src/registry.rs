@@ -34,6 +34,16 @@ pub enum Target {
     /// the component does not compile — so the empty choice does not exist
     /// here.
     VariantArg(usize, &'static [&'static str]),
+    /// A tooltip, written as the closure gpui takes:
+    /// `.tooltip(|window, cx| Tooltip::new("…").build(window, cx))`.
+    ///
+    /// Its own target for the same reason as [`Target::Scrollable`]: it lives
+    /// on a *stateful* element, so gpui offers it only after `id`. Verified
+    /// against the compiler — `v_flex().tooltip(…)` does not exist, and neither
+    /// does `Label::new("x").tooltip(…)`: a component that is not an element of
+    /// its own would have to be wrapped in a `div`, which is one node drawn as
+    /// two, and that decision belongs with the containers holding two contents.
+    Tooltip,
     /// Scrolling on the named axis: `overflow_y_scroll` or its horizontal
     /// counterpart.
     ///
@@ -100,6 +110,8 @@ pub enum Common {
     All,
     /// Size and box, for a component that draws no text of its own.
     Box,
+    /// Everything, plus what only a gpui element can take — a tooltip.
+    Element,
     /// None, for one that is not `Styled`.
     None,
 }
@@ -289,6 +301,16 @@ pub const COMMON: &[Prop] = &[
     Prop { label: "prop.rounded", target: Target::Family(ROUNDED), kind: Kind::Choice },
 ];
 
+/// The shared properties of a component that is a gpui element of its own.
+///
+/// Not in [`COMMON`], which every entry of the catalogue accepts: a tooltip
+/// needs `StatefulInteractiveElement`, which a `div` has once it carries an
+/// `id` and which no `gpui-component` widget has at all. Posed on everything,
+/// it would be a call that does not compile — the defect this table exists to
+/// prevent.
+pub const INTERACTIVE: &[Prop] =
+    &[Prop { label: "prop.tooltip", target: Target::Tooltip, kind: Kind::Text }];
+
 /// The shared properties that only make sense where there is text.
 ///
 /// Kept apart rather than filtered by name: the list is the answer to "does
@@ -327,7 +349,7 @@ pub const CATALOGUE: &[Spec] = &[
                 kind: Kind::Bool,
             },
         ],
-        common: Common::All,
+        common: Common::Element,
         handler: None,
         state: None,
     },
@@ -351,7 +373,7 @@ pub const CATALOGUE: &[Spec] = &[
                 kind: Kind::Bool,
             },
         ],
-        common: Common::All,
+        common: Common::Element,
         handler: None,
         state: None,
     },
@@ -775,7 +797,7 @@ pub const CATALOGUE: &[Spec] = &[
         default_args: &[],
         default_calls: &[],
         props: &[Prop { label: "prop.flex", target: Target::Flag("flex_1"), kind: Kind::Bool }],
-        common: Common::All,
+        common: Common::Element,
         handler: None,
         state: None,
     },
@@ -784,6 +806,19 @@ pub const CATALOGUE: &[Spec] = &[
 /// `120` becomes `px(120.)`, `12.5` becomes `px(12.5)`.
 fn pixel_literal(value: &str) -> Option<String> {
     Some(format!("px({})", float_literal(value)?))
+}
+
+/// The text of a tooltip closure, when it is one maxx wrote.
+///
+/// Anything else — a closure building something of the developer's own — is
+/// left as it is written, and shown that way in the inspector rather than
+/// half-read.
+pub fn tooltip_text(source: &str) -> Option<String> {
+    let (_, rest) = source.split_once("Tooltip::new(\"")?;
+    let (text, _) = rest.split_once("\")")?;
+    // An escape in there means the literal cannot be read back by splitting on
+    // a quote: the source is shown instead of a text cut in the wrong place.
+    (!text.contains('\\')).then(|| text.to_string())
 }
 
 /// A whole number, as a `usize` literal — or nothing, for anything else.
@@ -895,14 +930,18 @@ pub fn write_binding(node: &mut Node, prop: &Prop, expression: Option<&str>) {
 /// Every property of a component: its own, then the shared style ones.
 pub fn props(spec: &'static Spec) -> Vec<&'static Prop> {
     let shared: &[Prop] = match spec.common {
-        Common::All | Common::Box => COMMON,
+        Common::All | Common::Box | Common::Element => COMMON,
         Common::None => &[],
     };
     let text: &[Prop] = match spec.common {
-        Common::All => TEXT_COMMON,
+        Common::All | Common::Element => TEXT_COMMON,
         _ => &[],
     };
-    spec.props.iter().chain(shared).chain(text).collect()
+    let element: &[Prop] = match spec.common {
+        Common::Element => INTERACTIVE,
+        _ => &[],
+    };
+    spec.props.iter().chain(shared).chain(text).chain(element).collect()
 }
 
 /// Whether any property of `spec` owns the call named `name`.
@@ -922,6 +961,7 @@ pub fn covers(spec: &'static Spec, name: &str) -> bool {
         // a call it might then delete is how a hand-written line disappears
         // without anyone seeing it go.
         Target::Scrollable(method) => method == name,
+        Target::Tooltip => name == "tooltip",
     })
 }
 
@@ -1344,6 +1384,10 @@ pub fn read(node: &Node, prop: &Prop) -> Option<String> {
         Target::Variant(name, _) => {
             node.call(name).and_then(|call| call.args.first()).map(|arg| arg.to_source())
         }
+        Target::Tooltip => {
+            let source = node.call("tooltip")?.args.first()?.to_source();
+            Some(tooltip_text(&source).unwrap_or(source))
+        }
         Target::VariantArg(index, _) => match &node.base {
             Base::Known { args, .. } => args.get(index).map(|arg| arg.to_source()),
             Base::Opaque(_) => None,
@@ -1474,6 +1518,26 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
                 args.push(arg);
             }
         }
+        Target::Tooltip => {
+            if value.trim().is_empty() {
+                node.remove_call("tooltip");
+                return;
+            }
+            // The id first, and for the same reason the scroll needs it: the
+            // call lives on a stateful element, and written before `id` the
+            // chain does not compile. The workspace hands out an id no sibling
+            // is using; this is the fallback for a node written without one.
+            if node.call("id").is_none() {
+                node.set_call("id", Arg::Str("tip".into()));
+            }
+            node.set_call(
+                "tooltip",
+                Arg::Verbatim(format!(
+                    "|window, cx| Tooltip::new(\"{}\").build(window, cx)",
+                    crate::model::escape(value)
+                )),
+            );
+        }
         Target::Flag(name) => node.set_flag(name, value == "true"),
         Target::Scrollable(name) => {
             let hold = hold_for(name);
@@ -1551,6 +1615,14 @@ pub fn imports(root: &Node) -> Vec<&'static str> {
         for call in &node.calls {
             for arg in &call.args {
                 let source = arg.to_source();
+                // Not a prefix, this one: the argument is a closure, and the
+                // type it builds sits in the middle of it.
+                if source.contains("Tooltip::new(") {
+                    let line = "use gpui_component::tooltip::Tooltip;";
+                    if !lines.contains(&line) {
+                        lines.push(line);
+                    }
+                }
                 for (needle, line) in [
                     ("px(", "use gpui::px;"),
                     ("rgb(0x", "use gpui::rgb;"),

@@ -58,6 +58,11 @@ fn every_call_the_catalogue_writes_is_compiled_in_the_example() {
                     }
                 }
                 Target::Scrollable(name) => expect(format!(".{name}()"), prop.label),
+                // The closure gpui takes, and the type it builds inside it.
+                Target::Tooltip => {
+                    expect(".tooltip(".into(), prop.label);
+                    expect("Tooltip::new(".into(), prop.label);
+                }
             }
         }
     }
@@ -114,4 +119,21 @@ fn every_icon_offered_is_an_icon_the_canvas_draws() {
         icons.filter(|icon| !designer.contains(&format!("\"{icon}\" => "))).copied().collect();
 
     assert!(missing.is_empty(), "offered but never drawn: {}", missing.join(", "));
+}
+
+/// The tooltip comes after the id, and the example says so.
+///
+/// `tooltip` lives on a stateful element: gpui offers it only once `id` has
+/// been called, exactly like the scroll above. Written the other way round, the
+/// chain does not compile — in the developer's project, on a line maxx wrote.
+#[test]
+fn the_tooltip_example_keeps_the_id_first() {
+    let compiled = compiled();
+    let line = compiled
+        .lines()
+        .find(|line| line.contains(".tooltip(|") && !line.trim_start().starts_with("//"))
+        .expect("the tooltip closure is compiled nowhere");
+    let id = line.find(".id(").unwrap_or(usize::MAX);
+    let tooltip = line.find(".tooltip(").unwrap_or(0);
+    assert!(id < tooltip, "the id has to come first: {line}");
 }

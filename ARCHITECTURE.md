@@ -336,6 +336,15 @@ n'ouvre pas serait pire que pas d'enregistrement du tout. Et c'est le site de
 construction qui fait foi, pas la ligne `use` : un `main.rs` peut importer
 plusieurs vues, une seule est confiée à `Root`.
 
+**Deux appels ne vivent pas sur un élément ordinaire** : le défilement et
+l'infobulle. gpui ne les offre qu'à un élément *avec état*, c'est-à-dire une
+fois `id` posé — écrits dans l'autre ordre, ils ne compilent pas, dans le
+projet du développeur et sur une ligne que maxx a écrite. D'où leurs cibles à
+eux, `Target::Scrollable` et `Target::Tooltip`, qui posent l'`id` avant. Et
+d'où `Common::Element`, que seules la colonne, la ligne et l'espaceur portent :
+aucun composant de `gpui-component` n'est un élément gpui, donc l'infobulle
+posée sur tous serait un appel qui n'existe pas.
+
 **Ce que le catalogue importe** est conditionnel depuis qu'il écrit des
 variantes. Un appel comme `.primary()` ou `.disabled(…)` vient d'un trait, et
 un trait doit être en portée — mais l'importer dès qu'on voit le composant
