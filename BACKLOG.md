@@ -34,25 +34,24 @@ Ce qui reste de ce côté :
 
 ## Les modules copiés
 
-- **Le `rustfmt` du projet défait l'empreinte.** maxx enregistre dans
-  `maxx.toml` l'empreinte du gabarit tel qu'il l'a écrit ; le projet généré,
-  lui, est mis en forme au `rustfmt` par défaut, qui éclate ce que le gabarit
-  garde sur une ligne. Vérifié sur `demo/` : après un `cargo fmt`,
-  `src/system.rs` et `src/theme.rs` ne correspondent plus à leur empreinte —
-  la table des rôles de la palette passe de dix lignes à quarante — et
-  `outdated_modules` les tient donc pour édités par le développeur, ce qui
-  désactive en silence l'offre de mise à jour. `src/window.rs` et
-  `src/assets.rs` y échappent, mais par chance : ils sont écrits dans une forme
-  que le `rustfmt` par défaut ne touche pas.
+- ~~**Le `rustfmt` du projet défait l'empreinte.**~~ — réparé. maxx
+  reconnaissait un module qu'il avait écrit aux octets qu'il avait laissés, et
+  `cargo fmt` — le geste le plus banal qui soit — change ces octets sans
+  toucher une ligne de code. Mesuré sur les gabarits : la mise en page par
+  défaut déplace dix lignes de `system.rs`, cinquante-six de `theme.rs`, et
+  transforme `else { return }` en `else { return; }` — donc aucune comparaison
+  « aux espaces près » ne rattrape ça. maxx tenait alors le fichier pour édité
+  par le développeur et cessait, **en silence**, de lui proposer les
+  corrections.
 
-  Trois issues, aucune gratuite : écrire tous les gabarits en forme
-  `rustfmt` par défaut — et perdre la table des rôles, qui est précisément ce
-  que `use_small_heuristics = "Max"` protège dans maxx ; comparer sur une forme
-  normalisée plutôt que sur les octets ; ou enregistrer l'empreinte de ce qui
-  est sur le disque après l'écriture plutôt que celle du gabarit. La troisième
-  est la plus petite et la plus honnête — l'empreinte dit « ce que maxx a posé
-  ici », pas « ce que le gabarit contient » — mais elle demande de relire le
-  fichier après la mise en forme, donc de savoir quand elle a eu lieu.
+  `maxx.toml` porte désormais deux empreintes : celle des octets posés, et
+  celle du même texte passé au `rustfmt` **par défaut**, configuration du
+  projet ignorée — un étalon fixe, que les deux côtés d'une comparaison faite à
+  des années d'écart peuvent viser. Un fichier reconnu par l'une ou par l'autre
+  n'a pas été touché. Un commentaire ajouté par le développeur reste une
+  modification, `rustfmt` conservant les commentaires. Sans `rustfmt` sur la
+  machine, ou pour un `maxx.toml` écrit avant cette clé, on retombe sur les
+  octets, c'est-à-dire le comportement précédent.
 
 ## Ce que la zone gérée perdait
 
