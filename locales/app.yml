@@ -53,6 +53,9 @@ component.radio:
 component.row:
   en: "Row"
   fr: "Ligne"
+component.scrollbar:
+  en: "Scrollbar"
+  fr: "Barre de défilement"
 component.select:
   en: "Dropdown"
   fr: "Liste déroulante"
@@ -836,6 +839,9 @@ prop.rounded_full:
 prop.secondary:
   en: "Secondary"
   fr: "Secondaire"
+prop.scrollbar:
+  en: "Visible bar"
+  fr: "Barre visible"
 prop.selected:
   en: "Selected"
   fr: "Sélectionné"

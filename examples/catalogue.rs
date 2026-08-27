@@ -18,7 +18,7 @@
 #![allow(dead_code)]
 
 use gpui::prelude::*;
-use gpui::{FontWeight, ObjectFit, div, img, px, rgb};
+use gpui::{FontWeight, ObjectFit, ScrollHandle, div, img, px, rgb};
 use gpui_component::Disableable;
 use gpui_component::alert::Alert;
 use gpui_component::badge::Badge;
@@ -31,6 +31,7 @@ use gpui_component::label::Label;
 use gpui_component::link::Link;
 use gpui_component::progress::Progress;
 use gpui_component::radio::Radio;
+use gpui_component::scroll::{Scrollbar, ScrollbarAxis};
 use gpui_component::skeleton::Skeleton;
 use gpui_component::slider::{Slider, SliderState};
 use gpui_component::spinner::Spinner;
@@ -102,6 +103,23 @@ fn main() {
     // A tooltip, in the only place gpui offers one: on a stateful element, so
     // after `id` — the same order the scroll needs, and for the same reason.
     let _ = div().id("tip").tooltip(|window, cx| Tooltip::new("Hint").build(window, cx));
+
+    // The visible scrollbar, in the shape the box's property writes: one handle
+    // shared by the box that scrolls and the bar drawn over it, inside a
+    // positioned parent — `Scrollbar` is not `Styled`, so the `div` is what
+    // places it.
+    let handle = ScrollHandle::new();
+    let _ = div().id("scroller").relative().overflow_y_scroll().track_scroll(&handle).child(
+        div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .right_0()
+            .bottom_0()
+            .child(Scrollbar::new(&handle).id("bar").axis(ScrollbarAxis::Vertical)),
+    );
+    let _ = Scrollbar::new(&handle).axis(ScrollbarAxis::Horizontal);
+    let _ = Scrollbar::new(&handle).axis(ScrollbarAxis::Both);
 
     // Every component's own calls, on its own type — which is the half a
     // generic `Styled` check cannot answer.

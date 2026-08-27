@@ -479,6 +479,13 @@ impl Workspace {
         // here, before the catalogue writes the rest.
         let scroll_id = matches!(prop.target, registry::Target::Scrollable(_))
             .then(|| registry::unique_element_id(&view.root));
+        // The bar needs two names no node can decide on its own: an element id
+        // no sibling uses, and a field no other component is bound to. Both are
+        // read here, where the whole tree is.
+        let bar =
+            (matches!(prop.target, registry::Target::Scrollbar) && value == "true").then(|| {
+                (registry::unique_element_id(&view.root), registry::unique_input_field(&view.root))
+            });
         if view.root.at(&selected).is_some() {
             self.checkpoint();
             let view = self.view_mut().expect("just borrowed");
@@ -488,6 +495,9 @@ impl Workspace {
                     && node.call("id").is_none()
                 {
                     node.set_call("id", crate::model::Arg::Str(id));
+                }
+                if let Some((bar_id, field)) = bar {
+                    registry::attach_scrollbar(node, &bar_id, &field);
                 }
                 registry::write(node, prop, value);
             }

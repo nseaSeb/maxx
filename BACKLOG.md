@@ -54,6 +54,28 @@ Ce qui reste de ce côté :
   ici », pas « ce que le gabarit contient » — mais elle demande de relire le
   fichier après la mise en forme, donc de savoir quand elle a eu lieu.
 
+## Ce que la zone gérée perd, et qu'elle ne devrait pas
+
+**Un commentaire écrit entre les marqueurs disparaît au `⌘S` suivant.** Mesuré :
+
+```
+écrit :  v_flex()
+             // le titre de la page
+             .gap_2()
+             .child(Label::new("Nom"))
+relu :   v_flex().gap_2().child(Label::new("Nom"))
+```
+
+`syn` jette les commentaires, et `codegen` réécrit la zone depuis le modèle :
+ce qui n'est pas dans le modèle n'existe plus. Ce n'est pas un manque de
+fonctionnalité, c'est une perte de confiance — le premier commentaire d'un
+développeur qui se met vraiment à coder dans la zone, et l'outil l'a effacé
+sans rien dire.
+
+Il faudrait que le modèle porte les annotations et que le lecteur les récupère
+avant `syn`. C'est un chantier à part entière, et c'est le seul qui rende la
+zone gérée habitable.
+
 ## Composants
 
 - ~~Élargir le catalogue~~ — fait, cinq entrées de plus : bouton radio, lien,

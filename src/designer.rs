@@ -891,8 +891,10 @@ impl Workspace {
             .palette_filter()
             .map(|filter| filter.read(cx).value().to_string())
             .unwrap_or_default();
-        let matching: Vec<_> =
-            registry::CATALOGUE.iter().filter(|spec| matches_query(spec, &query)).collect();
+        let matching: Vec<_> = registry::CATALOGUE
+            .iter()
+            .filter(|spec| spec.palette && matches_query(spec, &query))
+            .collect();
 
         v_flex()
             .child(section_title("designer.components"))
@@ -1508,6 +1510,11 @@ fn preview(
             apply(gpui_component::skeleton::Skeleton::new(), &node.calls).into_any_element()
         }
         Some("Spinner::new") => gpui_component::spinner::Spinner::new().into_any_element(),
+        // The real one needs the handle of a box that scrolls, which the canvas
+        // has no view to hold: a bar of the right shape stands in.
+        Some("Scrollbar::new") => {
+            div().w(px(6.)).h(px(48.)).rounded_full().bg(theme::hover_bg()).into_any_element()
+        }
         // The variant is read back off the node, so the canvas shows the icon
         // the file will draw — and an unknown one is drawn as the fallback
         // rather than guessed at.
