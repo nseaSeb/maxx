@@ -62,13 +62,20 @@ Ce qui reste de ce côté :
   écrivait toujours `px(…)`. D'où `Kind::Ratio`, et `pixel_literal` qui n'est
   plus qu'un enrobage de `float_literal`.
 
-  Ce qui reste hors de portée sans une nouvelle sorte d'argument : **l'icône**,
-  dont le constructeur prend une variante d'énumération et non une chaîne ;
-  **le curseur**, qui vit dans une entité comme le champ texte ; **les variantes
-  de la pastille**, qui sont des constructeurs (`Tag::primary()`) et non des
-  méthodes, donc changer de variante changerait la base du nœud. Et **le badge**
-  n'implémente pas `Styled` : les propriétés communes ne compileraient pas
-  dessus.
+  Ce qui était hors de portée l'est six entrées de moins : **l'icône** a
+  demandé `Target::VariantArg`, une variante d'énumération en argument du
+  constructeur ; **le curseur** et **le sélecteur de couleur** ont réutilisé le
+  `StateSpec` du champ texte ; **les variantes de la pastille** passent par
+  `with_variant`, une méthode, et non par les constructeurs `Tag::primary()`
+  qui changeraient la base du nœud ; **le badge** et **le rouet**
+  n'implémentent pas `Styled`, ce qui est précisément ce que `Common::None`
+  disait déjà ; et **l'ossature** est un `new()` nu.
+
+  Ce qui reste de ce côté : les icônes offertes sont vingt-deux sur les
+  quatre-vingt-huit que porte `IconName`, parce que chacune doit aussi être
+  dessinable par le canvas — `IconName` n'a pas de `FromStr`, donc
+  `designer::icon_named` est une table, tenue à la liste du catalogue par
+  `tests/catalogue.rs`.
 
 - ~~Liste déroulante~~ — faite. Elle a demandé de généraliser la machinerie du
   champ texte plutôt que de la copier : une entrée du catalogue porte

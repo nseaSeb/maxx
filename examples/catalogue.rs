@@ -13,20 +13,30 @@
 //! Nothing is run: `main` builds elements and drops them. It is the compiler
 //! that answers the question.
 
+// The stateful pair below is built by nobody: the compiler is this file's only
+// reader, and what it has to answer is whether the calls exist.
+#![allow(dead_code)]
+
 use gpui::prelude::*;
 use gpui::{FontWeight, ObjectFit, div, img, px, rgb};
 use gpui_component::Disableable;
 use gpui_component::alert::Alert;
+use gpui_component::badge::Badge;
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::checkbox::Checkbox;
+use gpui_component::color_picker::{ColorPicker, ColorPickerState};
 use gpui_component::divider::Divider;
 use gpui_component::group_box::GroupBox;
 use gpui_component::label::Label;
 use gpui_component::link::Link;
 use gpui_component::progress::Progress;
 use gpui_component::radio::Radio;
+use gpui_component::skeleton::Skeleton;
+use gpui_component::slider::{Slider, SliderState};
+use gpui_component::spinner::Spinner;
 use gpui_component::switch::Switch;
-use gpui_component::tag::Tag;
+use gpui_component::tag::{Tag, TagVariant};
+use gpui_component::{Icon, IconName};
 
 fn main() {
     // The layout properties of a column and a row.
@@ -121,6 +131,85 @@ fn main() {
     let _ = Divider::horizontal().label("Divider");
     let _ = Link::new("link").href("https://example.org").disabled(true);
     let _ = Alert::new("alert", "Something happened").title("Note");
-    let _ = Tag::new().outline().rounded_full();
+    let _ = Tag::new()
+        .with_variant(TagVariant::Primary)
+        .with_variant(TagVariant::Secondary)
+        .with_variant(TagVariant::Danger)
+        .with_variant(TagVariant::Success)
+        .with_variant(TagVariant::Warning)
+        .with_variant(TagVariant::Info)
+        .outline()
+        .rounded_full();
     let _ = Progress::new().value(50.);
+
+    // A placeholder and a spinner: no argument, and no `Styled` on the second —
+    // which is why the catalogue gives it `Common::None`, and why the shared
+    // style calls above are not written on it here either.
+    let _ = Skeleton::new().h_4().secondary();
+    let _ = Spinner::new();
+
+    // The badge is the other one outside `Styled`; what it takes are two whole
+    // numbers, which is the whole reason `Kind::Count` exists — `.count(3.)`
+    // does not compile.
+    let _ = Badge::new().count(3).max(99).child(div());
+
+    // Every icon the inspector offers, each written as the file will carry it.
+    for name in [
+        IconName::Check,
+        IconName::Close,
+        IconName::Search,
+        IconName::Settings,
+        IconName::Plus,
+        IconName::Minus,
+        IconName::Info,
+        IconName::TriangleAlert,
+        IconName::CircleCheck,
+        IconName::CircleX,
+        IconName::Star,
+        IconName::Heart,
+        IconName::Bell,
+        IconName::Calendar,
+        IconName::File,
+        IconName::Folder,
+        IconName::Globe,
+        IconName::User,
+        IconName::Copy,
+        IconName::Delete,
+        IconName::Eye,
+        IconName::ArrowRight,
+    ] {
+        let _ = Icon::new(name).text_color(rgb(0x333333));
+    }
+}
+
+/// The two components that take an entity of their own.
+///
+/// Apart from `main` because they need a `Context` to build their state in,
+/// which is exactly what the generated view's `new` gives them — the shape
+/// checked here is the one `StateSpec` writes.
+fn stateful(window: &mut gpui::Window, cx: &mut gpui::Context<Holder>) -> Holder {
+    let slider = cx.new(|_| SliderState::new().min(0.).max(100.).step(1.).default_value(50.));
+    let picker = cx.new(|cx| ColorPickerState::new(window, cx));
+
+    let _ = Slider::new(&slider).horizontal().vertical().disabled(true);
+    let _ = ColorPicker::new(&picker).label("Colour");
+
+    Holder { slider, picker }
+}
+
+/// The view the two entities hang from, as `view::save` declares it.
+struct Holder {
+    slider: gpui::Entity<SliderState>,
+    picker: gpui::Entity<ColorPickerState>,
+}
+
+impl gpui::Render for Holder {
+    fn render(
+        &mut self,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> impl IntoElement {
+        let _ = stateful(window, cx);
+        div().child(Slider::new(&self.slider)).child(ColorPicker::new(&self.picker))
+    }
 }

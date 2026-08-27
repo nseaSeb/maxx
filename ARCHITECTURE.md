@@ -336,6 +336,16 @@ n'ouvre pas serait pire que pas d'enregistrement du tout. Et c'est le site de
 construction qui fait foi, pas la ligne `use` : un `main.rs` peut importer
 plusieurs vues, une seule est confiée à `Root`.
 
+**Ce que le catalogue importe** est conditionnel depuis qu'il écrit des
+variantes. Un appel comme `.primary()` ou `.disabled(…)` vient d'un trait, et
+un trait doit être en portée — mais l'importer dès qu'on voit le composant
+laisse un `use` inutilisé sur le bouton qui n'a pas de variante, donc un
+avertissement dans un projet que maxx vient d'écrire. `Spec::extra_imports`
+tient donc des paires « ces appels demandent cette ligne », et la condition est
+par composant : `outline` est une variante de bouton *et* un drapeau de
+pastille, si bien qu'une table d'appels commune importerait le trait du bouton
+dans un fichier qui n'a que des pastilles.
+
 **Les formes de projet** sont la troisième sorte de code que maxx écrit, après
 les vues qu'il dessine et les modules qu'il copie. `src/ui/shell.rs` — une
 barre latérale et la vue du moment — est du Rust ordinaire écrit une fois à la

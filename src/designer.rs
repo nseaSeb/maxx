@@ -707,6 +707,7 @@ impl Workspace {
             | Kind::Number
             | Kind::Color
             | Kind::Ratio
+            | Kind::Count
             | Kind::Path => {
                 match self.prop_input(prop) {
                     Some(state) if matches!(prop.kind, Kind::Handler) => {
@@ -790,9 +791,18 @@ impl Workspace {
                     // A list of enum variants cycles exactly like a family of
                     // methods: one of them applies, or none.
                     crate::registry::Target::Variant(_, values) => values,
+                    crate::registry::Target::VariantArg(_, values) => values,
                     _ => &[][..],
                 };
-                let next = next_in_family(names, &current);
+                // An argument of the constructor has no empty state to cycle
+                // through: the component does not compile without it.
+                let wraps = !matches!(prop.target, crate::registry::Target::VariantArg(..));
+                let next = match (next_in_family(names, &current).as_str(), wraps) {
+                    ("", false) => {
+                        names.first().map(|name| (*name).to_string()).unwrap_or_default()
+                    }
+                    (next, _) => next.to_string(),
+                };
                 row.child(
                     div()
                         .id(SharedString::from(format!("prop-{}-{}", spec.id, prop.label)))
@@ -1478,6 +1488,54 @@ fn preview(
         Some("Tag::new") => gpui_component::tag::Tag::new()
             .children(children_with_zones(node, path, selected, false, root, cx))
             .into_any_element(),
+        Some("Badge::new") => gpui_component::badge::Badge::new()
+            .count(call_whole(node, "count").unwrap_or(0))
+            .children(children_with_zones(node, path, selected, false, root, cx))
+            .into_any_element(),
+        Some("Skeleton::new") => {
+            apply(gpui_component::skeleton::Skeleton::new(), &node.calls).into_any_element()
+        }
+        Some("Spinner::new") => gpui_component::spinner::Spinner::new().into_any_element(),
+        // The variant is read back off the node, so the canvas shows the icon
+        // the file will draw — and an unknown one is drawn as the fallback
+        // rather than guessed at.
+        Some("Icon::new") => {
+            apply(icon_named(&base_source(node, 0)), &node.calls).into_any_element()
+        }
+        // Two components the canvas cannot build for real: both take an
+        // `Entity<…State>` the project's view owns, and maxx has no such view
+        // to hand them. A faithful lookalike, like the text input above.
+        Some("Slider::new") => div()
+            .h(px(20.))
+            .flex()
+            .items_center()
+            .child(
+                div()
+                    .flex_1()
+                    .h(px(4.))
+                    .rounded_full()
+                    .bg(theme::hover_bg())
+                    .child(div().w_1_2().h(px(4.)).rounded_full().bg(theme::accent())),
+            )
+            .into_any_element(),
+        Some("ColorPicker::new") => h_flex()
+            .gap_2()
+            .items_center()
+            .child(
+                div()
+                    .size(px(16.))
+                    .rounded_sm()
+                    .border_1()
+                    .border_color(theme::border())
+                    .bg(theme::accent()),
+            )
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(theme::text_muted())
+                    .child(SharedString::from(call_text(node, "label", ""))),
+            )
+            .into_any_element(),
         // A live text input on the canvas would swallow the clicks the designer
         // needs, so the preview is a faithful lookalike.
         Some("Input::new") => div()
@@ -1502,6 +1560,59 @@ fn preview(
             .child(crate::tr("designer.rust_code"))
             .into_any_element(),
     }
+}
+
+/// The icon a `IconName::…` path names, as the canvas can draw it.
+///
+/// A table rather than a parse: `IconName` has no `FromStr`, and the eighty-odd
+/// variants are not all offered anyway. `tests/catalogue.rs` holds this list
+/// and `registry::ICONS` to each other, so an icon the inspector offers is
+/// always one the canvas can show.
+fn icon_named(source: &str) -> gpui_component::Icon {
+    use gpui_component::IconName;
+    let name = match source {
+        "IconName::Check" => IconName::Check,
+        "IconName::Close" => IconName::Close,
+        "IconName::Search" => IconName::Search,
+        "IconName::Settings" => IconName::Settings,
+        "IconName::Plus" => IconName::Plus,
+        "IconName::Minus" => IconName::Minus,
+        "IconName::Info" => IconName::Info,
+        "IconName::TriangleAlert" => IconName::TriangleAlert,
+        "IconName::CircleCheck" => IconName::CircleCheck,
+        "IconName::CircleX" => IconName::CircleX,
+        "IconName::Star" => IconName::Star,
+        "IconName::Heart" => IconName::Heart,
+        "IconName::Bell" => IconName::Bell,
+        "IconName::Calendar" => IconName::Calendar,
+        "IconName::File" => IconName::File,
+        "IconName::Folder" => IconName::Folder,
+        "IconName::Globe" => IconName::Globe,
+        "IconName::User" => IconName::User,
+        "IconName::Copy" => IconName::Copy,
+        "IconName::Delete" => IconName::Delete,
+        "IconName::Eye" => IconName::Eye,
+        "IconName::ArrowRight" => IconName::ArrowRight,
+        // Anything else is a variant written by hand, which the canvas cannot
+        // resolve: an asterisk stands in rather than a wrong icon being drawn.
+        _ => IconName::Asterisk,
+    };
+    gpui_component::Icon::new(name)
+}
+
+/// The source text of a base argument, or the empty string.
+fn base_source(node: &Node, index: usize) -> String {
+    match &node.base {
+        crate::model::Base::Known { args, .. } => {
+            args.get(index).map(|arg| arg.to_source()).unwrap_or_default()
+        }
+        crate::model::Base::Opaque(_) => String::new(),
+    }
+}
+
+/// The whole-number argument of a one-argument call, when it reads as one.
+fn call_whole(node: &Node, name: &str) -> Option<usize> {
+    node.call(name)?.args.first()?.to_source().parse().ok()
 }
 
 /// The string argument of a one-argument call, or `fallback`.

@@ -8,12 +8,18 @@ about.title:
 component.alert:
   en: "Alert"
   fr: "Alerte"
+component.badge:
+  en: "Badge"
+  fr: "Pastille de compte"
 component.button:
   en: "Button"
   fr: "Bouton"
 component.checkbox:
   en: "Checkbox"
   fr: "Case à cocher"
+component.color_picker:
+  en: "Colour picker"
+  fr: "Sélecteur de couleur"
 component.column:
   en: "Column"
   fr: "Colonne"
@@ -26,6 +32,9 @@ component.group_box:
 component.image:
   en: "Image"
   fr: "Image"
+component.icon:
+  en: "Icon"
+  fr: "Icône"
 component.input:
   en: "Text field"
   fr: "Champ texte"
@@ -47,9 +56,18 @@ component.row:
 component.select:
   en: "Dropdown"
   fr: "Liste déroulante"
+component.skeleton:
+  en: "Placeholder"
+  fr: "Ossature"
+component.slider:
+  en: "Slider"
+  fr: "Curseur"
 component.spacer:
   en: "Elastic space"
   fr: "Espace élastique"
+component.spinner:
+  en: "Spinner"
+  fr: "Rouet"
 component.switch:
   en: "Switch"
   fr: "Interrupteur"
@@ -752,12 +770,18 @@ prop.action:
 prop.align:
   en: "Alignment"
   fr: "Alignement"
+prop.axis:
+  en: "Direction"
+  fr: "Sens"
 prop.background:
   en: "Background"
   fr: "Fond"
 prop.bound_field:
   en: "Bound field"
   fr: "Champ lié"
+prop.count:
+  en: "Count"
+  fr: "Nombre"
 prop.checked:
   en: "Checked"
   fr: "Cochée"
@@ -785,6 +809,12 @@ prop.id:
 prop.label:
   en: "Label"
   fr: "Libellé"
+prop.icon:
+  en: "Icon"
+  fr: "Icône"
+prop.max:
+  en: "Beyond"
+  fr: "Au-delà de"
 prop.message:
   en: "Message"
   fr: "Message"
@@ -803,6 +833,9 @@ prop.rounded:
 prop.rounded_full:
   en: "Fully rounded"
   fr: "Arrondi complet"
+prop.secondary:
+  en: "Secondary"
+  fr: "Secondaire"
 prop.selected:
   en: "Selected"
   fr: "Sélectionné"

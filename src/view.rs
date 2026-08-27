@@ -381,10 +381,18 @@ fn ensure_state_field(source: String, field: &str, state: &registry::StateSpec) 
         let initializer = format!("            {field}: {},\n", state.initializer);
         source = insert_into_block(source, brace, &initializer);
         // The template's `new` ignores its arguments; the field needs them.
+        // `cx` always — an entity is built with it — but `window` only when
+        // this initializer asks for one: a slider's state does not, and a
+        // parameter renamed for nothing leaves an unused-variable warning in
+        // the project maxx just wrote.
         source = source.replace(
             "pub fn new(_window: &mut Window, _cx: &mut Context<Self>)",
-            "pub fn new(window: &mut Window, cx: &mut Context<Self>)",
+            "pub fn new(_window: &mut Window, cx: &mut Context<Self>)",
         );
+        if state.initializer.contains("window") {
+            source = source
+                .replace("pub fn new(_window: &mut Window,", "pub fn new(window: &mut Window,");
+        }
     }
 
     source

@@ -26,6 +26,14 @@ pub enum Target {
     /// what goes into the file — and because the inspector shows them as they
     /// are written, the way it already shows `gap_2` rather than "medium".
     Variant(&'static str, &'static [&'static str]),
+    /// One variant of an enumeration, as an argument of the constructor:
+    /// `Icon::new(IconName::Search)`.
+    ///
+    /// Apart from [`Target::Variant`], which puts one in a method: an argument
+    /// of the base is not a call that can be added and removed — it is there or
+    /// the component does not compile — so the empty choice does not exist
+    /// here.
+    VariantArg(usize, &'static [&'static str]),
     /// Scrolling on the named axis: `overflow_y_scroll` or its horizontal
     /// counterpart.
     ///
@@ -58,6 +66,11 @@ pub enum Kind {
     /// Distinct from [`Kind::Number`], which is a length and wears `px(…)`.
     /// Writing a ratio as a length would not compile in the generated project.
     Ratio,
+    /// A whole number, written bare: `.count(3)`.
+    ///
+    /// Distinct from [`Kind::Ratio`], which writes `3.`: the counts of a badge
+    /// are `usize`, and a float literal there does not compile.
+    Count,
     /// A colour, written as `rgb(0x<value>)`.
     Color,
     /// A file of the project, written as `"<value>"`, relative to the root.
@@ -115,13 +128,20 @@ pub struct Spec {
     pub label: &'static str,
     /// Constructor path emitted in the generated code.
     pub base: &'static str,
-    /// The `use` lines the generated file needs for this component.
-    ///
-    /// A list and not one line: a variant or a `disabled` comes from a trait,
-    /// and a trait has to be in scope. With the type alone, the call is a
-    /// method the generated project does not have — and it says so only when
-    /// the developer builds it.
+    /// The `use` lines the generated file always needs for this component.
     pub imports: &'static [&'static str],
+    /// The `use` lines it needs only once a given call is written.
+    ///
+    /// A variant or a `disabled` comes from a trait, and a trait has to be in
+    /// scope: with the type alone, the call is a method the generated project
+    /// does not have, and it says so only when the developer builds it. But
+    /// imported on sight of the component, the trait is unused on the button
+    /// that has no variant — a warning in a project maxx has just written.
+    ///
+    /// Hence the condition, and hence its being held per component: `outline`
+    /// is a variant of a button and a flag of a tag, so a table of call names
+    /// alone would import the button's trait into a file that only has tags.
+    pub extra_imports: &'static [(&'static [&'static str], &'static str)],
     /// Whether this component accepts children.
     pub container: bool,
     /// Constructor arguments used when the component is first dropped.
@@ -205,6 +225,54 @@ const OBJECT_FITS: &[&str] = &[
     "ObjectFit::None",
 ];
 
+/// The variants of a tag, as `Tag::with_variant` takes them.
+///
+/// The method and not the constructors — `Tag::primary()` is one too — because
+/// changing the variant would otherwise change the node's base, and the tree
+/// would lose the calls hanging off it.
+const TAG_VARIANTS: &[&str] = &[
+    "TagVariant::Primary",
+    "TagVariant::Secondary",
+    "TagVariant::Danger",
+    "TagVariant::Success",
+    "TagVariant::Warning",
+    "TagVariant::Info",
+];
+
+/// The direction a slider runs in.
+const SLIDER_AXES: &[&str] = &["horizontal", "vertical"];
+
+/// The icons offered in the inspector.
+///
+/// A choice out of the eighty-eight `IconName` carries: a list that long is not
+/// a list one picks from, and every name here is drawn on the canvas by
+/// `designer::icon_named`, which is what `tests/catalogue.rs` holds the two
+/// sides to.
+const ICONS: &[&str] = &[
+    "IconName::Check",
+    "IconName::Close",
+    "IconName::Search",
+    "IconName::Settings",
+    "IconName::Plus",
+    "IconName::Minus",
+    "IconName::Info",
+    "IconName::TriangleAlert",
+    "IconName::CircleCheck",
+    "IconName::CircleX",
+    "IconName::Star",
+    "IconName::Heart",
+    "IconName::Bell",
+    "IconName::Calendar",
+    "IconName::File",
+    "IconName::Folder",
+    "IconName::Globe",
+    "IconName::User",
+    "IconName::Copy",
+    "IconName::Delete",
+    "IconName::Eye",
+    "IconName::ArrowRight",
+];
+
 const ROUNDED: &[&str] =
     &["rounded_none", "rounded_sm", "rounded_md", "rounded_lg", "rounded_full"];
 
@@ -244,6 +312,7 @@ pub const CATALOGUE: &[Spec] = &[
         label: "component.column",
         base: "v_flex",
         imports: &["use gpui_component::v_flex;"],
+        extra_imports: &[],
         container: true,
         default_args: &[],
         default_calls: &[],
@@ -267,6 +336,7 @@ pub const CATALOGUE: &[Spec] = &[
         label: "component.row",
         base: "h_flex",
         imports: &["use gpui_component::h_flex;"],
+        extra_imports: &[],
         container: true,
         default_args: &[],
         default_calls: &[],
@@ -290,6 +360,7 @@ pub const CATALOGUE: &[Spec] = &[
         label: "component.label",
         base: "Label::new",
         imports: &["use gpui_component::label::Label;"],
+        extra_imports: &[],
         container: false,
         default_args: &["Label"],
         default_calls: &[],
@@ -303,6 +374,7 @@ pub const CATALOGUE: &[Spec] = &[
         label: "component.input",
         base: "Input::new",
         imports: &["use gpui_component::input::Input;"],
+        extra_imports: &[],
         container: false,
         default_args: &[],
         default_calls: &[],
@@ -320,6 +392,7 @@ pub const CATALOGUE: &[Spec] = &[
         label: "component.select",
         base: "Select::new",
         imports: &["use gpui_component::select::Select;"],
+        extra_imports: &[],
         container: false,
         default_args: &[],
         default_calls: &[],
@@ -347,9 +420,10 @@ pub const CATALOGUE: &[Spec] = &[
         // The variants come from a trait, and a trait has to be in scope: with
         // `Button` alone, `.primary()` is a method the generated project does
         // not have, and it says so only when the developer builds it.
-        imports: &[
-            "use gpui_component::button::{Button, ButtonVariants};",
-            "use gpui_component::Disableable;",
+        imports: &["use gpui_component::button::Button;"],
+        extra_imports: &[
+            (VARIANTS, "use gpui_component::button::ButtonVariants;"),
+            (&["disabled"], "use gpui_component::Disableable;"),
         ],
         container: false,
         default_args: &["button"],
@@ -371,6 +445,7 @@ pub const CATALOGUE: &[Spec] = &[
         label: "component.checkbox",
         base: "Checkbox::new",
         imports: &["use gpui_component::checkbox::Checkbox;"],
+        extra_imports: &[],
         container: false,
         default_args: &["checkbox"],
         default_calls: &[],
@@ -389,6 +464,7 @@ pub const CATALOGUE: &[Spec] = &[
         label: "component.switch",
         base: "Switch::new",
         imports: &["use gpui_component::switch::Switch;"],
+        extra_imports: &[],
         container: false,
         default_args: &["switch"],
         default_calls: &[],
@@ -407,6 +483,7 @@ pub const CATALOGUE: &[Spec] = &[
         label: "component.group_box",
         base: "GroupBox::new",
         imports: &["use gpui_component::group_box::GroupBox;"],
+        extra_imports: &[],
         container: true,
         default_args: &[],
         default_calls: &[],
@@ -420,6 +497,7 @@ pub const CATALOGUE: &[Spec] = &[
         label: "component.divider",
         base: "Divider::horizontal",
         imports: &["use gpui_component::divider::Divider;"],
+        extra_imports: &[],
         container: false,
         default_args: &[],
         default_calls: &[],
@@ -432,7 +510,8 @@ pub const CATALOGUE: &[Spec] = &[
         id: "radio",
         label: "component.radio",
         base: "Radio::new",
-        imports: &["use gpui_component::radio::Radio;", "use gpui_component::Disableable;"],
+        imports: &["use gpui_component::radio::Radio;"],
+        extra_imports: &[(&["disabled"], "use gpui_component::Disableable;")],
         container: false,
         default_args: &["radio"],
         default_calls: &[],
@@ -451,7 +530,8 @@ pub const CATALOGUE: &[Spec] = &[
         id: "link",
         label: "component.link",
         base: "Link::new",
-        imports: &["use gpui_component::link::Link;", "use gpui_component::Disableable;"],
+        imports: &["use gpui_component::link::Link;"],
+        extra_imports: &[(&["disabled"], "use gpui_component::Disableable;")],
         // `Link` is a `ParentElement`: its text is a child, not an argument. A
         // label dropped inside it is what writes it.
         container: true,
@@ -471,6 +551,7 @@ pub const CATALOGUE: &[Spec] = &[
         label: "component.alert",
         base: "Alert::new",
         imports: &["use gpui_component::alert::Alert;"],
+        extra_imports: &[],
         container: false,
         default_args: &["alert", "Message"],
         default_calls: &[],
@@ -488,10 +569,16 @@ pub const CATALOGUE: &[Spec] = &[
         label: "component.tag",
         base: "Tag::new",
         imports: &["use gpui_component::tag::Tag;"],
+        extra_imports: &[(&["with_variant"], "use gpui_component::tag::TagVariant;")],
         container: true,
         default_args: &[],
         default_calls: &[],
         props: &[
+            Prop {
+                label: "prop.variant",
+                target: Target::Variant("with_variant", TAG_VARIANTS),
+                kind: Kind::Choice,
+            },
             Prop { label: "prop.outline", target: Target::Flag("outline"), kind: Kind::Bool },
             Prop {
                 label: "prop.rounded_full",
@@ -508,6 +595,7 @@ pub const CATALOGUE: &[Spec] = &[
         label: "component.progress",
         base: "Progress::new",
         imports: &["use gpui_component::progress::Progress;"],
+        extra_imports: &[],
         container: false,
         default_args: &[],
         default_calls: &[],
@@ -521,6 +609,7 @@ pub const CATALOGUE: &[Spec] = &[
         label: "component.image",
         base: "img",
         imports: &["use gpui::img;"],
+        extra_imports: &[],
         container: false,
         default_args: &["assets/images/image.png"],
         // A photograph is two thousand pixels wide, and a view is five hundred:
@@ -547,10 +636,141 @@ pub const CATALOGUE: &[Spec] = &[
         state: None,
     },
     Spec {
+        id: "slider",
+        label: "component.slider",
+        base: "Slider::new",
+        imports: &["use gpui_component::slider::Slider;"],
+        extra_imports: &[],
+        container: false,
+        default_args: &[],
+        default_calls: &[],
+        props: &[
+            Prop { label: "prop.bound_field", target: Target::BaseArg(0), kind: Kind::Field },
+            Prop { label: "prop.axis", target: Target::Family(SLIDER_AXES), kind: Kind::Choice },
+            Prop { label: "prop.disabled", target: Target::Method("disabled"), kind: Kind::Bool },
+        ],
+        // No text of its own, so no text size and no weight — five rows that do
+        // nothing would drown the three that matter.
+        common: Common::Box,
+        handler: None,
+        // The bounds live in the initializer, so in the code you edit by hand:
+        // maxx writes a nought-to-a-hundred slider so that something moves, and
+        // does not pretend to own the range.
+        state: Some(StateSpec {
+            ty: "Entity<SliderState>",
+            imports: &["use gpui::Entity;", "use gpui_component::slider::SliderState;"],
+            initializer: "cx.new(|_| SliderState::new().min(0.).max(100.).step(1.).default_value(50.))",
+        }),
+    },
+    Spec {
+        id: "color_picker",
+        label: "component.color_picker",
+        base: "ColorPicker::new",
+        imports: &["use gpui_component::color_picker::ColorPicker;"],
+        extra_imports: &[],
+        container: false,
+        default_args: &[],
+        default_calls: &[],
+        props: &[
+            Prop { label: "prop.bound_field", target: Target::BaseArg(0), kind: Kind::Field },
+            Prop { label: "prop.label", target: Target::Method("label"), kind: Kind::Text },
+        ],
+        common: Common::All,
+        handler: None,
+        state: Some(StateSpec {
+            ty: "Entity<ColorPickerState>",
+            imports: &["use gpui::Entity;", "use gpui_component::color_picker::ColorPickerState;"],
+            initializer: "cx.new(|cx| ColorPickerState::new(window, cx))",
+        }),
+    },
+    Spec {
+        id: "skeleton",
+        label: "component.skeleton",
+        base: "Skeleton::new",
+        imports: &["use gpui_component::skeleton::Skeleton;"],
+        extra_imports: &[],
+        container: false,
+        default_args: &[],
+        // A placeholder with no height of its own is a placeholder nobody sees.
+        default_calls: &["h_4"],
+        props: &[Prop {
+            label: "prop.secondary",
+            target: Target::Flag("secondary"),
+            kind: Kind::Bool,
+        }],
+        common: Common::Box,
+        handler: None,
+        state: None,
+    },
+    Spec {
+        id: "spinner",
+        label: "component.spinner",
+        base: "Spinner::new",
+        imports: &["use gpui_component::spinner::Spinner;"],
+        extra_imports: &[],
+        container: false,
+        default_args: &[],
+        default_calls: &[],
+        props: &[],
+        // `Spinner` does not implement `Styled`: the shared style calls would
+        // not compile on it, and the developer would find out, not maxx.
+        common: Common::None,
+        handler: None,
+        state: None,
+    },
+    Spec {
+        id: "badge",
+        label: "component.badge",
+        base: "Badge::new",
+        imports: &["use gpui_component::badge::Badge;"],
+        extra_imports: &[],
+        // It wraps what it marks — an icon, a button — rather than standing on
+        // its own.
+        container: true,
+        default_args: &[],
+        default_calls: &[],
+        props: &[
+            Prop { label: "prop.count", target: Target::Method("count"), kind: Kind::Count },
+            Prop { label: "prop.max", target: Target::Method("max"), kind: Kind::Count },
+        ],
+        // `Badge` does not implement `Styled` either. This is the case the flag
+        // was made for.
+        common: Common::None,
+        handler: None,
+        state: None,
+    },
+    Spec {
+        id: "icon",
+        label: "component.icon",
+        base: "Icon::new",
+        // Both always: the variant is the constructor's argument, so it is
+        // there from the moment the icon is.
+        imports: &["use gpui_component::{Icon, IconName};"],
+        extra_imports: &[],
+        container: false,
+        default_args: &["IconName::Check"],
+        default_calls: &[],
+        props: &[
+            Prop { label: "prop.icon", target: Target::VariantArg(0, ICONS), kind: Kind::Choice },
+            // An icon's colour is its text colour: it is drawn as an `svg`
+            // taking `text_color`, which is why it is here rather than among
+            // the shared text properties an icon has no use for.
+            Prop {
+                label: "prop.text_color",
+                target: Target::Method("text_color"),
+                kind: Kind::Color,
+            },
+        ],
+        common: Common::Box,
+        handler: None,
+        state: None,
+    },
+    Spec {
         id: "spacer",
         label: "component.spacer",
         base: "div",
         imports: &["use gpui::div;"],
+        extra_imports: &[],
         container: false,
         default_args: &[],
         default_calls: &[],
@@ -571,6 +791,15 @@ fn pixel_literal(value: &str) -> Option<String> {
 ///
 /// `f32::from_str` accepts spellings `rustc` does not, and emitting one leaves
 /// the generated project unbuildable.
+/// A whole number, as a `usize` literal — or nothing, for anything else.
+fn whole_literal(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() || !value.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    value.parse::<usize>().ok().map(|number| number.to_string())
+}
+
 fn float_literal(value: &str) -> Option<String> {
     let value = value.trim();
     let digits = value.strip_prefix('-').unwrap_or(value);
@@ -680,7 +909,7 @@ pub fn props(spec: &'static Spec) -> Vec<&'static Prop> {
 /// too.
 pub fn covers(spec: &'static Spec, name: &str) -> bool {
     props(spec).into_iter().any(|prop| match prop.target {
-        Target::BaseArg(_) => false,
+        Target::BaseArg(_) | Target::VariantArg(..) => false,
         Target::Method(method) | Target::Flag(method) => method == name,
         Target::Family(names) => names.contains(&name),
         Target::Variant(method, _) => method == name,
@@ -755,9 +984,11 @@ pub fn of(node: &Node) -> Option<&'static Spec> {
 /// Builds a fresh node for the component `id`.
 pub fn instantiate(id: &str) -> Option<Node> {
     let spec = by_id(id)?;
-    let args = if spec.id == "input" {
-        // A text input needs an `InputState` on the view; the scaffold adds the
-        // field, the chain references it.
+    let args = if spec.state.is_some() {
+        // A stateful component — a text input, a dropdown, a slider, a colour
+        // picker — is not a value but an entity the view owns: it takes a
+        // reference to a field, `view::save` declares it, and the caller gives
+        // it a name no sibling is using.
         vec![Arg::Verbatim("&self.field".into())]
     } else {
         // Per argument, and not from the first property: a component whose
@@ -768,14 +999,18 @@ pub fn instantiate(id: &str) -> Option<Node> {
             .iter()
             .enumerate()
             .map(|(index, value)| {
-                let kind = spec.props.iter().find_map(|prop| match prop.target {
-                    Target::BaseArg(at) if at == index => Some(prop.kind),
+                let target = spec.props.iter().find_map(|prop| match prop.target {
+                    Target::BaseArg(at) if at == index => Some((prop.target, prop.kind)),
+                    Target::VariantArg(at, _) if at == index => Some((prop.target, prop.kind)),
                     _ => None,
                 });
-                match kind {
+                match target {
                     // The encoder is the one `write` uses, so a fresh node and
                     // an edited one hold the same shape.
-                    Some(Kind::Path) => path_arg(None, value),
+                    Some((_, Kind::Path)) => path_arg(None, value),
+                    // A variant is a path, not a string: `Icon::new("IconName::Check")`
+                    // does not compile.
+                    Some((Target::VariantArg(..), _)) => Arg::Verbatim((*value).into()),
                     _ => Arg::Str((*value).into()),
                 }
             })
@@ -1092,17 +1327,24 @@ pub fn read(node: &Node, prop: &Prop) -> Option<String> {
             }),
             Base::Opaque(_) => None,
         },
-        Target::Method(name) if matches!(prop.kind, Kind::Number | Kind::Color | Kind::Ratio) => {
+        Target::Method(name)
+            if matches!(prop.kind, Kind::Number | Kind::Color | Kind::Ratio | Kind::Count) =>
+        {
             let source = node.call(name)?.args.first()?.to_source();
             match prop.kind {
                 Kind::Number => number_value(&source),
                 Kind::Ratio => Some(source.trim_end_matches('.').to_string()),
+                Kind::Count => Some(source),
                 _ => color_value(&source),
             }
         }
         Target::Variant(name, _) => {
             node.call(name).and_then(|call| call.args.first()).map(|arg| arg.to_source())
         }
+        Target::VariantArg(index, _) => match &node.base {
+            Base::Known { args, .. } => args.get(index).map(|arg| arg.to_source()),
+            Base::Opaque(_) => None,
+        },
         Target::Method(name) if matches!(prop.kind, Kind::Handler) => node
             .call(name)
             .and_then(|call| call.args.first())
@@ -1176,6 +1418,13 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
                 node.set_call(name, Arg::Verbatim(literal));
             }
         }
+        Target::Method(name) if matches!(prop.kind, Kind::Count) => {
+            if value.trim().is_empty() {
+                node.remove_call(name);
+            } else if let Some(literal) = whole_literal(value) {
+                node.set_call(name, Arg::Verbatim(literal));
+            }
+        }
         Target::Method(name) if matches!(prop.kind, Kind::Color) => {
             let hex = value.trim().trim_start_matches('#');
             if hex.is_empty() {
@@ -1203,6 +1452,23 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
                 node.remove_call(name);
             } else if values.contains(&value) {
                 node.set_call(name, Arg::Verbatim(value.to_string()));
+            }
+        }
+        // No empty case: the argument is what the constructor takes, and a
+        // component without it does not compile. A value the table does not
+        // know is refused rather than written.
+        Target::VariantArg(index, values) => {
+            if !values.contains(&value) {
+                return;
+            }
+            let Base::Known { args, .. } = &mut node.base else {
+                return;
+            };
+            let arg = Arg::Verbatim(value.to_string());
+            if index < args.len() {
+                args[index] = arg;
+            } else {
+                args.push(arg);
             }
         }
         Target::Flag(name) => node.set_flag(name, value == "true"),
@@ -1258,6 +1524,11 @@ pub fn imports(root: &Node) -> Vec<&'static str> {
         if let Some(spec) = of(node) {
             for line in spec.imports {
                 if !lines.contains(line) {
+                    lines.push(line);
+                }
+            }
+            for (calls, line) in spec.extra_imports {
+                if calls.iter().any(|call| node.call(call).is_some()) && !lines.contains(line) {
                     lines.push(line);
                 }
             }
