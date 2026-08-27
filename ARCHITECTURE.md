@@ -321,6 +321,21 @@ modifié n'est jamais remplacé**, il est signalé. C'est une troisième voie en
 l'extraction d'un crate — qui casserait la promesse « un projet généré ne doit
 rien à maxx » — et la génération du gabarit depuis le code de maxx.
 
+Le même fichier porte **le projet lui-même**, et pas seulement ce qu'il a
+emprunté : la vue sur laquelle sa fenêtre s'ouvre, et la ligne cargo qui le
+lance — profil, features, arguments passés à l'application. Les deux étaient
+écrits dans la pierre : la vue d'entrée dans `main.rs`, le lancement en `cargo
+run` nu. Un projet qui voulait `--release`, une feature ou un autre premier
+écran n'avait nulle part où le dire. Chaque clé est facultative, et un projet
+qui n'en pose aucune se comporte exactement comme avant.
+
+Déplacer la vue d'entrée écrit à deux endroits qui doivent s'accorder :
+`src/main.rs`, qui ouvre réellement la fenêtre, et `maxx.toml`, où maxx la
+relit. Le code d'abord — un `maxx.toml` qui annonce une entrée que le code
+n'ouvre pas serait pire que pas d'enregistrement du tout. Et c'est le site de
+construction qui fait foi, pas la ligne `use` : un `main.rs` peut importer
+plusieurs vues, une seule est confiée à `Root`.
+
 Le garde-fou qui fait tenir l'ensemble est dans `tests/modules.rs` : il retient
 l'empreinte de chaque gabarit à sa version courante. Modifier un gabarit fait
 échouer ce test, ce qui oblige à décider si la correction doit atteindre les

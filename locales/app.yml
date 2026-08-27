@@ -422,6 +422,9 @@ menu.save:
 menu.select_all:
   en: "Select All"
   fr: "Tout sélectionner"
+menu.set_entry_view:
+  en: "Open the window on this view"
+  fr: "Ouvrir la fenêtre sur cette vue"
 menu.shortcut:
   en: "Shortcut"
   fr: "Raccourci"
@@ -485,6 +488,12 @@ message.conflict_both:
 message.entry_is_system:
   en: "this entry is delegated to the system — it has no handler"
   fr: "cette entrée est déléguée au système — elle n'a pas de gestionnaire"
+message.entry_outside_ui:
+  en: "the view the window opens on lives in src/ui/"
+  fr: "la vue sur laquelle la fenêtre s'ouvre vit dans src/ui/"
+message.entry_set:
+  en: "the window opens on “%{name}”"
+  fr: "la fenêtre s'ouvre sur « %{name} »"
 message.field_added:
   en: "field “%{name}” added"
   fr: "champ « %{name} » ajouté"

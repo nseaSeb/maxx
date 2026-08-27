@@ -1,9 +1,22 @@
 # Written by maxx, and to be versioned with the project.
 #
-# It says what this project took from maxx: which modules, in which
-# version, and the fingerprint they had on the way out. That is what lets
-# maxx offer a fix later — and never replace a file you have changed
-# since.
+# It carries the project: the view its window opens on, how it is
+# launched — profile, features, arguments — and what it took from maxx,
+# which modules, in which version, and the fingerprint they had on the
+# way out. That last part is what lets maxx offer a fix later — and never
+# replace a file you have changed since.
+#
+# [project]
+# entry = "home"          # the module under src/ui/ the window opens on
+#
+# [run]
+# profile = "release"     # cargo run --profile release
+# features = ["demo"]
+# default-features = false
+# args = ["--verbose"]    # handed to the application, after --
+
+[project]
+entry = "home"
 
 [modules.assets]
 version = 1

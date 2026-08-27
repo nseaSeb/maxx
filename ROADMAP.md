@@ -66,10 +66,17 @@ maigre : `Fichier ▸ Nouveau projet…` écrit toujours le même squelette.
   application à réglages. `Sidebar` et `title_bar` de `gpui-component` arrivent
   par là, et pas par la palette de composants : ce ne sont pas des éléments à
   déposer, ce sont des formes de projet.
-- **`maxx.toml` porte le projet, pas seulement les modules.** Aujourd'hui la
-  vue d'entrée est écrite en dur dans `main_rs()` et la commande de lancement
-  est toujours `cargo run`, sans profil ni features. C'est le même fichier qui
-  les accueillera.
+- ~~**`maxx.toml` porte le projet, pas seulement les modules.**~~ — fait. Deux
+  sections facultatives : `[project] entry` dit la vue sur laquelle la fenêtre
+  s'ouvre, `[run]` dit le profil, les features et les arguments de
+  l'application. Un projet qui n'en pose aucune est lancé comme avant.
+
+  Déplacer l'entrée écrit à deux endroits qui doivent s'accorder — `main.rs`
+  d'abord, le fichier ensuite —, et c'est le site de construction
+  (`::new(window, cx)`) qui dit quelle vue est l'entrée, pas la ligne `use` :
+  un `main.rs` peut en importer plusieurs, une seule est confiée à `Root`. Le
+  type est lu dans le fichier de la vue et non déduit de son nom, sans quoi une
+  vue adoptée d'ailleurs serait importée sous un type qui n'existe pas.
 - ~~**Le composant image**~~ — fait. `gpui::img` accepte un `&str`, cherché
   dans l'`AssetSource` que le projet généré ne déclare pas, ou un chemin lu
   depuis le répertoire courant : c'est le chemin **relatif à la racine** qui
@@ -100,7 +107,7 @@ maigre : `Fichier ▸ Nouveau projet…` écrit toujours le même squelette.
 
 ~~Critère de fin de chantier~~ — atteint : *créer un projet, y déposer une
 image, le lancer, le fermer, le rouvrir — et retrouver la fenêtre où on l'avait
-laissée.* Restent les modèles de projet et `maxx.toml`.
+laissée.* Restent les modèles de projet.
 
 ### 2. Le catalogue — ce qu'on peut déposer
 

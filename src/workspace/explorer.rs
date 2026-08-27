@@ -134,6 +134,10 @@ impl Workspace {
             Some(project) => flatten(&project.root, &self.expanded),
             None => Vec::new(),
         };
+        self.entry_view = self.project.as_ref().and_then(|project| {
+            crate::projectfile::entry(&project.root)
+                .map(|module| project.root.join(format!("src/ui/{module}.rs")))
+        });
     }
 
     pub(super) fn render_project_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -207,6 +211,11 @@ impl Workspace {
                 menu.menu(crate::tr("context.new_view"), Box::new(crate::actions::NewView))
                     .menu(crate::tr("context.delete"), Box::new(crate::actions::DeleteFile))
                     .separator()
+                    .menu(
+                        crate::tr("menu.set_entry_view"),
+                        Box::new(crate::actions::SetEntryView),
+                    )
+                    .separator()
                     .menu(crate::tr("context.view_code"), Box::new(crate::actions::ViewCode))
                     .menu(crate::tr("context.reveal"), Box::new(crate::actions::RevealInFinder))
                     .menu(
@@ -218,6 +227,7 @@ impl Workspace {
 
     fn render_entry(&self, entry: Entry, cx: &mut Context<Self>) -> AnyElement {
         let is_selected = self.selected.as_deref() == Some(entry.path.as_path());
+        let is_entry = self.entry_view.as_deref() == Some(entry.path.as_path());
         let is_expanded = self.expanded.contains(&entry.path);
         let marker = if entry.is_dir { if is_expanded { "▾" } else { "▸" } } else { " " };
         let path = entry.path.clone();
@@ -249,6 +259,12 @@ impl Workspace {
                     .when(is_dir, |this| this.text_color(theme::accent()))
                     .child(entry.name.clone()),
             )
+            // The view the window opens on, marked where the files are rather
+            // than on the tab strip: it stays true when the view is closed,
+            // which is when the question comes up.
+            .when(is_entry, |this| {
+                this.child(div().text_xs().text_color(theme::accent()).child("●"))
+            })
             .on_click(cx.listener(move |this, _, _window, cx| {
                 if is_dir {
                     this.toggle_expanded(path.clone(), cx);
