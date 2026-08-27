@@ -59,6 +59,10 @@ impl Render for Home {
         v_flex()
             .id("home")
             .size_full()
+            // A comment written inside the region maxx owns, and left here on
+            // purpose: it used to disappear at the next save. The demo is what
+            // proves it does not — `tests/demo.rs` rewrites this view and
+            // requires the file to come out byte for byte the same.
             .overflow_y_scroll()
             .gap_4()
             .p_4()

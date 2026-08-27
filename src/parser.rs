@@ -341,7 +341,11 @@ pub fn parse(source: &str) -> Result<(Node, Region), Error> {
     let expr: Expr = syn::parse_str(inner).map_err(Error::Syntax)?;
     // Spans are relative to the string handed to `parse_str`, so the node's
     // verbatim slices index into that same string.
-    Ok((node_from_expr(&expr, inner), region))
+    let mut comments = comments_in(inner);
+    let mut node = node_from_expr(&expr, inner, &mut comments);
+    // Whatever stands after the whole expression, which no node's span covers.
+    node.trailing.extend(comments.drain(..).map(|(_, text)| text));
+    Ok((node, region))
 }
 
 /// Reads a lone builder expression, outside any file.
@@ -353,7 +357,10 @@ pub fn parse(source: &str) -> Result<(Node, Region), Error> {
 pub fn parse_expr(source: &str) -> Result<Node, Error> {
     let source = source.trim();
     let expr: Expr = syn::parse_str(source).map_err(Error::Syntax)?;
-    Ok(node_from_expr(&expr, source))
+    let mut comments = comments_in(source);
+    let mut node = node_from_expr(&expr, source, &mut comments);
+    node.trailing.extend(comments.drain(..).map(|(_, text)| text));
+    Ok(node)
 }
 
 /// Removes the region's own indentation from every line.
@@ -418,12 +425,75 @@ pub fn splice(source: &str, block: &str) -> Result<String, Error> {
     Ok(out)
 }
 
+/// Every comment of `source`, with the offset it starts at.
+///
+/// Strings, raw strings and char literals are skipped, or a `//` inside one of
+/// them would be read as a comment and moved somewhere else on the way out.
+fn comments_in(source: &str) -> Vec<(usize, String)> {
+    let bytes = source.as_bytes();
+    let mut out = Vec::new();
+    let mut index = 0usize;
+
+    while index < bytes.len() {
+        match bytes[index] {
+            b'/' if bytes.get(index + 1) == Some(&b'/') => {
+                let end = source[index..].find('\n').map_or(bytes.len(), |offset| index + offset);
+                out.push((index, source[index..end].trim_end().to_string()));
+                index = end;
+            }
+            b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                let end = source[index + 2..]
+                    .find("*/")
+                    .map_or(bytes.len(), |offset| index + 2 + offset + 2);
+                out.push((index, source[index..end].to_string()));
+                index = end;
+            }
+            b'r' => match raw_string_end(source, index) {
+                Some(end) => index = end,
+                None => index += 1,
+            },
+            b'"' => index = quoted_end(source, index),
+            b'\'' => match char_literal_end(source, index) {
+                Some(end) => index = end,
+                None => index += 1,
+            },
+            _ => index += 1,
+        }
+    }
+    out
+}
+
+/// The comments left before `offset`, taken out of the queue.
+///
+/// A queue rather than a search: the chain is walked in source order, so every
+/// comment belongs to the first thing that comes after it — and what is taken
+/// is gone, which is what stops a comment from being written twice.
+fn comments_before(comments: &mut Vec<(usize, String)>, offset: usize) -> Vec<String> {
+    let taken = comments.iter().take_while(|(at, _)| *at < offset).count();
+    comments.drain(..taken).map(|(_, text)| text).collect()
+}
+
+/// Drops the comments before `offset` without keeping them.
+///
+/// For what is already carried verbatim: an opaque node holds its own source,
+/// and a closure argument holds the comments written inside it. Keeping them
+/// here as well would write them twice.
+fn skip_comments(comments: &mut Vec<(usize, String)>, offset: usize) {
+    let taken = comments.iter().take_while(|(at, _)| *at < offset).count();
+    comments.drain(..taken);
+}
+
 /// Turns an expression into a node.
 ///
 /// A chain whose head is not a plain `path(args)` call is kept whole as an
 /// opaque node: re-emitting its source text unchanged is always safe, whereas
 /// guessing at its structure is not.
-fn node_from_expr(expr: &Expr, source: &str) -> Node {
+fn node_from_expr(expr: &Expr, source: &str, comments: &mut Vec<(usize, String)>) -> Node {
+    let span = expr.span().byte_range();
+    // Whatever stands before the expression belongs to it: the parent writes
+    // these lines above the `.child(` that holds it.
+    let leading = comments_before(comments, span.start);
+
     let mut chain = Vec::new();
     let mut head = expr;
     while let Expr::MethodCall(call) = head {
@@ -432,11 +502,19 @@ fn node_from_expr(expr: &Expr, source: &str) -> Node {
     }
     chain.reverse();
 
+    let mut opaque = || {
+        // Its own source text carries whatever was written inside it.
+        skip_comments(comments, span.end);
+        let mut node = Node::opaque(text(expr, source));
+        node.comments = leading.clone();
+        node
+    };
+
     let Expr::Call(call) = head else {
-        return Node::opaque(text(expr, source));
+        return opaque();
     };
     let Expr::Path(path) = call.func.as_ref() else {
-        return Node::opaque(text(expr, source));
+        return opaque();
     };
 
     let mut node = Node {
@@ -446,21 +524,36 @@ fn node_from_expr(expr: &Expr, source: &str) -> Node {
         },
         calls: Vec::new(),
         children: Vec::new(),
+        comments: leading,
+        trailing: Vec::new(),
     };
+    // The base's own arguments may hold comments; they are inside the text
+    // those arguments are kept as.
+    skip_comments(comments, call.span().byte_range().end);
 
     for method in chain {
         let name = method.method.to_string();
         if name == "child" && method.args.len() == 1 {
             let child = method.args.first().expect("length checked");
-            node.push_child(node_from_expr(child, source));
+            // The child drains what stands above it, including anything
+            // written between the previous call and this `.child(`.
+            node.push_child(node_from_expr(child, source, comments));
         } else {
+            let above = comments_before(comments, method.method.span().byte_range().start);
             node.calls.push(Call {
                 name,
                 args: method.args.iter().map(|arg| arg_from_expr(arg, source)).collect(),
+                comments: above,
             });
         }
+        // Anything left inside this call — a comment in a closure argument —
+        // is already part of the argument's own text.
+        skip_comments(comments, method.span().byte_range().end);
     }
 
+    // What is left is after the last call, and it stays at the end of the
+    // chain rather than being dropped.
+    node.trailing = comments_before(comments, span.end);
     node
 }
 

@@ -54,27 +54,22 @@ Ce qui reste de ce côté :
   ici », pas « ce que le gabarit contient » — mais elle demande de relire le
   fichier après la mise en forme, donc de savoir quand elle a eu lieu.
 
-## Ce que la zone gérée perd, et qu'elle ne devrait pas
+## Ce que la zone gérée perdait
 
-**Un commentaire écrit entre les marqueurs disparaît au `⌘S` suivant.** Mesuré :
+~~**Un commentaire écrit entre les marqueurs disparaît au `⌘S` suivant.**~~ —
+réparé. `syn` jette toujours les commentaires ; c'est le modèle qui les porte
+désormais, et le lecteur les récupère du texte avant de le lui donner. Un
+commentaire appartient à ce qui le suit : au-dessus d'un appel, au-dessus d'un
+enfant, en tête de chaîne ou après le dernier appel.
 
-```
-écrit :  v_flex()
-             // le titre de la page
-             .gap_2()
-             .child(Label::new("Nom"))
-relu :   v_flex().gap_2().child(Label::new("Nom"))
-```
+Ce qui reste de ce côté, et qui est mineur : un commentaire **en fin de ligne**
+(`.gap_2() // pourquoi`) remonte au-dessus de l'appel plutôt que de rester
+derrière lui. Le rendu de maxx est d'un appel par ligne, donc la place existe ;
+c'est le modèle qui ne distingue pas encore les deux positions.
 
-`syn` jette les commentaires, et `codegen` réécrit la zone depuis le modèle :
-ce qui n'est pas dans le modèle n'existe plus. Ce n'est pas un manque de
-fonctionnalité, c'est une perte de confiance — le premier commentaire d'un
-développeur qui se met vraiment à coder dans la zone, et l'outil l'a effacé
-sans rien dire.
-
-Il faudrait que le modèle porte les annotations et que le lecteur les récupère
-avant `syn`. C'est un chantier à part entière, et c'est le seul qui rende la
-zone gérée habitable.
+Reste aussi vrai, et c'est un autre sujet : la **mise en page** de la zone est
+celle de maxx, pas celle du développeur — un enfant écrit sur une ligne peut
+ressortir sur trois. Ce qui est garanti est le contenu, pas la colonne.
 
 ## Composants
 

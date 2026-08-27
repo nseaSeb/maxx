@@ -56,17 +56,23 @@ pub struct Call {
     pub name: String,
     /// Arguments, in order.
     pub args: Vec<Arg>,
+    /// The comment lines written above this call, source text included.
+    ///
+    /// Carried by the model because `syn` throws comments away and `codegen`
+    /// rewrites the region from the model: what the model does not hold is
+    /// erased at the next save, silently, on the developer's own words.
+    pub comments: Vec<String>,
 }
 
 impl Call {
     /// A call with no arguments, e.g. `.flex_1()`.
     pub fn bare(name: impl Into<String>) -> Self {
-        Self { name: name.into(), args: Vec::new() }
+        Self { name: name.into(), args: Vec::new(), comments: Vec::new() }
     }
 
     /// A call with a single argument.
     pub fn with(name: impl Into<String>, arg: Arg) -> Self {
-        Self { name: name.into(), args: vec![arg] }
+        Self { name: name.into(), args: vec![arg], comments: Vec::new() }
     }
 }
 
@@ -105,6 +111,13 @@ pub struct Node {
     pub calls: Vec<Call>,
     /// Children, in order, from the `.child(..)` calls.
     pub children: Vec<Node>,
+    /// The comment lines written above this node.
+    ///
+    /// Emitted by whoever places the node — the parent, or the splice for the
+    /// root — because that is who knows the column they go in.
+    pub comments: Vec<String>,
+    /// The comment lines written after the last call of the chain.
+    pub trailing: Vec<String>,
 }
 
 /// Position of a node in the tree: the child index at each level, from the root.
@@ -117,12 +130,32 @@ impl Node {
             base: Base::Known { path: path.into(), args: Vec::new() },
             calls: Vec::new(),
             children: Vec::new(),
+            comments: Vec::new(),
+            trailing: Vec::new(),
         }
     }
 
     /// A node that stands for an expression `maxx` did not interpret.
     pub fn opaque(source: impl Into<String>) -> Self {
-        Self { base: Base::Opaque(source.into()), calls: Vec::new(), children: Vec::new() }
+        Self {
+            base: Base::Opaque(source.into()),
+            calls: Vec::new(),
+            children: Vec::new(),
+            comments: Vec::new(),
+            trailing: Vec::new(),
+        }
+    }
+
+    /// Whether anything in this subtree carries a comment.
+    ///
+    /// What forces the chain onto several lines: a comment has nowhere to go on
+    /// a single line, and dropping it there is the very loss this exists to
+    /// prevent.
+    pub fn has_comments(&self) -> bool {
+        !self.comments.is_empty()
+            || !self.trailing.is_empty()
+            || self.calls.iter().any(|call| !call.comments.is_empty())
+            || self.children.iter().any(Node::has_comments)
     }
 
     /// Whether this node is an unparsed Rust expression.
