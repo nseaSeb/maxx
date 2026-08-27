@@ -135,12 +135,18 @@ pub fn matching_labels<'a>(labels: impl Iterator<Item = &'a str>, query: &str) -
         .collect()
 }
 
-/// Lowercase, and without the accents.
+/// Lowercase, without the accents, and with one kind of slash.
+///
+/// The slash matters on Windows, where a path reads `src\ui\home.rs`: shown
+/// that way, because that is what the system writes, but a hand typing
+/// `ui/home` must still find it — and a hand coming from a Mac types `/`. Both
+/// sides of the comparison are folded, so either slash answers either form.
 fn fold(value: &str) -> String {
     value
         .to_lowercase()
         .chars()
         .map(|character| match character {
+            '\\' => '/',
             'á'..='å' | 'à' => 'a',
             'é' | 'è' | 'ê' | 'ë' => 'e',
             'í' | 'ì' | 'î' | 'ï' => 'i',
