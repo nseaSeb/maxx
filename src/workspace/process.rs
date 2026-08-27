@@ -31,10 +31,8 @@ impl Workspace {
         // the project says the profile, the features and the arguments, and
         // they are otherwise invisible.
         let subcommand = if prewarm { "build" } else { "run" };
-        self.run_output.push(SharedString::from(format!(
-            "$ {}",
-            crate::run::command_line(&root, subcommand)
-        )));
+        self.run_output
+            .push(SharedString::from(format!("$ {}", crate::run::command_line(&root, subcommand))));
         self.run_state = crate::run::State::Running;
         self.run_pid = None;
         crate::settings::update_prefs(cx, |preferences| preferences.show_output = true);

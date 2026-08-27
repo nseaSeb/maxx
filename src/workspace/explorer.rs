@@ -211,10 +211,7 @@ impl Workspace {
                 menu.menu(crate::tr("context.new_view"), Box::new(crate::actions::NewView))
                     .menu(crate::tr("context.delete"), Box::new(crate::actions::DeleteFile))
                     .separator()
-                    .menu(
-                        crate::tr("menu.set_entry_view"),
-                        Box::new(crate::actions::SetEntryView),
-                    )
+                    .menu(crate::tr("menu.set_entry_view"), Box::new(crate::actions::SetEntryView))
                     .separator()
                     .menu(crate::tr("context.view_code"), Box::new(crate::actions::ViewCode))
                     .menu(crate::tr("context.reveal"), Box::new(crate::actions::RevealInFinder))

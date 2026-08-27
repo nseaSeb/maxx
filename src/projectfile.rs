@@ -153,19 +153,38 @@ pub fn path(root: &Path) -> PathBuf {
 /// Reads `maxx.toml`, or answers an empty file.
 ///
 /// An unreadable file is reported and then ignored: maxx has to open the
-/// project anyway, and will only rewrite the file if asked to add something to
-/// it.
+/// project anyway, and a project whose file has a typo in it still opens.
 pub fn load(root: &Path) -> ProjectFile {
-    let Ok(source) = std::fs::read_to_string(path(root)) else {
-        return ProjectFile::default();
-    };
-    match toml::from_str(&source) {
+    match read(root) {
         Ok(file) => file,
         Err(error) => {
-            eprintln!("maxx.toml is unreadable: {error}");
+            eprintln!("{error}");
             ProjectFile::default()
         }
     }
+}
+
+/// Reads `maxx.toml` for something about to write it back.
+///
+/// The difference with [`load`] is the whole point: a file that does not parse
+/// is an error here, not an empty file. Rewriting from empty would erase every
+/// module fingerprint the developer's project holds — and one missing bracket
+/// in a hand-written `[run]` is enough to get there — turning a menu item into
+/// a silent loss of the very records this file exists for.
+fn read(root: &Path) -> std::io::Result<ProjectFile> {
+    let source = match std::fs::read_to_string(path(root)) {
+        Ok(source) => source,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(ProjectFile::default());
+        }
+        Err(error) => return Err(error),
+    };
+    toml::from_str(&source).map_err(|error| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("{}: {error}", path(root).display()),
+        )
+    })
 }
 
 /// Writes `maxx.toml`.
@@ -187,7 +206,7 @@ pub fn entry(root: &Path) -> Option<String> {
 /// written — a `maxx.toml` claiming an entry the code does not open would be
 /// worse than no record at all.
 pub fn set_entry(root: &Path, module: &str) -> std::io::Result<()> {
-    let mut file = load(root);
+    let mut file = read(root)?;
     file.project.entry = Some(module.to_string());
     save(root, &file)
 }
@@ -199,7 +218,7 @@ pub fn arguments(root: &Path, subcommand: &str) -> Vec<String> {
 
 /// Records that a module was copied, with its version and its fingerprint.
 pub fn record(root: &Path, module: &str, version: u32, body: &str) -> std::io::Result<()> {
-    let mut file = load(root);
+    let mut file = read(root)?;
     file.modules.insert(module.to_string(), Module { version, fingerprint: fingerprint(body) });
     save(root, &file)
 }
