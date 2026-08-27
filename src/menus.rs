@@ -94,6 +94,7 @@ pub fn app_menus(cx: &App) -> Vec<Menu> {
                 MenuItem::action(tr("menu.overwrite"), OverwriteFile),
                 MenuItem::separator(),
                 MenuItem::action(tr("menu.adopt_view"), AdoptView),
+                MenuItem::action(tr("menu.set_entry_view"), SetEntryView),
                 MenuItem::separator(),
                 MenuItem::action(tr("menu.close_project"), CloseFolder),
                 MenuItem::action(tr("menu.close_view"), CloseWindow),

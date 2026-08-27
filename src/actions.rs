@@ -33,6 +33,7 @@ actions!(
         ClearRecentProjects,
         OpenFolder,
         AdoptView,
+        SetEntryView,
         ReloadView,
         OverwriteFile,
         Save,
@@ -137,6 +138,9 @@ pub fn register_handlers(cx: &mut App) {
 
     cx.on_action(|_: &NewView, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.new_view(cx));
+    });
+    cx.on_action(|_: &SetEntryView, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.set_entry_view(cx));
     });
     cx.on_action(|_: &AdoptView, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.adopt_view(cx));

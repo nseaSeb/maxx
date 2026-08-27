@@ -96,13 +96,15 @@ pub fn create_project(root: &Path, name: &str) -> io::Result<()> {
     std::fs::create_dir_all(root.join(".cargo"))?;
     std::fs::write(root.join("Cargo.toml"), cargo_toml(&crate_name(name)))?;
     std::fs::write(root.join(".cargo/config.toml"), cargo_config())?;
-    // No `maxx.toml` here: it records what the project took from maxx, so the
-    // fixes can be offered later. It is versioned with the project.
+    // `maxx.toml` carries the project, so it starts with the project: the view
+    // the window opens on. What was copied from maxx joins it later, module by
+    // module. Versioned with the project, both halves.
     std::fs::write(root.join(".gitignore"), "/target\n/.cargo\n")?;
     std::fs::write(root.join("src/main.rs"), main_rs())?;
     std::fs::write(root.join("src/menus.rs"), menus_rs())?;
     std::fs::write(root.join("src/ui/mod.rs"), "pub mod home;\n")?;
     std::fs::write(root.join("src/ui/home.rs"), view_rs("Home", "home"))?;
+    crate::projectfile::set_entry(root, "home")?;
     Ok(())
 }
 
@@ -131,6 +133,98 @@ pub fn create_view(root: &Path, module: &str) -> io::Result<()> {
         std::fs::write(&mod_path, source)?;
     }
     Ok(())
+}
+
+/// Makes the view in `module` the one the window opens on.
+///
+/// Two writes that have to agree: `src/main.rs`, which is what actually opens
+/// the window, and `maxx.toml`, which is where maxx reads it back. The code is
+/// written first — a `maxx.toml` naming an entry the code does not open would
+/// be worse than no record at all.
+///
+/// The construction site is the truth here, not the `use` line: `main.rs` may
+/// import several views, and only one of them is handed to `Root`. Whatever
+/// type is built with `::new(window, cx)` is the entry, and that is the one
+/// replaced.
+pub fn set_entry_view(root: &Path, module: &str) -> io::Result<()> {
+    let file = root.join(format!("src/ui/{module}.rs"));
+    let view_source = std::fs::read_to_string(&file)?;
+    let Some(type_name) = declared_type(&view_source) else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{}: no `pub struct` to open the window on", file.display()),
+        ));
+    };
+
+    let main_path = root.join("src/main.rs");
+    let source = std::fs::read_to_string(&main_path)?;
+    let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
+
+    let Some((built, current)) = lines
+        .iter()
+        .enumerate()
+        .find_map(|(index, line)| entry_type(line).map(|found| (index, found)))
+    else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "src/main.rs: no view built with `::new(window, cx)` —              change the view the window opens on by hand",
+        ));
+    };
+
+    // The import first: a `use` line for a type the file no longer builds is
+    // a warning, and one for a type it does build is what makes it compile.
+    let import = format!("use crate::ui::{module}::{type_name};");
+    match lines.iter().position(|line| is_import_of(line, &current)) {
+        Some(index) => lines[index] = import,
+        // A project whose `main.rs` names the view in full, or imports it
+        // through a `use crate::ui::*`: the import goes in rather than being
+        // guessed at.
+        None => lines.insert(header_end(&lines), import),
+    }
+
+    lines[built] = lines[built].replace(&format!("{current}::new("), &format!("{type_name}::new("));
+
+    std::fs::write(&main_path, joined(&lines, &source))?;
+    crate::projectfile::set_entry(root, module)
+}
+
+/// The type a view file declares, i.e. its first `pub struct`.
+///
+/// Read rather than derived from the module name: a view adopted from a
+/// project maxx did not write is called whatever its author called it, and
+/// `to_type_name` would answer a type that does not exist.
+fn declared_type(source: &str) -> Option<String> {
+    source.lines().find_map(|line| {
+        let rest = line.trim_start().strip_prefix("pub struct ")?;
+        let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+        (!name.is_empty()).then_some(name)
+    })
+}
+
+/// The type `line` builds the window's view from, if it does.
+fn entry_type(line: &str) -> Option<String> {
+    let (before, _) = line.split_once("::new(window, cx)")?;
+    let name: String = before
+        .chars()
+        .rev()
+        .take_while(|c| c.is_alphanumeric() || *c == '_')
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    // `Self::new(window, cx)` inside an `impl` is not a view being opened, and
+    // a bare `::new(` belongs to something else entirely.
+    (!name.is_empty() && name != "Self").then_some(name)
+}
+
+/// Whether `line` is the `use` that brings `type_name` in from `crate::ui`.
+fn is_import_of(line: &str, type_name: &str) -> bool {
+    let line = line.trim();
+    line.starts_with("use crate::ui::")
+        && line.ends_with(&format!("::{type_name};"))
+        // `use crate::ui::home::Home;` and nothing braced: a grouped import
+        // would need to be taken apart rather than replaced whole.
+        && !line.contains('{')
 }
 
 /// Turns a folder name into a name cargo accepts: lowercase, `_` for anything

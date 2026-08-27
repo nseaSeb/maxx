@@ -1,13 +1,21 @@
-//! `maxx.toml`: what a project took from maxx.
+//! `maxx.toml`: the project's own file.
 //!
-//! Versioned with the project, and readable: it says which modules maxx copied
-//! into it, in which version, and the fingerprint they had on the way out.
+//! Versioned with the project, and readable. It carries two things.
 //!
-//! That is what makes a copy catchable-up. Copied code belongs to the project
-//! and owes maxx nothing — that is the promise — but until now a defect fixed
-//! in maxx stayed stuck on maxx's side. With this file, maxx knows which
-//! projects are behind, and the fingerprint tells it whether the developer has
-//! touched the file since: what they changed is never replaced.
+//! What the project took from maxx: which modules were copied into it, in which
+//! version, and the fingerprint they had on the way out. That is what makes a
+//! copy catchable-up. Copied code belongs to the project and owes maxx nothing
+//! — that is the promise — but a defect fixed in maxx would otherwise stay
+//! stuck on maxx's side. With this file, maxx knows which projects are behind,
+//! and the fingerprint tells it whether the developer has touched the file
+//! since: what they changed is never replaced.
+//!
+//! And what the project is: the view its window opens on, and how it is
+//! launched. Both were written in stone before — the entry view inside
+//! `main.rs`, the launch as a bare `cargo run` — which meant a project that
+//! wanted `--release`, a feature, or another first screen had no place to say
+//! so. Here is that place. Every key is optional, and a project without them
+//! behaves exactly as it did.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -32,11 +40,108 @@ pub struct Module {
     pub fingerprint: String,
 }
 
+/// What maxx knows about the project itself.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Project {
+    /// The module under `src/ui/` whose view the window opens on, without its
+    /// extension — `home` for `src/ui/home.rs`.
+    ///
+    /// A name, not a path: `main.rs` reaches the view through `crate::ui::`,
+    /// and a view living anywhere else is not one maxx wrote.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry: Option<String>,
+}
+
+impl Project {
+    /// Whether nothing has been recorded, and the section can stay out of the
+    /// file.
+    fn is_default(&self) -> bool {
+        self == &Self::default()
+    }
+}
+
+/// How maxx launches the project.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Run {
+    /// The cargo profile, handed over as `--profile <name>`.
+    ///
+    /// Absent means cargo's own default, which is `dev` — and `release` is
+    /// spelled here as a profile rather than as a flag of its own, because
+    /// `--profile` is the form that also carries a profile the project
+    /// defined itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// The features to switch on.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub features: Vec<String>,
+    /// Whether the crate's default features stay on.
+    #[serde(rename = "default-features", skip_serializing_if = "is_on")]
+    pub default_features: bool,
+    /// What the application itself is given, after `--`.
+    ///
+    /// Only on a run: `cargo build` has nothing to hand them to.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+}
+
+impl Default for Run {
+    fn default() -> Self {
+        Self { profile: None, features: Vec::new(), default_features: true, args: Vec::new() }
+    }
+}
+
+impl Run {
+    /// Whether nothing has been recorded, and the section can stay out of the
+    /// file.
+    fn is_default(&self) -> bool {
+        self == &Self::default()
+    }
+
+    /// The whole cargo command line, `subcommand` first.
+    ///
+    /// The application's own arguments are appended to a run and dropped from
+    /// a build: `cargo build -- --verbose` is refused by cargo, and a prewarm
+    /// that fails to start is a prewarm nobody sees fail.
+    pub fn arguments(&self, subcommand: &str) -> Vec<String> {
+        let mut arguments = vec![subcommand.to_string()];
+        if let Some(profile) = &self.profile {
+            arguments.push("--profile".into());
+            arguments.push(profile.clone());
+        }
+        if !self.default_features {
+            arguments.push("--no-default-features".into());
+        }
+        if !self.features.is_empty() {
+            arguments.push("--features".into());
+            arguments.push(self.features.join(","));
+        }
+        if subcommand == "run" && !self.args.is_empty() {
+            arguments.push("--".into());
+            arguments.extend(self.args.iter().cloned());
+        }
+        arguments
+    }
+}
+
+/// Whether a flag is still on, for the fields that are written only once off.
+fn is_on(value: &bool) -> bool {
+    *value
+}
+
 /// The contents of `maxx.toml`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProjectFile {
+    /// What the project is.
+    #[serde(skip_serializing_if = "Project::is_default")]
+    pub project: Project,
+    /// How it is launched.
+    #[serde(skip_serializing_if = "Run::is_default")]
+    pub run: Run,
     /// The copied modules, by name.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub modules: BTreeMap<String, Module>,
 }
 
@@ -70,6 +175,28 @@ pub fn save(root: &Path, file: &ProjectFile) -> std::io::Result<()> {
     std::fs::write(path(root), format!("{}{body}", header()))
 }
 
+/// The module the project's window opens on, when the file says.
+pub fn entry(root: &Path) -> Option<String> {
+    load(root).project.entry
+}
+
+/// Records which module the window opens on.
+///
+/// The file alone: patching `main.rs` so it is true belongs to
+/// [`crate::scaffold::set_entry_view`], which calls this once the code is
+/// written — a `maxx.toml` claiming an entry the code does not open would be
+/// worse than no record at all.
+pub fn set_entry(root: &Path, module: &str) -> std::io::Result<()> {
+    let mut file = load(root);
+    file.project.entry = Some(module.to_string());
+    save(root, &file)
+}
+
+/// The cargo command line this project asks for.
+pub fn arguments(root: &Path, subcommand: &str) -> Vec<String> {
+    load(root).run.arguments(subcommand)
+}
+
 /// Records that a module was copied, with its version and its fingerprint.
 pub fn record(root: &Path, module: &str, version: u32, body: &str) -> std::io::Result<()> {
     let mut file = load(root);
@@ -98,9 +225,19 @@ pub fn fingerprint(body: &str) -> String {
 fn header() -> String {
     "# Written by maxx, and to be versioned with the project.\n\
      #\n\
-     # It says what this project took from maxx: which modules, in which\n\
-     # version, and the fingerprint they had on the way out. That is what lets\n\
-     # maxx offer a fix later — and never replace a file you have changed\n\
-     # since.\n\n"
+     # It carries the project: the view its window opens on, how it is\n\
+     # launched — profile, features, arguments — and what it took from maxx,\n\
+     # which modules, in which version, and the fingerprint they had on the\n\
+     # way out. That last part is what lets maxx offer a fix later — and never\n\
+     # replace a file you have changed since.\n\
+     #\n\
+     # [project]\n\
+     # entry = \"home\"          # the module under src/ui/ the window opens on\n\
+     #\n\
+     # [run]\n\
+     # profile = \"release\"     # cargo run --profile release\n\
+     # features = [\"demo\"]\n\
+     # default-features = false\n\
+     # args = [\"--verbose\"]    # handed to the application, after --\n\n"
         .to_string()
 }

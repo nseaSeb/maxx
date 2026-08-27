@@ -342,10 +342,12 @@ Ce qui reste :
 - **Montrer ce qui change** avant de remplacer, et proposer quelque chose à un
   fichier modifié — un diff, ou l'écriture du nouveau à côté. Aujourd'hui maxx
   dit seulement « vous l'avez modifié » et s'arrête.
-- **`maxx.toml` ne porte que les modules.** La vue d'entrée est toujours écrite
-  en dur dans `main_rs()`, et la commande de lancement est toujours
-  `cargo run`, sans profil ni features. C'est le même fichier qui les
-  accueillera.
+- ~~**`maxx.toml` ne porte que les modules.**~~ — fait : `[project] entry` et
+  `[run]` (profil, features, `default-features`, arguments). Ce qui reste de ce
+  point : rien ne les édite dans maxx, ils se posent à la main dans le fichier,
+  sauf la vue d'entrée qui a sa commande (*Fichier ▸ Ouvrir la fenêtre sur
+  cette vue*, et le menu contextuel de l'explorateur, qui marque d'un point la
+  vue d'entrée).
 - **Des modules plus fins**, si l'usage le demande : aujourd'hui le module
   système arrive entier, sous `allow(dead_code)`, alors qu'un projet n'en veut
   peut-être que la corbeille.
@@ -413,9 +415,9 @@ Va dans l'état de maxx, indexé par chemin.
 
 **Les réglages du projet lui-même**, dans les deux sens :
 
-- ce que maxx devine et devrait savoir : la vue d'entrée est écrite en dur
-  (`main_rs()` importe `home`), la commande de lancement est toujours
-  `cargo run`, sans profil ni features. Un `maxx.toml` à la racine, versionné.
+- ~~ce que maxx devine et devrait savoir~~ — fait : la vue d'entrée et la
+  commande de lancement vivent dans `maxx.toml`, versionné à la racine. Reste à
+  les éditer autrement qu'à la main pour `[run]`.
 - ce dont l'application générée a besoin pour elle-même : un `src/settings.rs`
   avec sa zone marquée, que maxx édite comme il édite `src/menus.rs`. Du Rust
   ordinaire qui tourne sans maxx, dans le principe du projet.

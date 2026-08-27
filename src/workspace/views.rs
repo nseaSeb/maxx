@@ -412,6 +412,61 @@ impl Workspace {
 
     /// Puts maxx's markers around the expression a hand-written `render`
     /// returns, then opens the view.
+    /// Makes the selected view the one the project's window opens on.
+    ///
+    /// The explorer's selection, not the active tab: this is a property of the
+    /// project, and the file it names is the one the pointer is on — the same
+    /// gesture as adopting a view.
+    pub fn set_entry_view(&mut self, cx: &mut Context<Self>) {
+        let Some(project) = self.project.as_ref() else {
+            self.message = Some(crate::tr("message.no_project"));
+            cx.notify();
+            return;
+        };
+        let root = project.root.clone();
+
+        let Some(path) = self
+            .selected
+            .clone()
+            .filter(|path| path.extension().is_some_and(|extension| extension == "rs"))
+        else {
+            self.message = Some(crate::tr("message.select_rs_file"));
+            cx.notify();
+            return;
+        };
+
+        // A view lives in `src/ui/`, and `main.rs` reaches it through
+        // `crate::ui::`: a file anywhere else could be imported, but the import
+        // maxx would write for it would not compile.
+        let module = path
+            .strip_prefix(root.join("src/ui"))
+            .ok()
+            .filter(|relative| relative.components().count() == 1)
+            .and_then(|relative| relative.file_stem())
+            .map(|stem| stem.to_string_lossy().into_owned());
+        let Some(module) = module else {
+            self.message = Some(crate::tr("message.entry_outside_ui"));
+            cx.notify();
+            return;
+        };
+
+        match crate::scaffold::set_entry_view(&root, &module) {
+            Ok(()) => {
+                self.message = Some(SharedString::from(
+                    t!("message.entry_set", name = module).into_owned(),
+                ));
+                // The reader may be showing the very `main.rs` that just
+                // changed under it.
+                let main = root.join("src/main.rs");
+                self.forget_code(|candidate| candidate == main);
+                // The explorer marks the entry view, and it has just moved.
+                self.refresh_entries();
+            }
+            Err(error) => self.message = Some(SharedString::from(error.to_string())),
+        }
+        cx.notify();
+    }
+
     pub fn adopt_view(&mut self, cx: &mut Context<Self>) {
         let Some(path) = self
             .selected

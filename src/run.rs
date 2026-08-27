@@ -38,14 +38,33 @@ pub enum State {
 }
 
 /// Starts `cargo run` in `root` and returns the channel its output arrives on.
+///
+/// What follows `run` comes from the project's own `maxx.toml`: a profile,
+/// features, and the arguments the application itself is given. A project that
+/// says nothing is launched exactly as before.
 pub fn start(root: PathBuf) -> Receiver<Message> {
-    spawn_cargo(root, "run")
+    let arguments = crate::projectfile::arguments(&root, "run");
+    spawn_cargo(root, arguments)
 }
 
 /// Starts `cargo build` in `root`, to pay the cost of the dependency tree while
 /// the user is still drawing.
+///
+/// The same profile and the same features as the run, or the prewarm fills a
+/// cache the run will not use.
 pub fn prewarm(root: PathBuf) -> Receiver<Message> {
-    spawn_cargo(root, "build")
+    let arguments = crate::projectfile::arguments(&root, "build");
+    spawn_cargo(root, arguments)
+}
+
+/// The command line a run or a prewarm will use, to show before it starts.
+///
+/// A project can now be launched with a profile, features and arguments of its
+/// own: without this line the panel would show the output of a command nobody
+/// can see, and a `[run]` section with a typo in it would look like a defect in
+/// maxx.
+pub fn command_line(root: &Path, subcommand: &str) -> String {
+    format!("cargo {}", crate::projectfile::arguments(root, subcommand).join(" "))
 }
 
 /// The directory every generated project compiles into.
@@ -85,9 +104,9 @@ fn cache_dir() -> PathBuf {
     if cfg!(target_os = "macos") { home.join("Library/Caches") } else { home.join(".cache") }
 }
 
-fn spawn_cargo(root: PathBuf, subcommand: &'static str) -> Receiver<Message> {
+fn spawn_cargo(root: PathBuf, arguments: Vec<String>) -> Receiver<Message> {
     let (sender, receiver) = channel();
-    std::thread::spawn(move || run(root, subcommand, sender));
+    std::thread::spawn(move || run(root, arguments, sender));
     receiver
 }
 
@@ -281,10 +300,10 @@ pub fn stop(pid: u32) {
     let _ = Command::new("taskkill").arg("/PID").arg(pid.to_string()).arg("/T").arg("/F").status();
 }
 
-fn run(root: PathBuf, subcommand: &str, sender: Sender<Message>) {
+fn run(root: PathBuf, arguments: Vec<String>, sender: Sender<Message>) {
     let mut command = Command::new("cargo");
     let child = command
-        .arg(subcommand)
+        .args(&arguments)
         .current_dir(&root)
         // Colour codes would end up in the panel as escape sequences.
         .env("CARGO_TERM_COLOR", "never")
@@ -305,7 +324,7 @@ fn run(root: PathBuf, subcommand: &str, sender: Sender<Message>) {
     let mut child = match child {
         Ok(child) => child,
         Err(error) => {
-            let _ = sender.send(Message::Line(format!("cargo {subcommand}: {error}")));
+            let _ = sender.send(Message::Line(format!("cargo {}: {error}", arguments.join(" "))));
             let _ = sender.send(Message::Finished(false));
             return;
         }

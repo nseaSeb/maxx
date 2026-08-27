@@ -134,6 +134,12 @@ pub struct Workspace {
     entries: Vec<Entry>,
     expanded: HashSet<PathBuf>,
     selected: Option<PathBuf>,
+    /// The view the project's window opens on, as `maxx.toml` records it.
+    ///
+    /// Held rather than read where it is drawn: the explorer paints every row
+    /// of every frame, and reading a file from there would read it a hundred
+    /// times a second. Refreshed with the rows themselves.
+    entry_view: Option<PathBuf>,
     /// The project's menu bar, when `src/menus.rs` is the file being edited.
     pub menu_file: Option<MenuFile>,
     /// The file the code reader is showing, when it is showing one.
@@ -234,6 +240,7 @@ impl Workspace {
             entries: Vec::new(),
             expanded: HashSet::new(),
             selected: None,
+            entry_view: None,
             menu_file: None,
             code: None,
             code_input: None,
