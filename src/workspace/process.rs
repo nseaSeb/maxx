@@ -31,6 +31,12 @@ impl Workspace {
         // the project says the profile, the features and the arguments, and
         // they are otherwise invisible.
         let subcommand = if prewarm { "build" } else { "run" };
+        // A file that does not parse is read as an empty one, so the line below
+        // would show a plain `cargo run` with no hint that the project asked
+        // for anything else.
+        if let Some(error) = crate::run::project_file_error(&root) {
+            self.run_output.push(SharedString::from(error));
+        }
         self.run_output
             .push(SharedString::from(format!("$ {}", crate::run::command_line(&root, subcommand))));
         self.run_state = crate::run::State::Running;

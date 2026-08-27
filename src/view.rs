@@ -285,20 +285,31 @@ fn already_imported(source: &str, line: &str) -> bool {
     else {
         return false;
     };
-    let Some((path, name)) = item.rsplit_once("::") else {
+    let Some((path, names)) = item.rsplit_once("::") else {
         return false;
     };
 
-    // Statements rather than lines: rustfmt wraps a long braced import over
-    // several of them, and a line-by-line scan misses it.
-    use_statements(source).iter().any(|statement| {
-        let Some(rest) = statement.strip_prefix(&format!("use {path}::")) else {
-            return false;
-        };
-        match rest.strip_prefix('{').and_then(|r| r.strip_suffix('}')) {
-            Some(list) => list.split(',').any(|entry| entry.trim() == name),
-            None => rest == name,
-        }
+    // The needle may be braced itself — `use gpui_component::{Icon, IconName};`
+    // — and then every one of its names has to be found, not the brace list as
+    // a whole: read as one name, it matches nothing and maxx writes the
+    // statement a second time, which is `E0252` in the developer's project.
+    let names: Vec<&str> = match names.strip_prefix('{').and_then(|rest| rest.strip_suffix('}')) {
+        Some(list) => list.split(',').map(str::trim).collect(),
+        None => vec![names],
+    };
+
+    names.iter().all(|name| {
+        // Statements rather than lines: rustfmt wraps a long braced import over
+        // several of them, and a line-by-line scan misses it.
+        use_statements(source).iter().any(|statement| {
+            let Some(rest) = statement.strip_prefix(&format!("use {path}::")) else {
+                return false;
+            };
+            match rest.strip_prefix('{').and_then(|r| r.strip_suffix('}')) {
+                Some(list) => list.split(',').any(|entry| entry.trim() == *name),
+                None => rest == *name,
+            }
+        })
     })
 }
 

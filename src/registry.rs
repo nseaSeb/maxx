@@ -786,12 +786,10 @@ fn pixel_literal(value: &str) -> Option<String> {
     Some(format!("px({})", float_literal(value)?))
 }
 
-/// `120` and `12.5` become Rust float literals; `.5`, `inf` and `NaN` are
-/// refused.
-///
-/// `f32::from_str` accepts spellings `rustc` does not, and emitting one leaves
-/// the generated project unbuildable.
 /// A whole number, as a `usize` literal — or nothing, for anything else.
+///
+/// What a badge's counts are, and why they cannot go through
+/// [`float_literal`]: `.count(3.)` does not compile.
 fn whole_literal(value: &str) -> Option<String> {
     let value = value.trim();
     if value.is_empty() || !value.chars().all(|c| c.is_ascii_digit()) {
@@ -800,6 +798,11 @@ fn whole_literal(value: &str) -> Option<String> {
     value.parse::<usize>().ok().map(|number| number.to_string())
 }
 
+/// `120` and `12.5` become Rust float literals; `.5`, `inf` and `NaN` are
+/// refused.
+///
+/// `f32::from_str` accepts spellings `rustc` does not, and emitting one leaves
+/// the generated project unbuildable.
 fn float_literal(value: &str) -> Option<String> {
     let value = value.trim();
     let digits = value.strip_prefix('-').unwrap_or(value);

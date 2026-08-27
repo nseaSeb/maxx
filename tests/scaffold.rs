@@ -1353,3 +1353,49 @@ fn wiring_a_module_keeps_the_line_endings_it_found() {
     assert!(main.matches("\r\n").count() > before, "{main:?}");
     assert_eq!(main.matches("\r\n").count(), main.matches('\n').count(), "an ending was lost");
 }
+
+/// A braced `use` already in the file is not written a second time.
+///
+/// The icon brings `use gpui_component::{Icon, IconName};`, and a project-wide
+/// `rustfmt` merges statements: read as one name, the braced needle matches
+/// nothing and maxx appends a duplicate, which is `E0252` in the developer's
+/// project.
+#[test]
+fn a_braced_import_already_present_is_not_written_again() {
+    let root = scratch("maxx_scaffold_braced_import");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+
+    let path = root.join("src/ui/home.rs");
+    let mut view = View::load(&path).unwrap();
+    let icon = maxx::registry::instantiate("icon").expect("the icon is in the catalogue");
+    let end = view.root.children.len();
+    assert!(view.root.insert(&[end], icon));
+    view.save().unwrap();
+
+    let written = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        written.contains("use gpui_component::{Icon, IconName};"),
+        "the icon's import is the braced one this test is about:\n{written}"
+    );
+
+    // What rustfmt leaves once the file has both: one statement.
+    let merged = written
+        .clone()
+        .replace("use gpui_component::{Icon, IconName};\n", "")
+        .replace("use gpui_component::v_flex;", "use gpui_component::{Icon, IconName, v_flex};");
+    assert!(
+        merged.contains("{Icon, IconName, v_flex}"),
+        "the merge this test needs did not happen"
+    );
+    std::fs::write(&path, merged).unwrap();
+
+    let mut view = View::load(&path).unwrap();
+    view.save().unwrap();
+
+    let source = std::fs::read_to_string(&path).unwrap();
+    assert_eq!(
+        source.matches("use gpui_component::{Icon, IconName};").count(),
+        0,
+        "the import was written a second time:\n{source}"
+    );
+}

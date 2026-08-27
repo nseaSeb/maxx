@@ -495,3 +495,43 @@ fn every_component_of_the_catalogue_compiles_where_maxx_puts_it() {
         "what maxx wrote does not compile without warnings:\n{report}"
     );
 }
+
+#[test]
+fn a_view_imported_inside_a_group_is_not_imported_again() {
+    let root = scratch("maxx_project_entry_group");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::create_view(&root, "second").unwrap();
+
+    // What a `rustfmt` with `imports_granularity = "Crate"` leaves, and what a
+    // developer writes by hand: one statement for both views.
+    let main_path = root.join("src/main.rs");
+    let source = std::fs::read_to_string(&main_path)
+        .unwrap()
+        .replace("use crate::ui::home::Home;", "use crate::ui::{home::Home, second::Second};");
+    std::fs::write(&main_path, source).unwrap();
+
+    scaffold::set_entry_view(&root, "second").expect("the entry must move");
+
+    let main = std::fs::read_to_string(&main_path).unwrap();
+    assert!(
+        !main.contains("\nuse crate::ui::second::Second;"),
+        "a second import of the same type is E0252:\n{main}"
+    );
+    assert!(main.contains("Second::new(window, cx)"), "{main}");
+}
+
+#[test]
+fn a_broken_file_stops_the_entry_before_main_is_touched() {
+    let root = scratch("maxx_project_entry_broken_file");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::create_view(&root, "second").unwrap();
+
+    let before = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    std::fs::write(projectfile::path(&root), "[run]\nfeatures = [\"demo\"\n").unwrap();
+
+    scaffold::set_entry_view(&root, "second").expect_err("an unreadable file is an error");
+
+    // Otherwise the code opens the new view while the file still names the old
+    // one — the exact disagreement the write order exists to prevent.
+    assert_eq!(std::fs::read_to_string(root.join("src/main.rs")).unwrap(), before);
+}

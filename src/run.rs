@@ -67,6 +67,17 @@ pub fn command_line(root: &Path, subcommand: &str) -> String {
     format!("cargo {}", crate::projectfile::arguments(root, subcommand).join(" "))
 }
 
+/// What is wrong with the project's file, when something is.
+///
+/// `projectfile::load` answers an empty file for one that does not parse, and
+/// says so on maxx's own stderr — where nobody running maxx from an icon will
+/// ever read it. The panel is where a run is watched, so that is where the
+/// reason belongs: without it, a `[run]` with a missing bracket launches a
+/// plain `cargo run` and looks like maxx ignoring the file.
+pub fn project_file_error(root: &Path) -> Option<String> {
+    crate::projectfile::check(root).err().map(|error| error.to_string())
+}
+
 /// The directory every generated project compiles into.
 ///
 /// Sharing it is what makes the second project cheap: `gpui` and
