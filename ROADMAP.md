@@ -180,11 +180,20 @@ Par coût croissant, pas par ordre alphabétique.
   positionné qui tient le `Scrollbar` lié au **même** `ScrollHandle`, la forme
   avec laquelle `gpui-component` monte les siennes.
 
-  Un seul interrupteur pour cinq écritures, à rebours de toutes les autres
-  propriétés, et c'est le but : assembler ça à la main demanderait trois
-  entrées du catalogue et un nom de champ tapé deux fois — c'est-à-dire de
-  savoir ce que maxx sait. Ce qui est écrit reste du Rust ordinaire : deux
-  nœuds de l'arbre, qu'on édite et qu'on supprime comme les autres.
+  La forme n'est pas un choix : dans gpui, `Div::prepaint` décale **tous** ses
+  enfants du décalage de défilement, y compris un enfant positionné en absolu.
+  Une barre écrite *dans* la boîte défile donc avec le contenu et sort de
+  l'écran — c'est la première version, prise en revue. La barre est un **frère**
+  de la boîte, sous une enveloppe `relative`, et rien de la boîte ne bouge :
+  elle garde son style, son `gap`, ses enfants et son identifiant. C'est
+  précisément ce que l'enveloppe achète, là où déplacer la mise en page sur un
+  élément interne est ce qui fait perdre le `gap` à `overflow_y_scrollbar()`.
+
+  Un seul interrupteur pour tout cela, à rebours des autres propriétés, et
+  c'est le but : assembler ça à la main demanderait trois entrées du catalogue
+  et un nom de champ tapé deux fois — c'est-à-dire de savoir ce que maxx sait.
+  Ce qui est écrit reste du Rust ordinaire : des nœuds de l'arbre, qu'on édite
+  et qu'on supprime comme les autres.
 
   `ScrollableElement::overflow_y_scrollbar()` reste écarté pour la raison
   vérifiée à l'écran : `Scrollable::render` déplace le style vers son

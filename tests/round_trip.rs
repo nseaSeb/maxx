@@ -951,36 +951,67 @@ fn a_tooltip_carries_its_import() {
     );
 }
 
-/// The visible scrollbar: one switch, and what it writes reads back.
+/// The visible scrollbar: what the switch builds, and what reads back.
+///
+/// The bar is a *sibling* of the box, not a child of it: gpui moves every child
+/// of a scrolling element by the scroll offset, so a bar written inside would
+/// travel with the content and leave the screen.
 #[test]
-fn the_scrollbar_switch_writes_a_tree_that_reads_back() {
-    use maxx::registry::{self, Kind, Target};
+fn the_scrollbar_is_a_sibling_of_the_box_it_watches() {
+    use maxx::registry;
 
-    let prop =
-        registry::Prop { label: "prop.scrollbar", target: Target::Scrollbar, kind: Kind::Bool };
-    let mut node = Node::known("v_flex");
-    node.set_call("id", Arg::Str("scroller".into()));
-    registry::attach_scrollbar(&mut node, "bar", "scroll");
-    registry::write(&mut node, &prop, "true");
+    let mut box_node = Node::known("v_flex");
+    box_node.set_call("id", Arg::Str("scroller".into()));
+    box_node.set_flag("overflow_y_scroll", true);
+    box_node.push_child(Node::known("Label::new"));
 
-    let written = render(&node, 0);
-    assert!(written.contains(".relative()"), "{written}");
-    assert!(written.contains(".track_scroll(&self.scroll)"), "{written}");
-    assert!(written.contains("Scrollbar::new(&self.scroll)"), "{written}");
+    let wrapper = registry::scrollbar_assembly(box_node, "bar", "scroll");
+    let written = render(&wrapper, 0);
+
+    assert!(registry::is_scrollbar_wrapper(&wrapper), "{written}");
+    assert_eq!(wrapper.children.len(), 2, "the box and the bar, side by side");
+    assert!(wrapper.call("relative").is_some(), "the bar is positioned against it");
+    assert!(wrapper.children[0].call("track_scroll").is_some(), "{written}");
+    // Nothing of the box moved: its own children stay where they were, which is
+    // what the wrapper is for.
+    assert_eq!(wrapper.children[0].children.len(), 1, "{written}");
     assert!(written.contains("ScrollbarAxis::Vertical"), "{written}");
+    assert_eq!(written.matches("&self.scroll").count(), 2, "one handle, shared: {written}");
     assert_eq!(reparse(&written), written);
-    assert_eq!(registry::read(&node, &prop).as_deref(), Some("true"));
 
-    // The bar and the box share one handle, or the bar follows nothing.
-    assert_eq!(written.matches("&self.scroll").count(), 2, "{written}");
+    // And unwrapping gives the box back, handle removed.
+    let back = registry::unwrap_scrollbar(&wrapper).expect("maxx wrote this wrapper");
+    assert!(back.call("track_scroll").is_none());
+    assert_eq!(back.children.len(), 1);
+    assert!(back.call("overflow_y_scroll").is_some(), "the box still scrolls");
+}
 
-    // And the switch turned off takes back what maxx wrote, leaving the box
-    // scrolling as it was.
-    registry::write(&mut node, &prop, "false");
-    let written = render(&node, 0);
-    assert!(!written.contains("track_scroll"), "{written}");
-    assert!(!written.contains("Scrollbar::new"), "{written}");
-    assert_eq!(registry::read(&node, &prop).as_deref(), Some("false"));
+/// A row scrolls sideways, so its bar is the horizontal one.
+#[test]
+fn the_bar_follows_the_axis_the_box_scrolls_on() {
+    let mut row = Node::known("h_flex");
+    row.set_flag("overflow_x_scroll", true);
+    let wrapper = maxx::registry::scrollbar_assembly(row, "bar", "scroll");
+    let written = render(&wrapper, 0);
+    assert!(written.contains("ScrollbarAxis::Horizontal"), "{written}");
+    // And the wrapper holds the width rather than the height.
+    assert!(wrapper.call("w_full").is_some(), "{written}");
+}
+
+/// What maxx did not write, maxx does not take away.
+#[test]
+fn a_wrapper_the_developer_touched_is_not_unwrapped() {
+    use maxx::registry;
+
+    let mut box_node = Node::known("v_flex");
+    box_node.set_flag("overflow_y_scroll", true);
+    let mut wrapper = registry::scrollbar_assembly(box_node, "bar", "scroll");
+
+    // A node dropped beside the bar: the shape is no longer the one maxx
+    // wrote, so it stays whole.
+    wrapper.push_child(Node::known("Label::new"));
+    assert!(!registry::is_scrollbar_wrapper(&wrapper));
+    assert!(registry::unwrap_scrollbar(&wrapper).is_none());
 }
 
 /// The handle is a field of the view, and it is not an entity.
@@ -990,9 +1021,9 @@ fn the_scrollbar_switch_writes_a_tree_that_reads_back() {
 /// is where `Entity<InputState>` comes from too.
 #[test]
 fn the_scrollbar_asks_the_view_for_a_handle() {
-    let mut node = Node::known("v_flex");
-    maxx::registry::attach_scrollbar(&mut node, "bar", "scroll");
-    let imports = maxx::registry::imports(&node);
+    let node = Node::known("v_flex");
+    let wrapper = maxx::registry::scrollbar_assembly(node, "bar", "scroll");
+    let imports = maxx::registry::imports(&wrapper);
     assert!(imports.contains(&"use gpui_component::scroll::Scrollbar;"), "{imports:?}");
     // The axis type comes with the axis, not with the bar.
     assert!(imports.contains(&"use gpui_component::scroll::ScrollbarAxis;"), "{imports:?}");
@@ -1018,4 +1049,39 @@ fn the_palette_does_not_offer_what_only_a_property_writes() {
     for spec in maxx::registry::CATALOGUE {
         assert!(spec.palette || spec.id == "scrollbar", "{} is offered by nothing", spec.id);
     }
+}
+
+/// A tooltip carrying a quote survives the trip to the file and back.
+#[test]
+fn a_tooltip_with_a_quote_reads_back_whole() {
+    use maxx::registry::{self, Kind, Target};
+
+    let prop = registry::Prop { label: "prop.tooltip", target: Target::Tooltip, kind: Kind::Text };
+    let mut node = Node::known("v_flex");
+    registry::write(&mut node, &prop, "He said \"hi\"");
+
+    let written = render(&node, 0);
+    assert!(written.contains("Tooltip::new(\"He said \\\"hi\\\"\")"), "{written}");
+    // Split on the first quote, the text would come back cut in half — and the
+    // inspector would then write the half back.
+    assert_eq!(registry::read(&node, &prop).as_deref(), Some("He said \"hi\""));
+    assert_eq!(reparse(&written), written);
+}
+
+/// A closure the developer wrote is shown as it is, not half-read.
+#[test]
+fn a_hand_written_tooltip_closure_is_left_alone() {
+    use maxx::registry::{self, Kind, Target};
+
+    let prop = registry::Prop { label: "prop.tooltip", target: Target::Tooltip, kind: Kind::Text };
+    let mut node = Node::known("v_flex");
+    node.set_call(
+        "tooltip",
+        Arg::Verbatim(
+            "|window, cx| Tooltip::new(\"Hint\").key_binding(None).build(window, cx)".into(),
+        ),
+    );
+
+    let shown = registry::read(&node, &prop).expect("something is shown");
+    assert!(shown.starts_with("|window, cx|"), "the source itself: {shown}");
 }

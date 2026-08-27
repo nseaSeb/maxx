@@ -76,6 +76,22 @@ fn is_key(value: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '.')
 }
 
+/// Whether the byte at `at` is escaped by an odd run of backslashes.
+fn is_escaped(bytes: &[u8], at: usize) -> bool {
+    let mut backslashes = 0;
+    let mut index = at;
+    while index > 0 && bytes[index - 1] == b'\\' {
+        backslashes += 1;
+        index -= 1;
+    }
+    backslashes % 2 == 1
+}
+
+/// Whether the quote at `at` is the char literal `'"'`.
+fn in_char_literal(bytes: &[u8], at: usize) -> bool {
+    at > 0 && bytes[at - 1] == b'\'' && bytes.get(at + 1) == Some(&b'\'')
+}
+
 /// Every translation key written as a literal in the sources, with its file.
 fn keys_used() -> BTreeMap<String, String> {
     let mut used = BTreeMap::new();
@@ -84,15 +100,32 @@ fn keys_used() -> BTreeMap<String, String> {
             return;
         };
         let name = path.strip_prefix(root()).unwrap_or(path).display().to_string();
-        let mut rest = source.as_str();
-        while let Some(open) = rest.find('"') {
-            rest = &rest[open + 1..];
-            let Some(close) = rest.find('"') else { break };
-            let value = &rest[..close];
-            rest = &rest[close + 1..];
-            if is_key(value) {
+        // Quotes are counted, not just found: an escaped one inside a literal
+        // — `"Tooltip::new(\""` — or a char literal `'"'` used to shift every
+        // pair after it, and the keys further down the file were then read as
+        // ordinary words and reported unused. The guard has to survive the code
+        // it guards.
+        let bytes = source.as_bytes();
+        let mut index = 0;
+        while index < bytes.len() {
+            if bytes[index] != b'"' || is_escaped(bytes, index) || in_char_literal(bytes, index) {
+                index += 1;
+                continue;
+            }
+            let start = index + 1;
+            let mut end = start;
+            while end < bytes.len() && (bytes[end] != b'"' || is_escaped(bytes, end)) {
+                end += 1;
+            }
+            if end >= bytes.len() {
+                break;
+            }
+            if let Ok(value) = std::str::from_utf8(&bytes[start..end])
+                && is_key(value)
+            {
                 used.entry(value.to_string()).or_insert_with(|| name.clone());
             }
+            index = end + 1;
         }
     };
     for path in rust_sources() {

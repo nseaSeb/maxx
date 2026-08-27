@@ -300,6 +300,54 @@ pub(crate) fn escape(value: &str) -> String {
     out
 }
 
+/// Reads a Rust string literal's content back, escapes included.
+///
+/// The counterpart of [`escape`]: what maxx wrote as `He said \"hi\"` has to come
+/// back to the inspector as `He said "hi"`, or the field shows source instead
+/// of text.
+pub(crate) fn unescape(literal: &str) -> String {
+    let mut out = String::with_capacity(literal.len());
+    let mut chars = literal.chars();
+    while let Some(character) = chars.next() {
+        if character != '\\' {
+            out.push(character);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('t') => out.push('\t'),
+            Some('r') => out.push('\r'),
+            // `\"` and `\\`, and anything else is kept as it was written.
+            Some(other) => out.push(other),
+            None => out.push('\\'),
+        }
+    }
+    out
+}
+
+/// The content of the string literal starting at `source`, and what follows it.
+///
+/// Splitting on the first quote is not enough: a literal may carry an escaped
+/// one, and cutting there gives half a text.
+pub(crate) fn read_literal(source: &str) -> Option<(String, &str)> {
+    let mut rest = source;
+    let mut literal = String::new();
+    loop {
+        let character = rest.chars().next()?;
+        rest = &rest[character.len_utf8()..];
+        match character {
+            '"' => return Some((unescape(&literal), rest)),
+            '\\' => {
+                let escaped = rest.chars().next()?;
+                literal.push('\\');
+                literal.push(escaped);
+                rest = &rest[escaped.len_utf8()..];
+            }
+            _ => literal.push(character),
+        }
+    }
+}
+
 /// Renders a base or call argument list as `(a, b)`, or `()` when empty.
 pub(crate) fn write_args(out: &mut String, args: &[Arg]) {
     out.push('(');
