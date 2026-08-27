@@ -222,6 +222,12 @@ pub fn create_view(root: &Path, module: &str) -> io::Result<()> {
 /// hard about it is that maxx has to be sure it has found the right one, and
 /// [`entry_site`] refuses rather than guesses.
 pub fn set_entry_view(root: &Path, module: &str) -> io::Result<()> {
+    // Before `main.rs` is touched, not after: `maxx.toml` may be unreadable —
+    // one missing bracket in a hand-written `[run]` — and a code that opens the
+    // new view while the file still names the old one is the very thing the
+    // order above exists to prevent.
+    crate::projectfile::check(root)?;
+
     let file = root.join(format!("src/ui/{module}.rs"));
     let view_source = std::fs::read_to_string(&file)?;
     let Some(type_name) = declared_type(&view_source) else {
@@ -265,6 +271,10 @@ pub fn set_entry_view(root: &Path, module: &str) -> io::Result<()> {
         }
         (Some(index), false) => lines[index] = import,
         (None, true) => {}
+        // Already there inside a braced import, which `is_import_of` does not
+        // touch: writing it again as a line of its own is `E0252`, and taking
+        // the group apart is the developer's layout to rewrite.
+        (None, false) if imported_in_group(&lines, module, &type_name) => {}
         // A `main.rs` that names the view in full, or imports it through a
         // `use crate::ui::*`: the import goes in rather than being guessed at.
         (None, false) => lines.insert(header_end(&lines), import),
@@ -366,6 +376,23 @@ fn last_segment(path: &str) -> &str {
 fn leading_identifier(text: &str) -> Option<String> {
     let name: String = text.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
     (!name.is_empty()).then_some(name)
+}
+
+/// Whether a braced `use crate::ui::…` already brings `module::type_name` in.
+///
+/// Braces and spaces are dropped before the search, so the three spellings a
+/// developer or a `rustfmt` may leave — `{home::Home, second::Second}`,
+/// `second::{Second}`, one name per line — all read the same.
+fn imported_in_group(lines: &[String], module: &str, type_name: &str) -> bool {
+    let needle = format!("{module}::{type_name}");
+    lines
+        .iter()
+        .filter(|line| line.trim_start().starts_with("use crate::ui::") && line.contains('{'))
+        .any(|line| {
+            let flattened: String =
+                line.chars().filter(|c| !c.is_whitespace() && *c != '{' && *c != '}').collect();
+            flattened.contains(&needle)
+        })
 }
 
 /// Whether `line` is the `use` that brings `type_name` in from `crate::ui`.

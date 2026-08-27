@@ -194,6 +194,15 @@ pub fn save(root: &Path, file: &ProjectFile) -> std::io::Result<()> {
     std::fs::write(path(root), format!("{}{body}", header()))
 }
 
+/// Answers whether the file is one maxx could write back.
+///
+/// For a caller about to change something else first — `scaffold::set_entry_view`
+/// writes `main.rs` — so that a file it will not be able to record into is
+/// found before, not after.
+pub fn check(root: &Path) -> std::io::Result<()> {
+    read(root).map(|_| ())
+}
+
 /// The module the project's window opens on, when the file says.
 pub fn entry(root: &Path) -> Option<String> {
     load(root).project.entry

@@ -1485,11 +1485,14 @@ fn preview(
                 .children(children_with_zones(node, path, selected, false, root, cx))
                 .into_any_element()
         }
-        Some("Tag::new") => gpui_component::tag::Tag::new()
+        Some("Tag::new") => tag_variant(node)
             .children(children_with_zones(node, path, selected, false, root, cx))
             .into_any_element(),
         Some("Badge::new") => gpui_component::badge::Badge::new()
             .count(call_whole(node, "count").unwrap_or(0))
+            // Both numbers, or a count of 30 beyond 9 still draws “30” on the
+            // canvas and “9+” in the running application.
+            .max(call_whole(node, "max").unwrap_or(99))
             .children(children_with_zones(node, path, selected, false, root, cx))
             .into_any_element(),
         Some("Skeleton::new") => {
@@ -1505,7 +1508,7 @@ fn preview(
         // Two components the canvas cannot build for real: both take an
         // `Entity<…State>` the project's view owns, and maxx has no such view
         // to hand them. A faithful lookalike, like the text input above.
-        Some("Slider::new") => div()
+        Some("Slider::new") => apply(div(), &node.calls)
             .h(px(20.))
             .flex()
             .items_center()
@@ -1518,7 +1521,7 @@ fn preview(
                     .child(div().w_1_2().h(px(4.)).rounded_full().bg(theme::accent())),
             )
             .into_any_element(),
-        Some("ColorPicker::new") => h_flex()
+        Some("ColorPicker::new") => apply(h_flex(), &node.calls)
             .gap_2()
             .items_center()
             .child(
@@ -1560,6 +1563,30 @@ fn preview(
             .child(crate::tr("designer.rust_code"))
             .into_any_element(),
     }
+}
+
+/// A tag in the variant the node carries.
+///
+/// Read off `with_variant`, like every other property the canvas shows: a
+/// variant that reaches the generated file and leaves the canvas identical is
+/// the inspector looking broken.
+fn tag_variant(node: &Node) -> gpui_component::tag::Tag {
+    use gpui_component::tag::{Tag, TagVariant};
+    let variant = match call_source(node, "with_variant").as_deref() {
+        Some("TagVariant::Primary") => TagVariant::Primary,
+        Some("TagVariant::Danger") => TagVariant::Danger,
+        Some("TagVariant::Success") => TagVariant::Success,
+        Some("TagVariant::Warning") => TagVariant::Warning,
+        Some("TagVariant::Info") => TagVariant::Info,
+        // What `Tag::new` gives, and what an unreadable variant falls back to.
+        _ => TagVariant::Secondary,
+    };
+    Tag::new().with_variant(variant)
+}
+
+/// The source text of a one-argument call, when it has one.
+fn call_source(node: &Node, name: &str) -> Option<String> {
+    node.call(name)?.args.first().map(|arg| arg.to_source())
 }
 
 /// The icon a `IconName::…` path names, as the canvas can draw it.
