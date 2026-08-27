@@ -41,6 +41,7 @@ Déjà aligné :
 | Format à l'enregistrement | par défaut | fait, `rustfmt` sur le fichier |
 | Fichier lu, pas édité | — | le lecteur de code, `⌘E` pour retourner la vue |
 | Ouverture rapide | `⌘P` | `⌘P`, la même boîte que la palette, sur les fichiers |
+| Onglet suivant, fichier précédent | `⌘⌥→`, `⌃⇥` | les mêmes touches |
 
 Reste à aligner, par ordre de manque ressenti :
 
@@ -56,9 +57,12 @@ Reste à aligner, par ordre de manque ressenti :
   si le canvas doit accepter un dépôt venant de l'arbre, et l'inverse.
 - **La surveillance du fichier.** Zed recharge un tampon non modifié sans rien
   demander ; maxx le fait aussi, mais seulement au retour dans la fenêtre.
-- **Plusieurs vues ouvertes en même temps.** Les onglets existent, la
-  navigation entre eux est encore pauvre : pas de `⌘⌥→`, pas de « fichier
-  précédent ».
+- ~~**Plusieurs vues ouvertes en même temps.**~~ — fait : `⌘⌥→` et `⌘⌥←`
+  parcourent la bande comme un anneau — s'arrêter au dernier onglet ne ferait
+  rien précisément quand il y a où aller —, et `⌃⇥` revient au fichier
+  précédent, deux fois de suite pour repartir. Ce qui est retenu est le
+  **chemin**, pas l'indice : fermer un onglet décale tous les suivants, et un
+  indice gardé au travers d'une fermeture nomme ce qui a pris sa place.
 
 ## Ce qui passe avant le reste
 

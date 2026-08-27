@@ -53,6 +53,9 @@ actions!(
         ToggleTheme,
         TogglePalette,
         QuickOpen,
+        NextTab,
+        PreviousTab,
+        LastView,
         PaletteUp,
         PaletteDown,
         PaletteClose,
@@ -175,6 +178,15 @@ pub fn register_handlers(cx: &mut App) {
     });
     cx.on_action(|_: &TogglePalette, cx: &mut App| {
         with_active_workspace(cx, |workspace, window, cx| workspace.toggle_palette(window, cx));
+    });
+    cx.on_action(|_: &NextTab, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.step_view(true, cx));
+    });
+    cx.on_action(|_: &PreviousTab, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.step_view(false, cx));
+    });
+    cx.on_action(|_: &LastView, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.last_view(cx));
     });
     cx.on_action(|_: &QuickOpen, cx: &mut App| {
         with_active_workspace(cx, |workspace, window, cx| workspace.quick_open(window, cx));
@@ -348,6 +360,11 @@ pub fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-ctrl-down", MoveMenuDown, None),
         KeyBinding::new("cmd-k", TogglePalette, None),
         KeyBinding::new("cmd-p", QuickOpen, None),
+        // Zed's own three, and for once maxx has nothing to choose: a hand
+        // coming from there reaches for these without looking.
+        KeyBinding::new("cmd-alt-right", NextTab, None),
+        KeyBinding::new("cmd-alt-left", PreviousTab, None),
+        KeyBinding::new("ctrl-tab", LastView, None),
         // These three hold in the palette only: `escape`, `up` and `down` taken
         // globally would be taken away from the rest of the interface.
         KeyBinding::new("escape", PaletteClose, Some("Palette")),

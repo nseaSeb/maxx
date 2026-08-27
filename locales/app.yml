@@ -353,6 +353,9 @@ menu.hide:
 menu.hide_others:
   en: "Hide Others"
   fr: "Masquer les autres"
+menu.last_view:
+  en: "Previous file"
+  fr: "Fichier précédent"
 menu.minimize:
   en: "Minimize"
   fr: "Réduire"
@@ -365,6 +368,9 @@ menu.move_up:
 menu.new_entry_label:
   en: "Entry"
   fr: "Entrée"
+menu.next_tab:
+  en: "Next tab"
+  fr: "Onglet suivant"
 menu.new_project:
   en: "New project…"
   fr: "Nouveau projet…"
@@ -419,6 +425,9 @@ menu.project_panel:
 menu.quit:
   en: "Quit maxx"
   fr: "Quitter maxx"
+menu.previous_tab:
+  en: "Previous tab"
+  fr: "Onglet précédent"
 menu.quick_open:
   en: "Open a file…"
   fr: "Ouvrir un fichier…"
@@ -566,6 +575,9 @@ message.no_action:
 message.no_menu_bar:
   en: "this project has no menu bar"
   fr: "ce projet n'a pas de barre de menus"
+message.no_previous_view:
+  en: "no file to go back to"
+  fr: "aucun fichier où revenir"
 message.no_project:
   en: "no project open"
   fr: "aucun projet ouvert"
