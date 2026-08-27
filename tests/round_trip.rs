@@ -1157,3 +1157,93 @@ fn a_comment_inside_an_argument_is_not_lifted_out() {
     assert_eq!(written.matches("rien pour l'instant").count(), 1, "{written}");
     assert_eq!(written, source);
 }
+
+/// A block comment nests, and cutting it in half breaks the file.
+#[test]
+fn a_nested_block_comment_comes_back_whole() {
+    let source = "v_flex()\n    /* un /* deux */ trois */\n    .gap_2()";
+    // Stopping at the first `*/` would write back an open comment, and
+    // everything after it in the developer's file becomes comment text.
+    assert_eq!(reparse(source), source);
+}
+
+/// A comment between the parentheses belongs to nobody, so it used to vanish.
+#[test]
+fn a_comment_inside_an_argument_list_is_kept() {
+    for source in [
+        "v_flex().gap(/* huit */ 8)",
+        "v_flex().child(Label::new(/* le nom */ \"Nom\"))",
+        "v_flex().child(Label::new(\"a\") /* apres */)",
+    ] {
+        let written = reparse(source);
+        let word = source
+            .split("/*")
+            .nth(1)
+            .and_then(|rest| rest.split("*/").next())
+            .expect("a comment")
+            .trim()
+            .to_string();
+        assert!(written.contains(&word), "lost from {source}: {written}");
+        // The line moves — maxx lays the chain out its own way — but a second
+        // save changes nothing more.
+        assert_eq!(reparse(&written), written, "{written}");
+    }
+}
+
+/// A comment above a call maxx then removes is not removed with it.
+#[test]
+fn a_comment_outlives_the_call_it_stood_above() {
+    use maxx::registry::{self, Kind, Prop, Target};
+
+    let source = "v_flex()\n    // pourquoi ce hold\n    .h_full()\n    .gap_2()";
+    let (mut node, _) = parser::parse(&file_with(source)).expect("parse");
+
+    // The inspector turning a flag off takes the call away; the sentence above
+    // it is the developer's.
+    let flag = Prop { label: "prop.hold", target: Target::Flag("h_full"), kind: Kind::Bool };
+    registry::write(&mut node, &flag, "false");
+
+    let written = render(&node, 0);
+    assert!(!written.contains(".h_full()"), "{written}");
+    assert!(written.contains("// pourquoi ce hold"), "the comment went with the call: {written}");
+    assert_eq!(reparse(&written), written);
+}
+
+/// A duplicated scrolling box does not share the original's handle.
+#[test]
+fn a_copied_assembly_gets_a_handle_of_its_own() {
+    use maxx::registry;
+
+    let mut box_node = Node::known("v_flex");
+    box_node.set_flag("overflow_y_scroll", true);
+    let wrapper = registry::scrollbar_assembly(box_node, "scroll", "field");
+
+    let mut root = Node::known("v_flex");
+    root.push_child(wrapper.clone());
+    let mut copy = wrapper;
+    registry::rebind_state_fields(&mut copy, &root);
+    root.push_child(copy);
+
+    let written = render(&root, 0);
+    // The box holds its handle in a call and the bar in a constructor
+    // argument: renaming only one leaves a copy that scrolls in step with the
+    // original — it compiles, and it is wrong only once it runs.
+    assert_eq!(written.matches("&self.field)").count(), 2, "{written}");
+    assert_eq!(written.matches("&self.field_2)").count(), 2, "{written}");
+    // And two siblings must not answer to the same element id.
+    assert_eq!(written.matches(".id(\"scroll\")").count(), 1, "{written}");
+}
+
+/// The bar is only ever put over a box that scrolls.
+#[test]
+fn a_bar_makes_its_box_scroll() {
+    let wrapper = maxx::registry::scrollbar_assembly(Node::known("v_flex"), "bar", "scroll");
+    let box_node = &wrapper.children[0];
+    assert!(box_node.call("overflow_y_scroll").is_some(), "a bar over a still box watches nothing");
+    assert!(box_node.call("h_full").is_some(), "and a box that grows scrolls nothing");
+
+    // A row scrolls sideways, and takes the width instead.
+    let row = maxx::registry::scrollbar_assembly(Node::known("h_flex"), "bar", "scroll");
+    assert!(row.children[0].call("overflow_x_scroll").is_some());
+    assert!(row.children[0].call("w_full").is_some());
+}

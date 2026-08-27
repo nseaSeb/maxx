@@ -36,9 +36,7 @@ pub fn matching_brace(source: &str, open: usize) -> Option<usize> {
                 continue;
             }
             b'/' if bytes.get(index + 1) == Some(&b'*') => {
-                index = source[index + 2..]
-                    .find("*/")
-                    .map_or(bytes.len(), |offset| index + 2 + offset + 2);
+                index = block_comment_end(source, index);
                 continue;
             }
             b'r' => {
@@ -425,6 +423,35 @@ pub fn splice(source: &str, block: &str) -> Result<String, Error> {
     Ok(out)
 }
 
+/// The offset just past the `*/` that closes the block comment at `start`.
+///
+/// Rust nests them: `/* un /* deux */ trois */` is one comment, and stopping at
+/// the first `*/` cuts it in half — the half maxx would then write back leaves
+/// a comment open, and everything after it in the developer's file becomes
+/// comment text.
+fn block_comment_end(source: &str, start: usize) -> usize {
+    let bytes = source.as_bytes();
+    let mut depth = 0usize;
+    let mut index = start;
+    while index + 1 < bytes.len() {
+        match (bytes[index], bytes[index + 1]) {
+            (b'/', b'*') => {
+                depth += 1;
+                index += 2;
+            }
+            (b'*', b'/') => {
+                depth -= 1;
+                index += 2;
+                if depth == 0 {
+                    return index;
+                }
+            }
+            _ => index += 1,
+        }
+    }
+    bytes.len()
+}
+
 /// Every comment of `source`, with the offset it starts at.
 ///
 /// Strings, raw strings and char literals are skipped, or a `//` inside one of
@@ -442,9 +469,7 @@ fn comments_in(source: &str) -> Vec<(usize, String)> {
                 index = end;
             }
             b'/' if bytes.get(index + 1) == Some(&b'*') => {
-                let end = source[index + 2..]
-                    .find("*/")
-                    .map_or(bytes.len(), |offset| index + 2 + offset + 2);
+                let end = block_comment_end(source, index);
                 out.push((index, source[index..end].to_string()));
                 index = end;
             }
@@ -481,6 +506,29 @@ fn comments_before(comments: &mut Vec<(usize, String)>, offset: usize) -> Vec<St
 fn skip_comments(comments: &mut Vec<(usize, String)>, offset: usize) {
     let taken = comments.iter().take_while(|(at, _)| *at < offset).count();
     comments.drain(..taken);
+}
+
+/// The comments of an argument list that no argument carries.
+///
+/// `.gap(/* huit */ 8)` writes one between the parentheses and the value: it is
+/// inside no argument's own text, so nothing else would keep it — and dropping
+/// it is the silent erasure this whole mechanism exists to stop. What is inside
+/// an argument is left alone, because that text already holds it.
+///
+/// The line moves: it comes back above the call rather than inside it. The
+/// promise is the words, not the column.
+fn comments_around_args(
+    comments: &mut Vec<(usize, String)>,
+    end: usize,
+    args: impl IntoIterator<Item = std::ops::Range<usize>>,
+) -> Vec<String> {
+    let inside: Vec<std::ops::Range<usize>> = args.into_iter().collect();
+    let taken = comments.iter().take_while(|(at, _)| *at < end).count();
+    comments
+        .drain(..taken)
+        .filter(|(at, _)| !inside.iter().any(|range| range.contains(at)))
+        .map(|(_, text)| text)
+        .collect()
 }
 
 /// Turns an expression into a node.
@@ -527,9 +575,11 @@ fn node_from_expr(expr: &Expr, source: &str, comments: &mut Vec<(usize, String)>
         comments: leading,
         trailing: Vec::new(),
     };
-    // The base's own arguments may hold comments; they are inside the text
-    // those arguments are kept as.
-    skip_comments(comments, call.span().byte_range().end);
+    // A comment written between the constructor's parentheses belongs to
+    // nobody else; one written inside an argument is already in its text.
+    let base_spans = call.args.iter().map(|arg| arg.span().byte_range());
+    let around = comments_around_args(comments, call.span().byte_range().end, base_spans);
+    node.comments.extend(around);
 
     for method in chain {
         let name = method.method.to_string();
@@ -538,17 +588,23 @@ fn node_from_expr(expr: &Expr, source: &str, comments: &mut Vec<(usize, String)>
             // The child drains what stands above it, including anything
             // written between the previous call and this `.child(`.
             node.push_child(node_from_expr(child, source, comments));
+            // What the `.child(…)` parentheses hold beyond the child itself.
+            let child_spans = method.args.iter().map(|arg| arg.span().byte_range());
+            let around =
+                comments_around_args(comments, method.span().byte_range().end, child_spans);
+            if let Some(child) = node.children.last_mut() {
+                child.trailing.extend(around);
+            }
         } else {
-            let above = comments_before(comments, method.method.span().byte_range().start);
+            let mut above = comments_before(comments, method.method.span().byte_range().start);
+            let spans = method.args.iter().map(|arg| arg.span().byte_range());
+            above.extend(comments_around_args(comments, method.span().byte_range().end, spans));
             node.calls.push(Call {
                 name,
                 args: method.args.iter().map(|arg| arg_from_expr(arg, source)).collect(),
                 comments: above,
             });
         }
-        // Anything left inside this call — a comment in a closure argument —
-        // is already part of the argument's own text.
-        skip_comments(comments, method.span().byte_range().end);
     }
 
     // What is left is after the last call, and it stays at the end of the

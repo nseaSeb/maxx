@@ -64,8 +64,11 @@ enfant, en tête de chaîne ou après le dernier appel.
 
 Ce qui reste de ce côté, et qui est mineur : un commentaire **en fin de ligne**
 (`.gap_2() // pourquoi`) remonte au-dessus de l'appel plutôt que de rester
-derrière lui. Le rendu de maxx est d'un appel par ligne, donc la place existe ;
-c'est le modèle qui ne distingue pas encore les deux positions.
+derrière lui, et un commentaire écrit **entre les parenthèses** d'un appel
+(`.gap(/* huit */ 8)`) remonte de même au-dessus de lui. Le rendu de maxx est
+d'un appel par ligne, donc la place existe ; c'est le modèle qui ne distingue
+pas encore ces positions. Ce qui est garanti est que les mots ne disparaissent
+pas, et qu'un deuxième enregistrement ne bouge plus rien.
 
 Reste aussi vrai, et c'est un autre sujet : la **mise en page** de la zone est
 celle de maxx, pas celle du développeur — un enfant écrit sur une ligne peut

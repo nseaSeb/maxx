@@ -42,11 +42,15 @@ fn with_own_comments(node: &Node, rendered: String, indent: &str) -> String {
         for (index, line) in comment.lines().enumerate() {
             if index == 0 {
                 out.push_str(line.trim_start());
+                out.push('\n');
+                out.push_str(indent);
             } else {
+                // Verbatim, and no indent added — the same rule `write_comments`
+                // follows. Indenting a continuation here would push it four
+                // columns further right on every save.
                 out.push_str(line);
+                out.push('\n');
             }
-            out.push('\n');
-            out.push_str(indent);
         }
     }
     out.push_str(&rendered);

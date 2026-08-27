@@ -912,6 +912,28 @@ fn pixel_literal(value: &str) -> Option<String> {
 /// sibling is using.
 pub fn scrollbar_assembly(mut box_node: Node, bar_id: &str, field: &str) -> Node {
     let horizontal = box_node.call("overflow_x_scroll").is_some();
+    // A bar over a box that does not scroll watches something that never
+    // moves: the switch says "show the bar", and scrolling is what a bar is
+    // for, so the box is made to scroll. The axis follows its own direction —
+    // a row scrolls sideways.
+    if !horizontal && box_node.call("overflow_y_scroll").is_none() {
+        box_node.set_flag(
+            if box_node.base.path() == Some("h_flex") {
+                "overflow_x_scroll"
+            } else {
+                "overflow_y_scroll"
+            },
+            true,
+        );
+    }
+    let horizontal = box_node.call("overflow_x_scroll").is_some();
+    // And nothing scrolls inside a box whose height follows its content: it
+    // grows instead, and the window cuts it.
+    let hold = if horizontal { "w_full" } else { "h_full" };
+    let size = if horizontal { "w" } else { "h" };
+    if box_node.call(size).is_none() && box_node.call("size_full").is_none() {
+        box_node.set_flag(hold, true);
+    }
     box_node.set_call("track_scroll", Arg::Verbatim(format!("&self.{field}")));
 
     let mut bar = Node::known("Scrollbar::new");
@@ -1157,6 +1179,22 @@ fn hold_for(axis: &str) -> &'static str {
 /// rather than the siblings is the cheap answer, and it survives a node being
 /// dragged somewhere else.
 pub fn unique_element_id(root: &Node) -> String {
+    next_element_id(&element_ids(root))
+}
+
+/// The first `scroll…` name that `taken` does not hold.
+fn next_element_id(taken: &[String]) -> String {
+    let mut name = "scroll".to_string();
+    let mut index = 2;
+    while taken.contains(&name) {
+        name = format!("scroll_{index}");
+        index += 1;
+    }
+    name
+}
+
+/// Every element id the tree answers to.
+fn element_ids(root: &Node) -> Vec<String> {
     let mut taken = Vec::new();
     root.walk(&mut |_, node| {
         if let Some(call) = node.call("id")
@@ -1179,13 +1217,7 @@ pub fn unique_element_id(root: &Node) -> String {
             }
         }
     });
-    let mut name = "scroll".to_string();
-    let mut index = 2;
-    while taken.contains(&name) {
-        name = format!("scroll_{index}");
-        index += 1;
-    }
-    name
+    taken
 }
 
 /// The catalogue entry with this identifier.
@@ -1443,7 +1475,7 @@ pub fn rebind_state_fields(subtree: &mut Node, root: &Node) {
     // of the same subtree must not be given the same one either.
     let mut taken = state_fields(root);
 
-    fn walk(node: &mut Node, taken: &mut Vec<String>) {
+    fn walk(node: &mut Node, taken: &mut Vec<String>, renamed: &mut Vec<(String, String)>) {
         if of(node).is_some_and(|spec| spec.state.is_some())
             && let Base::Known { args, .. } = &mut node.base
         {
@@ -1456,6 +1488,9 @@ pub fn rebind_state_fields(subtree: &mut Node, root: &Node) {
                 _ => {
                     let name = next_field(taken);
                     taken.push(name.clone());
+                    if let Some(old) = current {
+                        renamed.push((old, name.clone()));
+                    }
                     let arg = Arg::Verbatim(format!("&self.{name}"));
                     match args.first_mut() {
                         Some(slot) => *slot = arg,
@@ -1465,10 +1500,50 @@ pub fn rebind_state_fields(subtree: &mut Node, root: &Node) {
             }
         }
         for child in &mut node.children {
-            walk(child, taken);
+            walk(child, taken, renamed);
         }
     }
-    walk(subtree, &mut taken);
+    let mut renamed = Vec::new();
+    walk(subtree, &mut taken, &mut renamed);
+
+    // A field is not always bound where it is declared: a scrolling box holds
+    // its handle in `track_scroll(&self.…)`, and the bar that watches it holds
+    // the same one as a constructor argument. Renaming only the second leaves a
+    // copy whose box scrolls in step with the original — it compiles, and it is
+    // wrong only once it runs, which is the worst kind.
+    if !renamed.is_empty() {
+        subtree.walk_mut(&mut |node| {
+            for call in &mut node.calls {
+                for arg in &mut call.args {
+                    let Arg::Verbatim(source) = arg else { continue };
+                    for (old, fresh) in &renamed {
+                        if *source == format!("&self.{old}") {
+                            *source = format!("&self.{fresh}");
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Two siblings answering to the same element id share gpui's state for it:
+    // a duplicated scrolling box would scroll where its twin scrolls.
+    let mut ids = element_ids(root);
+    subtree.walk_mut(&mut |node| {
+        let Some(current) =
+            node.call("id").and_then(|call| call.args.first()).and_then(|arg| arg.as_str())
+        else {
+            return;
+        };
+        let current = current.to_string();
+        if !ids.contains(&current) {
+            ids.push(current);
+            return;
+        }
+        let fresh = next_element_id(&ids);
+        ids.push(fresh.clone());
+        node.set_call("id", Arg::Str(fresh));
+    });
 }
 
 /// The names of the view fields every state-backed node of `root` binds to.
