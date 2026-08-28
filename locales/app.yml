@@ -704,6 +704,48 @@ prefs.format_on_save:
 prefs.format_on_save_desc:
   en: "Runs rustfmt on the file after every write, so that what maxx writes follows the project's conventions — its rustfmt.toml included. Careful: rustfmt formats the whole file, not only the region maxx manages. On an already formatted project, that changes nothing elsewhere."
   fr: "Passe rustfmt sur le fichier après chaque écriture, pour que ce que maxx écrit suive les conventions du projet — son rustfmt.toml compris. Attention : rustfmt met en forme le fichier entier, pas seulement la zone que maxx gère. Sur un projet déjà formaté, cela ne change rien ailleurs."
+prefs.run:
+  en: "Run"
+  fr: "Exécution"
+prefs.run_args:
+  en: "Arguments"
+  fr: "Arguments"
+prefs.run_args_desc:
+  en: "Handed to the application itself, after --, and only on a run: cargo build has nothing to give them to. Separated by spaces, so an argument that contains one has to be written into maxx.toml by hand."
+  fr: "Passés à l'application elle-même, après --, et seulement sur une exécution : cargo build n'a personne à qui les donner. Séparés par des espaces, donc un argument qui en contient un s'écrit à la main dans maxx.toml."
+prefs.run_command:
+  en: "The command"
+  fr: "La commande"
+prefs.run_command_desc:
+  en: "What Run (⌘R) will launch, as the output panel shows it."
+  fr: "Ce que Exécuter (⌘R) lancera, tel que le panneau de sortie l'affiche."
+prefs.run_default_features:
+  en: "Default features"
+  fr: "Fonctionnalités par défaut"
+prefs.run_default_features_desc:
+  en: "Off writes --no-default-features. Left on, the crate keeps whatever its Cargo.toml turns on by default."
+  fr: "Éteint, écrit --no-default-features. Allumé, la caisse garde ce que son Cargo.toml allume par défaut."
+prefs.run_desc:
+  en: "The project's own settings, not yours: they are written to its maxx.toml, and travel with it. A field is written when you leave it."
+  fr: "Les réglages du projet, et non les vôtres : ils sont écrits dans son maxx.toml et voyagent avec lui. Un champ est écrit quand on le quitte."
+prefs.run_features:
+  en: "Features"
+  fr: "Fonctionnalités"
+prefs.run_features_desc:
+  en: "Switched on with --features, separated by commas. Empty means none."
+  fr: "Allumées avec --features, séparées par des virgules. Vide, aucune."
+prefs.run_none:
+  en: "No project is open"
+  fr: "Aucun projet n'est ouvert"
+prefs.run_none_desc:
+  en: "How a project is launched is written in its own maxx.toml, so there is nothing to show until one is open."
+  fr: "La façon dont un projet est lancé est écrite dans son propre maxx.toml : il n'y a rien à montrer tant qu'aucun n'est ouvert."
+prefs.run_profile:
+  en: "Profile"
+  fr: "Profil"
+prefs.run_profile_desc:
+  en: "Handed over as --profile. Empty means cargo's own default, which is dev; release is spelled here as a profile, because --profile is also what carries one the project defined itself."
+  fr: "Passé en --profile. Vide, c'est le défaut de cargo, qui est dev ; release s'écrit ici comme un profil, parce que --profile porte aussi celui que le projet a défini lui-même."
 prefs.installed_only:
   en: "Only what is installed is offered."
   fr: "Seul ce qui est installé est proposé."

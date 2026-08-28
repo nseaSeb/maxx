@@ -132,8 +132,39 @@ maigre : `Fichier ▸ Nouveau projet…` écrit toujours le même squelette.
 
 ~~Critère de fin de chantier~~ — atteint : *créer un projet, y déposer une
 image, le lancer, le fermer, le rouvrir — et retrouver la fenêtre où on l'avait
-laissée.* Reste, du chantier : `title_bar` dans une forme de projet, et de
-quoi éditer `[run]` autrement qu'à la main.
+laissée.*
+
+Les deux points qui restaient sont faits, et le chantier est clos :
+
+- **`title_bar` dans une forme de projet.** Les deux formes qui ont une coquille
+  — *Barre latérale et contenu*, *Avec des réglages* — dessinent leur propre
+  barre de titre ; la forme *Vide* garde celle du système, n'ayant rien à mettre
+  dans une barre à elle. La décision se prend à deux endroits qui doivent
+  s'accorder : `TitleBar::title_bar_options()` dans `main.rs`, qui rend la barre
+  du système transparente, et `gpui_component::TitleBar` dans `shell.rs`, qui
+  est ce qu'on dessine à sa place. L'un sans l'autre se voit au premier coup
+  d'œil — une barre doublée, ou une bande nue là où sont les feux tricolores —,
+  d'où le drapeau porté par le gabarit de `main.rs` plutôt que déduit ailleurs.
+
+  Le nom d'une page est désormais écrit une fois, dans `Page::label` : la barre
+  latérale et la barre de titre le lisent au même endroit, et ne peuvent plus
+  finir par se contredire.
+
+- **Éditer `[run]`.** Une page *Exécution* dans l'écran des réglages, et non un
+  écran de plus : quatre champs ne valent pas une deuxième barre latérale. Ce
+  qu'elle porte est dit plutôt que dessiné — ce sont les réglages du **projet**,
+  pas ceux de l'utilisateur, et ils partent dans son `maxx.toml`. La commande
+  qui sera lancée s'affiche dessous, telle que le panneau de sortie l'écrira.
+
+  Un champ est écrit quand on le quitte, pas à chaque frappe : un `maxx.toml`
+  réécrit par caractère serait un fichier passant par tous les états d'un nom à
+  moitié tapé. Et `⌘R` écrit d'abord ce qui traîne dans une boîte encore
+  focalisée — sans quoi changer le profil puis lancer sans quitter le champ
+  lancerait le précédent.
+
+  La traduction entre ce qu'une personne écrit et ce que la section porte —
+  un profil vide qui veut dire « aucun », une liste à séparateurs — vit dans
+  `projectfile`, avec la section, où elle se teste sans fenêtre.
 
 ### 2. Le catalogue — ce qu'on peut déposer
 

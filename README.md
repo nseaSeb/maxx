@@ -76,8 +76,10 @@ not which component to drop but what holds what. *Empty* is one window and one
 view. *Sidebar and content* writes `src/ui/shell.rs` — a sidebar on the left, the
 view of the moment on the right — and the pages it holds stay views maxx
 designs. *With settings* is the same, plus the settings module and a screen that
-reads and writes it. The shell is ordinary Rust, written once: adding a page is
-four lines the compiler asks for one by one.
+reads and writes it. Both shells draw their own title bar, with the application's
+name and the page you are on; *Empty* keeps the system's, having nothing to put
+in one of its own. The shell is ordinary Rust, written once: adding a page is
+five lines the compiler asks for one by one.
 
 On the canvas: click to select, drag to move, double-click a button to give it
 an action. Columns resize by their handle, and their width is remembered. `⌘S`
@@ -397,6 +399,13 @@ whole file.
 
 `⌘,` opens the settings screen, as a tab rather than a modal: `⌘W` closes it and
 gives the current view back.
+
+Settings ▸ **Run** is the one page that is not yours but the project's: the
+cargo profile, the features, whether the default ones stay on, and the arguments
+the application itself is given. They are written to the project's `maxx.toml`
+and travel with it, and the page shows the command `⌘R` will launch. A field is
+written when you leave it — `⌘R` writes whatever is still in a focused box
+before it starts, so changing the profile and launching does what it looks like.
 
 Two files in `~/Library/Application Support/maxx/` — `$XDG_CONFIG_HOME` or
 `~/.config` elsewhere, `%APPDATA%` on Windows.

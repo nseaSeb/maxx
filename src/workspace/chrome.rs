@@ -307,6 +307,7 @@ impl Render for Workspace {
 
         self.sync_prop_inputs(window, cx);
         self.sync_menu_inputs(window, cx);
+        self.sync_run_inputs(window, cx);
         self.sync_code_input(window, cx);
         let visible = crate::settings::prefs(cx).clone();
         let show_panel = visible.show_project_panel && self.project.is_some();

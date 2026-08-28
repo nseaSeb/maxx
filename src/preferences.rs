@@ -19,6 +19,11 @@ use gpui_component::setting::{
     SettingField, SettingGroup, SettingItem, SettingPage, Settings as SettingsView,
 };
 
+use gpui::Entity;
+use gpui_component::Sizable;
+use gpui_component::input::{Input, InputState};
+
+use crate::projectfile::RunField;
 use crate::settings;
 use crate::theme;
 use crate::workspace::Workspace;
@@ -31,6 +36,7 @@ impl Workspace {
             .page(appearance_page())
             .page(tools_page())
             .page(projects_page(cx))
+            .page(run_page(self))
             .page(file_page(cx))
             .into_any_element()
     }
@@ -247,6 +253,95 @@ fn projects_page(cx: &mut Context<Workspace>) -> SettingPage {
                 })
             })),
     )
+}
+
+/// How the open project is launched: the `[run]` section of its `maxx.toml`.
+///
+/// A page of this screen rather than a screen of its own, and the distinction
+/// it has to carry is stated rather than drawn: these are the project's
+/// settings, not the user's, and the group says which file they go to. The
+/// alternative was a second sidebar and a second set of pages for four fields.
+///
+/// The boxes are built by `sync_run_inputs` and only borrowed here: an entity
+/// created in a render closure is a new one per frame, and a field rebuilt
+/// under the caret loses what is being typed into it.
+fn run_page(workspace: &Workspace) -> SettingPage {
+    let Some(project) = workspace.project() else {
+        return SettingPage::new(crate::tr("prefs.run")).group(
+            SettingGroup::new()
+                .title(crate::tr("prefs.run_none"))
+                .description(crate::tr("prefs.run_none_desc")),
+        );
+    };
+
+    let root = project.root.clone();
+    let name = project.name.clone();
+    let config = workspace.run_config().clone();
+    let inputs: Vec<_> = workspace.run_inputs().to_vec();
+    let boxed = |field: RunField| {
+        inputs.iter().find(|(this, _)| *this == field).map(|(_, state)| state.clone())
+    };
+    let (profile, features, args) =
+        (boxed(RunField::Profile), boxed(RunField::Features), boxed(RunField::Args));
+    let line = format!("$ cargo {}", config.arguments("run").join(" "));
+    let _ = root;
+
+    SettingPage::new(crate::tr("prefs.run"))
+        .group(
+            SettingGroup::new()
+                .title(name)
+                .description(crate::tr("prefs.run_desc"))
+                .item(field_row("prefs.run_profile", "prefs.run_profile_desc", profile))
+                .item(field_row("prefs.run_features", "prefs.run_features_desc", features))
+                .item(
+                    SettingItem::new(
+                        crate::tr("prefs.run_default_features"),
+                        SettingField::switch(
+                            {
+                                let on = config.default_features;
+                                move |_| on
+                            },
+                            |value, cx| {
+                                crate::workspace::defer_active(cx, move |workspace, _, cx| {
+                                    workspace.toggle_default_features(value, cx);
+                                });
+                            },
+                        ),
+                    )
+                    .description(crate::tr("prefs.run_default_features_desc")),
+                )
+                .item(field_row("prefs.run_args", "prefs.run_args_desc", args)),
+        )
+        .group(
+            SettingGroup::new()
+                .title(crate::tr("prefs.run_command"))
+                .description(crate::tr("prefs.run_command_desc"))
+                .item(SettingItem::render(move |_, _, _| {
+                    div()
+                        .text_xs()
+                        .text_color(theme::text_muted())
+                        .child(SharedString::from(line.clone()))
+                })),
+        )
+}
+
+/// One labelled text box of the run page.
+fn field_row(label: &str, description: &str, state: Option<Entity<InputState>>) -> SettingItem {
+    let label = crate::tr(label);
+    let description = crate::tr(description);
+    SettingItem::render(move |_, _, _| {
+        let field: AnyElement = match &state {
+            Some(state) => Input::new(state).small().into_any_element(),
+            None => div().into_any_element(),
+        };
+        div()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .child(div().child(label.clone()))
+            .child(div().text_xs().text_color(theme::text_muted()).child(description.clone()))
+            .child(field)
+    })
 }
 
 /// Where the settings live, and how to edit them by hand.

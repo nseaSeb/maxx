@@ -374,8 +374,16 @@ fn the_sidebar_shape_hangs_two_views_off_a_shell() {
     assert!(main.contains("Shell::new(window, cx)"), "{main}");
 
     let shell = std::fs::read_to_string(root.join("src/ui/shell.rs")).unwrap();
-    assert!(shell.contains("SidebarMenuItem::new(\"Home\")"), "{shell}");
-    assert!(shell.contains("SidebarMenuItem::new(\"Library\")"), "{shell}");
+    // The name is written once, in `Page::label`, and the sidebar reads it from
+    // there — the title bar shows the same one, and the two cannot drift.
+    assert!(shell.contains("Self::Home => \"Home\","), "{shell}");
+    assert!(shell.contains("Self::Library => \"Library\","), "{shell}");
+    assert!(shell.contains("SidebarMenuItem::new(Page::Home.label())"), "{shell}");
+    assert!(shell.contains("SidebarMenuItem::new(Page::Library.label())"), "{shell}");
+    // The shell draws its own title bar, and `main.rs` opens the window with the
+    // options that make room for it. One without the other is a doubled bar.
+    assert!(shell.contains("TitleBar::new()"), "{shell}");
+    assert!(main.contains("TitleBar::title_bar_options()"), "{main}");
 
     // Both pages stay views maxx can design: the shape is around them, not
     // instead of them.
@@ -534,4 +542,75 @@ fn a_broken_file_stops_the_entry_before_main_is_touched() {
     // Otherwise the code opens the new view while the file still names the old
     // one — the exact disagreement the write order exists to prevent.
     assert_eq!(std::fs::read_to_string(root.join("src/main.rs")).unwrap(), before);
+}
+
+#[test]
+fn a_run_field_is_taken_as_a_person_writes_it() {
+    use maxx::projectfile::{Run, RunField};
+
+    let mut run = Run::default();
+
+    // Empty is no profile at all, not the empty one: a project that says
+    // nothing gets cargo's own default.
+    run.set(RunField::Profile, "  release  ");
+    assert_eq!(run.profile.as_deref(), Some("release"));
+    run.set(RunField::Profile, "   ");
+    assert_eq!(run.profile, None);
+
+    // A trailing separator leaves an empty piece behind, and half a list typed
+    // is not half a feature.
+    run.set(RunField::Features, " metal ,  wayland , ");
+    assert_eq!(run.features, ["metal", "wayland"]);
+    run.set(RunField::Features, "");
+    assert!(run.features.is_empty());
+
+    run.set(RunField::Args, "--verbose   --colour always");
+    assert_eq!(run.args, ["--verbose", "--colour", "always"]);
+}
+
+#[test]
+fn a_run_field_comes_back_the_way_it_went_in() {
+    use maxx::projectfile::{Run, RunField};
+
+    let mut run = Run::default();
+    for (field, written) in [
+        (RunField::Profile, "release"),
+        (RunField::Features, "metal, wayland"),
+        (RunField::Args, "--verbose --quiet"),
+    ] {
+        run.set(field, written);
+        assert_eq!(run.get(field), written, "{field:?} must survive the round trip");
+    }
+}
+
+#[test]
+fn the_run_section_written_from_the_screen_reaches_the_command_line() {
+    let root = scratch("maxx_run_edited");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+
+    let mut file = projectfile::load(&root);
+    file.run.set(maxx::projectfile::RunField::Profile, "release");
+    file.run.set(maxx::projectfile::RunField::Features, "metal");
+    file.run.default_features = false;
+    file.run.set(maxx::projectfile::RunField::Args, "--verbose");
+    projectfile::save(&root, &file).unwrap();
+
+    assert_eq!(
+        projectfile::arguments(&root, "run"),
+        [
+            "run",
+            "--profile",
+            "release",
+            "--no-default-features",
+            "--features",
+            "metal",
+            "--",
+            "--verbose"
+        ]
+    );
+    // A build has nobody to hand the application's own arguments to.
+    assert_eq!(
+        projectfile::arguments(&root, "build"),
+        ["build", "--profile", "release", "--no-default-features", "--features", "metal"]
+    );
 }

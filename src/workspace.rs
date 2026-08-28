@@ -206,6 +206,15 @@ pub struct Workspace {
     watch_task: Option<Task<()>>,
     /// The watcher itself, kept alive here: dropped, it stops watching.
     watcher: Option<notify::RecommendedWatcher>,
+    /// Text boxes of the run page, one per editable field of `[run]`.
+    run_inputs: Vec<(crate::projectfile::RunField, Entity<InputState>)>,
+    /// The project those boxes were built for, so they are built once.
+    run_synced: Option<PathBuf>,
+    /// `[run]` as it stands, read once with the boxes rather than per frame.
+    ///
+    /// Held rather than re-read where it is drawn: the preferences screen
+    /// repaints on every notification, and `maxx.toml` is a file.
+    run_config: crate::projectfile::Run,
     /// Name box of the state panel.
     state_name_input: Option<Entity<InputState>>,
     /// Search box of the component palette.
@@ -301,6 +310,9 @@ impl Workspace {
             run_state: crate::run::State::Idle,
             run_pid: None,
             run_task: None,
+            run_inputs: Vec::new(),
+            run_synced: None,
+            run_config: crate::projectfile::Run::default(),
             watch_task: None,
             watcher: None,
             state_name_input: None,
