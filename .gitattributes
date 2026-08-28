@@ -13,3 +13,4 @@ demo/** -text
 
 # Images are binary: never line-ending conversion.
 *.png binary
+*.gif binary

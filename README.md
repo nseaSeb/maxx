@@ -165,6 +165,8 @@ opened from the menu bar, a menu bar editable in maxx. It doubles as the tests'
 reference — read every view back, rewrite without moving a line, read the menu
 bar back.
 
+![Editing the demo project in maxx: a component is picked from the catalogue on the right, appears on the canvas, and the generated `src/ui/home.rs` is opened and read back](docs/maxx-demo.gif)
+
 ## Requirements
 
 Rust 1.88 or newer — maxx uses `&& let` chains, which the 2024 edition alone
