@@ -40,6 +40,14 @@ rust-i18n = "3"
 # n'en lit que l'en-tête, et c'est ce qui permet de dire à l'inspecteur combien
 # de pixels fait vraiment la photographie qu'on vient de poser.
 image = "0.25"
+# Déjà dans l'arbre par gpui-component : le prendre en dépendance directe ne
+# coûte rien de plus au build. C'est ce qui prévient maxx qu'un éditeur vient
+# d'écrire dans le projet ouvert.
+notify = "7"
+# Déjà dans l'arbre par gpui, qui construit tout son exécuteur dessus. Ce qu'on
+# lui prend tient en une chose : un canal qu'on peut attendre, pour que la veille
+# du projet ne réveille pas la fenêtre dix fois par seconde à ne rien faire.
+futures = "0.3"
 
 [dev-dependencies]
 # Déjà dans l'arbre par gpui : sert à rasteriser les essais d'icône.
