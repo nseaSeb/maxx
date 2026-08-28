@@ -133,7 +133,9 @@ pub fn create_project(root: &Path, name: &str, template: Template) -> io::Result
     // the window opens on. What was copied from maxx joins it later, module by
     // module. Versioned with the project, both halves.
     std::fs::write(root.join(".gitignore"), "/target\n/.cargo\n")?;
-    std::fs::write(root.join("src/main.rs"), main_rs())?;
+    // A shape with a shell draws its own title bar; the empty one keeps the
+    // system's, having nothing to put in a bar of its own.
+    std::fs::write(root.join("src/main.rs"), main_rs(template != Template::Empty))?;
     std::fs::write(root.join("src/menus.rs"), menus_rs())?;
     std::fs::write(root.join("src/ui/mod.rs"), "pub mod home;\n")?;
     std::fs::write(root.join("src/ui/home.rs"), view_rs("Home", "home"))?;
@@ -1706,13 +1708,29 @@ pub fn app_menus() -> Vec<Menu> {
     .to_string()
 }
 
-fn main_rs() -> String {
-    r#"mod menus;
+/// The entry point of the generated project.
+///
+/// `own_title_bar` says whether the window carries a title bar of its own — a
+/// shape decision, taken once at creation. It has to be taken here and not in
+/// the shell: `TitleBar::title_bar_options()` is what makes the system bar
+/// transparent, and `gpui_component::TitleBar` is what is drawn in its place.
+/// Either one without the other is visible at a glance — a doubled bar, or a
+/// bare strip where the traffic lights sit.
+fn main_rs(own_title_bar: bool) -> String {
+    let (import, option) = if own_title_bar {
+        (
+            "use gpui_component::{Root, TitleBar};\n\n",
+            "                titlebar: Some(TitleBar::title_bar_options()),\n",
+        )
+    } else {
+        ("use gpui_component::Root;\n\n", "")
+    };
+
+    let body = r#"mod menus;
 mod ui;
 
 use gpui::{App, Application, Bounds, WindowBounds, WindowOptions, prelude::*, px, size};
-use gpui_component::Root;
-
+IMPORT
 use crate::ui::home::Home;
 
 fn main() {
@@ -1728,7 +1746,7 @@ fn main() {
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
-                ..Default::default()
+OPTION                ..Default::default()
             },
             |window, cx| {
                 let view = cx.new(|cx| Home::new(window, cx));
@@ -1738,8 +1756,9 @@ fn main() {
         .expect("the window must open");
     });
 }
-"#
-    .to_string()
+"#;
+
+    body.replace("IMPORT\n", import).replace("OPTION", option)
 }
 
 /// The view template.

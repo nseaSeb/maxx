@@ -2,6 +2,8 @@
 
 use super::*;
 
+use crate::projectfile::RunField;
+
 impl Workspace {
     /// Builds the dependency tree in the background, so the first run does not
     /// have to.
@@ -26,6 +28,10 @@ impl Workspace {
         }
 
         let root = project.root.clone();
+        // A box still holding the caret has not been written yet, and ⌘R is a
+        // global shortcut: without this, editing the profile and launching
+        // without leaving the field would run the previous one.
+        self.save_run(cx);
         self.run_output.clear();
         // What is actually being launched, before its first line of output:
         // the project says the profile, the features and the arguments, and
@@ -223,5 +229,85 @@ impl Workspace {
                             .child(Scrollbar::vertical(&self.output_scroll)),
                     ),
             )
+    }
+}
+
+/// Editing the project's `[run]` section, on the preferences screen.
+impl Workspace {
+    /// Builds the run page's text boxes, once per project.
+    ///
+    /// Built here rather than where they are drawn, for the reason every other
+    /// panel in maxx has: `SettingItem::render` runs on every repaint, and an
+    /// entity created there would be a new one each frame — a field that loses
+    /// the caret as soon as it is typed in.
+    pub(super) fn sync_run_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let root = self.project.as_ref().map(|project| project.root.clone());
+        if self.run_synced == root {
+            return;
+        }
+        self.run_synced = root.clone();
+        self.run_inputs.clear();
+        let Some(root) = root else {
+            self.run_config = crate::projectfile::Run::default();
+            return;
+        };
+
+        self.run_config = crate::projectfile::load(&root).run;
+        for field in [RunField::Profile, RunField::Features, RunField::Args] {
+            let value = self.run_config.get(field);
+            let state = cx.new(|cx| InputState::new(window, cx).default_value(value));
+            cx.subscribe(&state, move |this, state, event: &InputEvent, cx| match event {
+                // The typing is kept in memory; the file is written when the
+                // field is left. A `maxx.toml` rewritten on every keystroke
+                // would be a disk write per character, and — worse — every
+                // half-typed feature name would be a state the project was
+                // briefly in.
+                InputEvent::Change => {
+                    let value = state.read(cx).value().to_string();
+                    this.run_config.set(field, &value);
+                }
+                InputEvent::Blur | InputEvent::PressEnter { .. } => this.save_run(cx),
+                _ => {}
+            })
+            .detach();
+            self.run_inputs.push((field, state));
+        }
+    }
+
+    /// Turns the switch, and writes: one file write per toggle is not a burden
+    /// the way one per keystroke would be.
+    pub(crate) fn toggle_default_features(&mut self, on: bool, cx: &mut Context<Self>) {
+        self.run_config.default_features = on;
+        self.save_run(cx);
+    }
+
+    /// Writes `[run]` back to `maxx.toml`.
+    ///
+    /// The whole file is loaded and put back rather than patched: `[run]` is
+    /// maxx's own section, where `[modules]` and `[project]` are written by
+    /// other hands, and reading them back is what keeps them.
+    fn save_run(&mut self, cx: &mut Context<Self>) {
+        let Some(root) = self.project.as_ref().map(|project| project.root.clone()) else {
+            return;
+        };
+        let mut file = crate::projectfile::load(&root);
+        if file.run == self.run_config {
+            return;
+        }
+        file.run = self.run_config.clone();
+        if let Err(error) = crate::projectfile::save(&root, &file) {
+            self.message = Some(SharedString::from(error.to_string()));
+        }
+        cx.notify();
+    }
+
+    /// What the run page holds, for the screen that draws it.
+    pub(crate) fn run_config(&self) -> &crate::projectfile::Run {
+        &self.run_config
+    }
+
+    /// The boxes of the run page, in the order they were built.
+    pub(crate) fn run_inputs(&self) -> &[(RunField, Entity<InputState>)] {
+        &self.run_inputs
     }
 }

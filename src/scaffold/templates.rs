@@ -12,7 +12,7 @@
 // nothing but `std`. `build.rs` is a program of its own and would not compile
 // otherwise.
 
-/// The shell that holds a sidebar and the view it shows.
+/// The shell that holds a title bar, a sidebar and the view it shows.
 ///
 /// `pages` is, per entry: the module under `src/ui/`, the type it declares, and
 /// the label the sidebar shows.
@@ -30,6 +30,11 @@ pub fn shell_rs(pages: &[(&str, &str, &str)]) -> String {
     let variants: String =
         pages.iter().map(|(_, type_name, _)| format!("    {type_name},\n")).collect();
 
+    let labels: String = pages
+        .iter()
+        .map(|(_, type_name, label)| format!("            Self::{type_name} => \"{label}\",\n"))
+        .collect();
+
     let fields: String = pages
         .iter()
         .map(|(module, type_name, _)| format!("    {module}: Entity<{type_name}>,\n"))
@@ -42,20 +47,24 @@ pub fn shell_rs(pages: &[(&str, &str, &str)]) -> String {
         })
         .collect();
 
+    // Built as a list and joined, rather than concatenated: only the last item
+    // carries the comma that closes the argument, and a file that leaves it out
+    // is a file `rustfmt` rewrites — which is exactly what a shape must not be.
     let items: String = pages
         .iter()
-        .map(|(_, type_name, label)| {
+        .map(|(_, type_name, _)| {
             format!(
-                "                            .child(\n\
-                 \x20                               SidebarMenuItem::new(\"{label}\")\n\
-                 \x20                                   .active(self.page == Page::{type_name})\n\
-                 \x20                                   .on_click(cx.listener(|this, _, _window, cx| {{\n\
-                 \x20                                       this.show(Page::{type_name}, cx)\n\
-                 \x20                                   }})),\n\
-                 \x20                           )\n"
+                "                                .child(\n\
+                 \x20                                   SidebarMenuItem::new(Page::{type_name}.label())\n\
+                 \x20                                       .active(self.page == Page::{type_name})\n\
+                 \x20                                       .on_click(cx.listener(|this, _, _window, cx| {{\n\
+                 \x20                                           this.show(Page::{type_name}, cx)\n\
+                 \x20                                       }})),\n\
+                 \x20                               )"
             )
         })
-        .collect();
+        .collect::<Vec<_>>()
+        .join("\n");
 
     let arms: String = pages
         .iter()
@@ -70,15 +79,17 @@ pub fn shell_rs(pages: &[(&str, &str, &str)]) -> String {
     let first = pages.first().map(|(_, type_name, _)| *type_name).unwrap_or("Home");
 
     format!(
-        "//! The application's shell: a sidebar, and the view it shows.\n\
+        "//! The application's shell: a title bar, a sidebar, and the view it shows.\n\
          //!\n\
          //! Ordinary Rust, written once and yours from here. maxx designs the\n\
          //! views under `src/ui/`; this file is what puts them side by side.\n\
          //!\n\
-         //! Adding a page is four lines the compiler asks for one by one: a\n\
-         //! `Page` variant, a field, the entity that fills it, and a menu item.\n\
+         //! Adding a page is five lines the compiler asks for one by one: a `Page`\n\
+         //! variant, its label, a field, the entity that fills it, and a menu item.\n\
          \n\
-         use gpui::{{Context, Entity, Window, prelude::*}};\n\
+         use gpui::{{Context, Entity, Window, div, prelude::*}};\n\
+         use gpui_component::StyledExt;\n\
+         use gpui_component::TitleBar;\n\
          use gpui_component::h_flex;\n\
          use gpui_component::sidebar::{{Sidebar, SidebarMenu, SidebarMenuItem}};\n\
          use gpui_component::v_flex;\n\
@@ -89,6 +100,16 @@ pub fn shell_rs(pages: &[(&str, &str, &str)]) -> String {
          #[derive(Clone, Copy, PartialEq, Eq)]\n\
          pub enum Page {{\n\
          {variants}\
+         }}\n\
+         \n\
+         impl Page {{\n\
+         \x20   /// The name the sidebar and the title bar both show. Written once,\n\
+         \x20   /// so the two cannot come to disagree.\n\
+         \x20   fn label(self) -> &'static str {{\n\
+         \x20       match self {{\n\
+         {labels}\
+         \x20       }}\n\
+         \x20   }}\n\
          }}\n\
          \n\
          pub struct Shell {{\n\
@@ -115,18 +136,32 @@ pub fn shell_rs(pages: &[(&str, &str, &str)]) -> String {
          \n\
          impl Render for Shell {{\n\
          \x20   fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {{\n\
-         \x20       h_flex()\n\
+         \x20       v_flex()\n\
          \x20           .size_full()\n\
          \x20           .child(\n\
-         \x20               Sidebar::left().child(\n\
-         \x20                   SidebarMenu::new()\n\
-         {items}\
-         \x20               ),\n\
+         \x20               // `main.rs` opens the window with\n\
+         \x20               // `TitleBar::title_bar_options()`, which is what makes\n\
+         \x20               // the system bar transparent; this is what is drawn in\n\
+         \x20               // its place. The two go together — either one without\n\
+         \x20               // the other shows at a glance, as a doubled bar or as a\n\
+         \x20               // bare strip where the window controls sit.\n\
+         \x20               TitleBar::new()\n\
+         \x20                   .child(div().font_semibold().child(env!(\"CARGO_PKG_NAME\")))\n\
+         \x20                   .child(div().child(self.page.label())),\n\
          \x20           )\n\
          \x20           .child(\n\
-         \x20               v_flex().flex_1().size_full().child(match self.page {{\n\
+         \x20               h_flex()\n\
+         \x20                   .flex_1()\n\
+         \x20                   .overflow_hidden()\n\
+         \x20                   .child(\n\
+         \x20                       Sidebar::left().child(\n\
+         \x20                           SidebarMenu::new()\n\
+         {items},\n\
+         \x20                       ),\n\
+         \x20                   )\n\
+         \x20                   .child(v_flex().flex_1().size_full().child(match self.page {{\n\
          {arms}\
-         \x20               }}),\n\
+         \x20                   }})),\n\
          \x20           )\n\
          \x20   }}\n\
          }}\n"

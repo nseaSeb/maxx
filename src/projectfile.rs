@@ -160,6 +160,63 @@ impl Run {
     }
 }
 
+/// One editable field of the `[run]` section.
+///
+/// Here rather than beside the screen that draws it: what a person types into
+/// a box and what the section holds are two different shapes — a profile is a
+/// word or nothing, a list is written with separators — and the translation
+/// between them belongs with the section, where it can be tested without a
+/// window.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RunField {
+    /// The cargo profile, empty for cargo's own default.
+    Profile,
+    /// The features to switch on, comma-separated.
+    Features,
+    /// What the application itself is given, after `--`, space-separated.
+    Args,
+}
+
+impl Run {
+    /// Takes one field as a person wrote it.
+    pub fn set(&mut self, field: RunField, value: &str) {
+        match field {
+            // Empty is not the empty profile, it is no profile at all: cargo's
+            // own default, which is what a project that says nothing gets.
+            RunField::Profile => {
+                let value = value.trim();
+                self.profile = (!value.is_empty()).then(|| value.to_string());
+            }
+            RunField::Features => self.features = split_list(value, ','),
+            RunField::Args => self.args = split_list(value, ' '),
+        }
+    }
+
+    /// One field back, as it goes into the box.
+    pub fn get(&self, field: RunField) -> String {
+        match field {
+            RunField::Profile => self.profile.clone().unwrap_or_default(),
+            RunField::Features => self.features.join(", "),
+            RunField::Args => self.args.join(" "),
+        }
+    }
+}
+
+/// Splits a list the way a person writes one: on the separator, trimmed, and
+/// without the empty pieces a trailing separator leaves behind.
+///
+/// A separator inside a value cannot be written here, and that is the honest
+/// limit of a one-line box: an argument holding a space goes into `maxx.toml`
+/// by hand.
+fn split_list(value: &str, separator: char) -> Vec<String> {
+    value
+        .split(separator)
+        .map(str::trim)
+        .filter(|piece| !piece.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
 /// Whether a flag is still on, for the fields that are written only once off.
 fn is_on(value: &bool) -> bool {
     *value
