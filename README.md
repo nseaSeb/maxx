@@ -186,7 +186,9 @@ fontconfig, ALSA. The exact list is in
 
 CI checks macOS on every push, and all three systems on pull requests, on
 demand and once a week. A `v*` tag opens the release gate: the whole matrix, a
-release build, and binaries for the three systems attached to the release.
+release build on each system, and a release opened on GitHub. No binary is
+attached to it — maxx is built from its source, by people who have a Rust
+toolchain anyway.
 
 What CI does not prove: that maxx is usable. No test opens a window — they cover
 the model, the parser, the templates and the settings. maxx is developed on

@@ -334,9 +334,9 @@ ressortir sur trois. Ce qui est garanti est le contenu, pas la colonne.
   écarte les médias du README : `cargo package` rend 78 fichiers et un paquet
   qui se construit. Reste le geste lui-même, `cargo publish`, avec un jeton que
   seul un humain pose. À savoir avant : `cargo install` demande à l'utilisateur
-  Linux les paquets de développement de Vulkan, de Wayland et de fontconfig, là
-  où le binaire attaché à la version ne demande rien — crates.io sert surtout à
-  réserver le nom et à servir qui a déjà de quoi compiler. Et une version
+  Linux les paquets de développement de Vulkan, de Wayland et de fontconfig.
+  C'est assumé — maxx s'adresse à des gens qui compilent, et la version ouverte
+  par un tag n'attache plus aucun binaire depuis `v0.1.0`. Et une version
   publiée ne se supprime pas, elle se *yank*.
 - ~~`cargo fmt`~~ — fait, avec `use_small_heuristics = "Max"` pour préserver
   les tables du catalogue, et `fmt --check` est dans les deux workflows.

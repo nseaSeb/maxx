@@ -5,6 +5,17 @@ restent sous la leur : ce fichier récapitule ce que leur redistribution
 demande. Il décrit l'état du graphe de dépendances tel que `Cargo.lock` le fige
 pour la cible macOS ; il est à revoir après toute mise à jour du verrou.
 
+**Ce que maxx distribue aujourd'hui : de la source, et rien d'autre.** Le dépôt
+ne porte aucun exécutable, la version ouverte par un tag n'en attache aucun, et
+crates.io n'en reçoit pas non plus. Or les obligations décrites plus bas — le
+texte de la licence Apache-2.0 à joindre, les mentions de copyright à
+conserver, la source du crate MPL-2.0 à indiquer — portent toutes sur la
+distribution d'un **binaire**. Aucune ne s'applique donc en l'état. Ce fichier
+existe pour le jour où elle changerait : un paquet Homebrew, un `.app` signé,
+un exécutable joint à une version. Ce jour-là, il faudra faire voyager ces
+mentions avec le fichier distribué — la fenêtre « À propos » est l'endroit
+habituel pour une application à interface.
+
 La liste complète et à jour se lit avec :
 
 ```

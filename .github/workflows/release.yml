@@ -79,35 +79,6 @@ jobs:
       - name: Construction
         run: cargo build --release
 
-      - name: Nommer le binaire
-        shell: bash
-        run: |
-          set -euo pipefail
-          case "${{ runner.os }}" in
-            Windows) source="target/release/maxx.exe"; cible="maxx-windows.exe" ;;
-            macOS)   source="target/release/maxx";     cible="maxx-macos" ;;
-            *)       source="target/release/maxx";     cible="maxx-linux" ;;
-          esac
-          mkdir -p paquets
-          cp "$source" "paquets/$cible"
-
-      # Une icône ne s'attache pas à un exécutable : sur macOS c'est le paquet
-      # qui la porte, et le nom que le Dock affiche avec elle. Le binaire nu
-      # part quand même, pour qui le veut dans son `PATH`.
-      - name: Paquet d'application (macOS)
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          set -euo pipefail
-          scripts/bundle-macos.sh target/release/maxx paquets
-          ditto -c -k --keepParent paquets/maxx.app paquets/maxx-macos.app.zip
-          rm -rf paquets/maxx.app
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: binaire-${{ runner.os }}
-          path: paquets/*
-
   paquet:
     name: le paquet se tient
     runs-on: macos-latest
@@ -134,7 +105,7 @@ jobs:
           exit 0
 
   publier:
-    name: attacher les binaires à la version
+    name: ouvrir la version
     needs: [verifier, paquet]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -142,25 +113,20 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          path: paquets
-          merge-multiple: true
 
-      # Des binaires, et pas seulement crates.io : `cargo install` demande à
-      # l'utilisateur Linux d'avoir les paquets de développement de Vulkan, de
-      # Wayland et de fontconfig. Un fichier à télécharger ne demande rien.
+      # Aucun binaire n'est attaché, et c'est délibéré : maxx s'adresse à des
+      # gens qui compilent. Un exécutable joint ici serait une distribution au
+      # sens des licences — Apache-2.0 pour gpui, MPL-2.0 pour option-ext —
+      # avec les mentions à faire voyager avec lui. Publier la source n'en
+      # demande aucune, et `cargo install` suffit à qui a de quoi construire.
       #
-      # Par le client `gh` plutôt qu'une action tierce : le dépôt est destiné à
-      # devenir public, et chaque action tierce est une surface de plus.
-      - name: Attacher
+      # Par le client `gh` plutôt qu'une action tierce : chaque action tierce
+      # est une surface de plus sur un dépôt public.
+      - name: Ouvrir
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          ls -l paquets
           gh release create "${GITHUB_REF_NAME}" \
             --title "${GITHUB_REF_NAME}" \
-            --generate-notes \
-            paquets/* \
-            || gh release upload "${GITHUB_REF_NAME}" paquets/* --clobber
+            --generate-notes
