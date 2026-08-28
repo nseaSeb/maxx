@@ -858,10 +858,6 @@ impl Workspace {
         }
     }
 
-    /// The fields of the view's struct, and a box to add one.
-    ///
-    /// A property can only read what exists, so declaring the field comes
-    /// first; binding a property to it is one click away in the inspector.
     /// The open view, and the box that renames it.
     ///
     /// A section of its own above the state: every view maxx creates is called
@@ -903,6 +899,10 @@ impl Workspace {
         )
     }
 
+    /// The fields of the view's struct, and a box to add one.
+    ///
+    /// A property can only read what exists, so declaring the field comes
+    /// first; binding a property to it is one click away in the inspector.
     fn render_state(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let fields = self.view().map(|view| view.state_fields()).unwrap_or_default();
         let (type_label, _, _) = crate::view::STATE_TYPES[self.state_type()];

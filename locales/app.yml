@@ -734,6 +734,12 @@ message.name_the_view:
 message.not_a_view:
   en: "only a view of src/ui/ can be renamed here"
   fr: "seule une vue de src/ui/ se renomme ici"
+message.run_changed_on_disk:
+  en: "maxx.toml changed outside maxx — reopen the settings screen to see it"
+  fr: "maxx.toml a changé hors de maxx — rouvrez l'écran des réglages pour le voir"
+message.view_unsaved_rename:
+  en: "save the view before renaming it — the rename works from the file"
+  fr: "enregistrez la vue avant de la renommer — le renommage part du fichier"
 message.view_renamed:
   en: "renamed to %{name}"
   fr: "renommée en %{name}"

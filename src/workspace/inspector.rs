@@ -244,6 +244,14 @@ impl Workspace {
             cx.notify();
             return;
         };
+        // Asked before anything moves, not explained after: the rename is made
+        // from what is on disk, so an unsaved canvas would be dropped with the
+        // tab — and the developer would learn it from the empty canvas.
+        if self.view().is_some_and(|view| view.dirty()) {
+            self.message = Some(crate::tr("message.view_unsaved_rename"));
+            cx.notify();
+            return;
+        }
 
         match crate::scaffold::rename_view(&root, &module, &renamed) {
             Ok(elsewhere) => {
@@ -364,6 +372,15 @@ impl Workspace {
             return;
         };
 
+        // The gate `add_state_field` applies, and for the same reason: this
+        // writes the file from maxx's copy of it, so a file changed elsewhere
+        // would be overwritten with a version that predates the change.
+        if view.disk_changed() {
+            self.message = Some(crate::tr("error.changed_on_disk_reload"));
+            cx.notify();
+            return;
+        }
+
         let filled = match crate::view::fill_handler(&view.source, &name, kind) {
             Ok(filled) => filled,
             Err(error) => {
@@ -379,12 +396,13 @@ impl Workspace {
             cx.notify();
             return;
         }
-        if let Some(view) = self.view_mut()
-            && let Err(error) = view.reload()
-        {
-            self.message = Some(SharedString::from(error));
-            cx.notify();
-            return;
+        // The copy is taken forward rather than re-read. A handler lives beside
+        // the managed region, so nothing in the tree changed — and `reload`
+        // would replace the tree from disk, which is the last saved one: an
+        // unsaved edit on the canvas, and the undo stack behind it, would go
+        // with it. `add_state_field` writes the same way, for the same reason.
+        if let Some(view) = self.view_mut() {
+            view.source = filled;
         }
         self.message = Some(SharedString::from(
             t!("message.handler_filled", name = name, kind = kind).into_owned(),
@@ -879,7 +897,6 @@ impl Workspace {
         if view.root.insert(&destination, node) {
             view.selected = destination;
         }
-        self.revision += 1;
         cx.notify();
     }
 
