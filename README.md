@@ -1,4 +1,4 @@
-# maxx
+# <img src="assets/icon-1024.png" alt="" width="40" align="top"> maxx
 
 A visual workshop that builds [GPUI](https://gpui.rs) views and writes them out
 as real Rust source.
