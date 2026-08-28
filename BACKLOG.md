@@ -316,10 +316,10 @@ ressortir sur trois. Ce qui est garanti est le contenu, pas la colonne.
   l'arborescence, ce que `maxx.toml` porte désormais (l'entrée, `[run]`, les
   deux empreintes), et ce que la zone gérée garde — les expressions opaques et
   les commentaires.
-- **Un GIF dans le README.** La capture est là (`docs/maxx.png`) ; ce point
-  était périmé pour moitié. Reste l'animation, qui est ce qui manque vraiment à
-  un outil visuel : la démo de `demo/` est faite pour ça, c'est elle qu'il faut
-  filmer.
+- ~~**Un GIF dans le README.**~~ — fait : `docs/maxx-demo.gif`, la démo de
+  `demo/` filmée, en tête du fichier avant la capture fixe. La source pesait
+  25 Mo ; le GIF versionné en fait 3,5 (800 px, 10 images/s, 64 couleurs) et
+  reste hors du paquet crates.io par `exclude`.
 - ~~**Compiler la démo en CI.**~~ — fait, et ce point était périmé : le travail
   « la démo compile » de `.github/workflows/ci.yml` lance `cargo check` dans
   `demo/`, qui n'est pas membre de l'espace de travail et que rien d'autre ne
@@ -329,13 +329,15 @@ ressortir sur trois. Ce qui est garanti est le contenu, pas la colonne.
 - ~~CI GitHub Actions~~ — faite, en matrice sur les trois systèmes, plus un
   travail qui compile la démo.
 - ~~Métadonnées `Cargo.toml`~~ — faites, `rust-version = "1.88"` compris.
-- **Publier, si on y va.** Le nom `maxx` est libre sur crates.io (vérifié).
-  Trois choses manquent alors : retirer `publish = false` du `Cargo.toml`, un
-  jeton dans les secrets du dépôt, et la décision elle-même — `cargo install`
-  demande à l'utilisateur Linux d'avoir les paquets de développement de Vulkan,
-  de Wayland et de fontconfig, là où le binaire attaché à la version ne demande
-  rien. crates.io sert surtout à réserver le nom et à rendre `cargo install`
-  possible pour qui a déjà de quoi compiler.
+- **Publier.** Le nom `maxx` est libre sur crates.io (revérifié). Le verrou
+  `publish = false` est levé, la description est passée en anglais et `exclude`
+  écarte les médias du README : `cargo package` rend 78 fichiers et un paquet
+  qui se construit. Reste le geste lui-même, `cargo publish`, avec un jeton que
+  seul un humain pose. À savoir avant : `cargo install` demande à l'utilisateur
+  Linux les paquets de développement de Vulkan, de Wayland et de fontconfig, là
+  où le binaire attaché à la version ne demande rien — crates.io sert surtout à
+  réserver le nom et à servir qui a déjà de quoi compiler. Et une version
+  publiée ne se supprime pas, elle se *yank*.
 - ~~`cargo fmt`~~ — fait, avec `use_small_heuristics = "Max"` pour préserver
   les tables du catalogue, et `fmt --check` est dans les deux workflows.
 

@@ -3,7 +3,7 @@ name = "maxx"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-description = "Atelier visuel qui dessine des vues GPUI et les écrit en Rust"
+description = "A visual workshop that builds GPUI views and writes them out as real Rust source"
 repository = "https://github.com/nseaSeb/maxx"
 readme = "README.md"
 keywords = ["gpui", "gui", "designer", "codegen"]
@@ -11,8 +11,13 @@ categories = ["development-tools", "gui"]
 # Les chaînes `&& let` (actions.rs, workspace.rs) demandent 1.88 ; l'édition
 # 2024 seule laisserait croire à 1.85.
 rust-version = "1.88"
-# La démo se construit seule, et publier maxx n'est pas l'objectif du moment.
-publish = false
+# Ce que le paquet crates.io n'emporte pas : les médias du README, qui pèsent
+# quatre méga-octets à eux seuls et que personne ne télécharge en installant
+# maxx. crates.io résout les liens relatifs du README contre `repository`,
+# donc les images continuent de s'afficher — depuis GitHub. `assets/icon.svg`
+# et les deux petits PNG restent : la source de l'icône est corrigeable, et
+# `cargo run --example make_icon` la relit.
+exclude = ["docs/", "assets/maxx.icns"]
 
 [dependencies]
 # runtime_shaders avoids the build-time `metal` compiler, which Xcode 26 ships

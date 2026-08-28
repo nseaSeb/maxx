@@ -37,6 +37,15 @@ où obtenir la source de ce crate — <https://crates.io/crates/option-ext>.
 GPL-2.0) figurent dans `Cargo.lock` mais ne sont pas dans le graphe de
 compilation macOS : dépendances de compilation ou d'une autre plateforme.
 
+## Une licence qu'aucun outil ne voit
+
+- **tree-sitter-graphql 0.1.0**, tiré par la feature `tree-sitter-languages`.
+
+Son `Cargo.toml` déclare `license-file = "LICENSE"` et non `license`, si bien
+que `cargo metadata` — et tout ce qui le lit — rend un champ vide. Le fichier
+est là et dit MIT, copyright 2025 Joohwan Oh. Rien de particulier à faire, sauf
+ne pas s'en alarmer au prochain audit.
+
 ## Autres licences présentes
 
 Unicode-3.0, BSD-2-Clause, BSD-3-Clause, ISC, Zlib, 0BSD, CC0-1.0, Unlicense.
