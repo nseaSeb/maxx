@@ -272,6 +272,59 @@ impl Workspace {
         }
     }
 
+    /// Fills the selected node's handler with the body that opens a box.
+    ///
+    /// Written straight to the file rather than into the tree: a handler is not
+    /// part of the managed region — it is a method of the view, beside it — so
+    /// there is nothing here for `⌘S` to carry. The view is re-read afterwards,
+    /// for the reason `format_after_save` gives: maxx holds a copy of the file
+    /// and compares it with the disk, and a copy left behind would make the
+    /// next save believe someone else had written.
+    pub fn fill_handler(
+        &mut self,
+        prop: &'static crate::registry::Prop,
+        kind: &'static str,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        let Some(name) = registry::read(view.selected(), prop).filter(|name| !name.is_empty())
+        else {
+            self.message = Some(crate::tr("message.no_action"));
+            cx.notify();
+            return;
+        };
+
+        let filled = match crate::view::fill_handler(&view.source, &name, kind) {
+            Ok(filled) => filled,
+            Err(error) => {
+                self.message = Some(SharedString::from(error));
+                cx.notify();
+                return;
+            }
+        };
+
+        let path = view.path.clone();
+        if let Err(error) = std::fs::write(&path, &filled) {
+            self.message = Some(SharedString::from(error.to_string()));
+            cx.notify();
+            return;
+        }
+        if let Some(view) = self.view_mut()
+            && let Err(error) = view.reload()
+        {
+            self.message = Some(SharedString::from(error));
+            cx.notify();
+            return;
+        }
+        self.message = Some(SharedString::from(
+            t!("message.handler_filled", name = name, kind = kind).into_owned(),
+        ));
+        self.revision += 1;
+        cx.notify();
+    }
+
     /// Removes a call from the selected node.
     pub fn remove_call_at_selection(&mut self, name: &str, cx: &mut Context<Self>) {
         let Some(view) = self.view() else {

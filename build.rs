@@ -45,6 +45,29 @@ fn write_shapes() {
         .expect("the shape must be written");
     std::fs::write(out.join("settings_screen.rs"), as_module_body(&settings_screen_rs()))
         .expect("the shape must be written");
+
+    // The handler bodies, each wrapped in the two parameters a handler stub
+    // carries. Written from the same table `view::fill_handler` inserts from,
+    // so a call gpui-component drops is a build that fails here rather than a
+    // project that stops compiling on a line maxx wrote.
+    let mut boxes = String::new();
+    let mut seen: Vec<&str> = Vec::new();
+    for (name, imports, body) in BOXES {
+        // Two boxes needing the same `use` is the common case, and a repeated
+        // import is a compile error here where it is not in a project — each
+        // one lands in a file of its own there.
+        for import in *imports {
+            if !seen.contains(import) {
+                seen.push(import);
+                boxes.push_str(import);
+                boxes.push('\n');
+            }
+        }
+        boxes.push_str(&format!(
+            "#[allow(dead_code)]\nfn a_{name}(window: &mut Window, cx: &mut App) {{\n        {body}\n}}\n"
+        ));
+    }
+    std::fs::write(out.join("boxes.rs"), boxes).expect("the boxes must be written");
 }
 
 /// The same text, as something `include!` accepts.

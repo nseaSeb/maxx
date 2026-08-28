@@ -234,3 +234,38 @@ impl Render for SettingsScreen {
 "#
     .to_string()
 }
+
+/// The boxes maxx can write into a handler, by name.
+///
+/// Per entry: the name the interface uses, the `use` lines the body needs, and
+/// the body itself — written against `window` and `cx`, the two parameters
+/// every handler stub already carries.
+///
+/// A table of plain tuples rather than a struct, for the reason the top of this
+/// file gives: `build.rs` includes it verbatim, and a type declared in maxx
+/// would not be there.
+pub const BOXES: &[(&str, &[&str], &str)] = &[
+    (
+        "dialog",
+        &["use gpui::div;", "use gpui_component::WindowExt;"],
+        "window.open_dialog(cx, |dialog, _window, _cx| {\n\
+         \x20           dialog\n\
+         \x20               .title(\"A dialog\")\n\
+         \x20               .child(div().p_4().child(\"Written by maxx; the body is yours.\"))\n\
+         \x20       });",
+    ),
+    (
+        "sheet",
+        &["use gpui::div;", "use gpui_component::WindowExt;"],
+        "window.open_sheet(cx, |sheet, _window, _cx| {\n\
+         \x20           sheet\n\
+         \x20               .title(\"A sheet\")\n\
+         \x20               .child(div().p_4().child(\"Written by maxx; the body is yours.\"))\n\
+         \x20       });",
+    ),
+    (
+        "notification",
+        &["use gpui_component::WindowExt;", "use gpui_component::notification::Notification;"],
+        "window.push_notification(Notification::info(\"Written by maxx.\"), cx);",
+    ),
+];

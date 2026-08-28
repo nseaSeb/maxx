@@ -704,6 +704,24 @@ prefs.format_on_save:
 prefs.format_on_save_desc:
   en: "Runs rustfmt on the file after every write, so that what maxx writes follows the project's conventions — its rustfmt.toml included. Careful: rustfmt formats the whole file, not only the region maxx manages. On an already formatted project, that changes nothing elsewhere."
   fr: "Passe rustfmt sur le fichier après chaque écriture, pour que ce que maxx écrit suive les conventions du projet — son rustfmt.toml compris. Attention : rustfmt met en forme le fichier entier, pas seulement la zone que maxx gère. Sur un projet déjà formaté, cela ne change rien ailleurs."
+designer.opens:
+  en: "opens"
+  fr: "ouvre"
+designer.opens_desc:
+  en: "Fills the handler with the code that presents this box. Only an empty one: what you wrote in it is the file."
+  fr: "Remplit le gestionnaire avec le code qui présente cette boîte. Seulement s'il est vide : ce que vous y avez écrit, c'est le fichier."
+error.handler_not_empty:
+  en: "%{name} already has a body — maxx only fills an empty one."
+  fr: "%{name} a déjà un corps — maxx ne remplit que ceux qui sont vides."
+error.handler_unreadable:
+  en: "maxx cannot read the shape of %{name}."
+  fr: "maxx n'arrive pas à lire la forme de %{name}."
+error.no_such_box:
+  en: "maxx knows no box named %{name}."
+  fr: "maxx ne connaît aucune boîte nommée %{name}."
+message.handler_filled:
+  en: "%{name} now opens a %{kind}."
+  fr: "%{name} ouvre maintenant %{kind}."
 prefs.run:
   en: "Run"
   fr: "Exécution"

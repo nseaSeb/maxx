@@ -1325,3 +1325,71 @@ fn unwrapping_keeps_what_was_written_above_the_wrapper() {
     let back = registry::unwrap_scrollbar(&wrapper).expect("maxx wrote this wrapper");
     assert_eq!(back.comments, vec!["// la liste des vues".to_string()]);
 }
+
+#[test]
+fn an_empty_handler_is_filled_with_the_box_that_was_asked_for() {
+    for (kind, imports, body) in maxx::scaffold::templates::BOXES {
+        let filled = maxx::view::fill_handler(HANDLER, "pressed", kind)
+            .unwrap_or_else(|error| panic!("{kind} must fill: {error}"));
+
+        assert!(filled.contains(body.trim_start()), "{kind}: {filled}");
+        for import in *imports {
+            assert!(filled.contains(import), "{kind} needs {import}: {filled}");
+        }
+        // The two parameters the body uses lose their underscore; the event the
+        // body does not touch keeps its own.
+        assert!(filled.contains("window: &mut Window"), "{kind}: {filled}");
+        assert!(filled.contains("cx: &mut Context<Self>"), "{kind}: {filled}");
+        assert!(filled.contains("_event: &ClickEvent"), "{kind}: {filled}");
+        // And what maxx manages is untouched: a handler is beside the region,
+        // not inside it.
+        assert!(filled.contains("// maxx:begin"), "{kind}: {filled}");
+    }
+}
+
+#[test]
+fn a_handler_that_holds_something_is_never_written_over() {
+    let written = HANDLER.replace("    ) {\n    }", "    ) {\n        self.count += 1;\n    }");
+    let error = maxx::view::fill_handler(&written, "pressed", "dialog")
+        .expect_err("a body that holds something must be refused");
+    assert!(error.contains("pressed"), "{error}");
+    // And the file is untouched, which is the point of the refusal.
+    assert!(written.contains("self.count += 1;"));
+}
+
+#[test]
+fn a_handler_that_is_not_there_is_named_rather_than_invented() {
+    let error = maxx::view::fill_handler(HANDLER, "absent", "dialog")
+        .expect_err("a method that is not written must be refused");
+    assert!(error.contains("absent"), "{error}");
+
+    let error = maxx::view::fill_handler(HANDLER, "pressed", "carousel")
+        .expect_err("a box maxx does not know must be refused");
+    assert!(error.contains("carousel"), "{error}");
+}
+
+/// A view carrying one empty handler, as `ensure_handler` writes it.
+const HANDLER: &str = r#"use gpui::{ClickEvent, Context, Window, prelude::*};
+use gpui_component::v_flex;
+
+pub struct Home {}
+
+impl Home {
+    /// Written by maxx; the body is yours.
+    pub fn pressed(
+        &mut self,
+        _event: &ClickEvent,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+    }
+}
+
+impl Render for Home {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        // maxx:begin
+        v_flex()
+        // maxx:end
+    }
+}
+"#;

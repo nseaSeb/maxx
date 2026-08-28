@@ -78,3 +78,15 @@ mod shell {
 }
 
 fn main() {}
+
+/// The bodies maxx writes into a handler, compiled where they are written.
+///
+/// Wrapped in the two parameters a handler stub already carries: what the
+/// developer gets is the same text inside a method, and what fails here is a
+/// call `gpui-component` no longer offers.
+mod boxes {
+    use gpui::prelude::*;
+    use gpui::{App, Window};
+
+    include!(concat!(env!("OUT_DIR"), "/boxes.rs"));
+}
