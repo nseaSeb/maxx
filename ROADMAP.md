@@ -258,10 +258,33 @@ Par coût croissant, pas par ordre alphabétique.
   Pour les autres, il faudrait envelopper le composant dans un `div` : un nœud
   dessiné en deux éléments, soit le même manque que les emplacements multiples
   ci-dessous. C'est là que ça se décidera.
-- **Les boîtes de dialogue non plus** : `dialog`, `sheet`, `popover`,
-  `notification` sont présentés impérativement, jamais enfants de la vue. Leur
-  place est du côté des gestionnaires — « ce bouton ouvre une boîte » — et donc
-  après le chantier 1, pas pendant.
+- ~~**Les boîtes de dialogue non plus**~~ — faites, pour trois des quatre, et
+  la place annoncée était la bonne : le gestionnaire. Le champ *Action* d'un
+  bouton porte maintenant trois boutons — *ouvre dialog*, *ouvre sheet*,
+  *ouvre notification* — qui écrivent dans la méthode le corps qui présente la
+  boîte, avec ses imports, et qui délient les deux paramètres que le talon
+  laissait inutilisés.
+
+  Un corps **vide** seulement. La règle que suit `ensure_handler` tient ici pour
+  une raison plus forte encore : ce n'est pas un talon qu'on pose, c'est une
+  méthode déjà sur le disque, et ce que le développeur y a écrit *est* le
+  fichier.
+
+  Écrit droit au fichier et non dans l'arbre : un gestionnaire n'est pas dans la
+  zone gérée, il est à côté — il n'y a donc rien que `⌘S` puisse porter. La vue
+  est relue après coup, pour la raison que donne `format_after_save`.
+
+  **`popover` reste dehors, et le point de la feuille de route était mal
+  classé** : ce n'est pas une boîte impérative. `Popover::new(id).trigger(…)
+  .content(…)` est un élément déclaratif, enfant de la vue, avec **deux**
+  emplacements — un déclencheur et un contenu. Sa place serait donc le
+  catalogue, et il bute exactement sur « les emplacements multiples », auxquels
+  ce document a déjà dit non. Le sortir demanderait de revenir sur cette
+  décision-là, pas d'écrire un gestionnaire de plus.
+
+  Les trois corps sont compilés là où ils sont écrits : `build.rs` les enveloppe
+  dans les deux paramètres d'un gestionnaire et `examples/shapes.rs` les
+  compile, comme il le fait déjà des formes de projet.
 
 Hors de portée, et c'est un choix : `Table`, `tree`, `list`, `virtual_list`
 sont pilotés par un `Delegate` que l'utilisateur écrit ; `chart` et `plot` sont

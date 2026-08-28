@@ -8,7 +8,7 @@ use rust_i18n::t;
 use std::io;
 use std::path::Path;
 
-mod templates;
+pub mod templates;
 pub use templates::{settings_screen_rs, shell_rs};
 
 /// Where an image dropped on a view is kept.

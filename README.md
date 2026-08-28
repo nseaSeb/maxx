@@ -203,6 +203,13 @@ button beside the Action property opens your editor on the method's line. And do
 not forget `cx.notify()` — without it the field changes and the screen does not
 move.
 
+Beside it, **opens dialog**, **opens sheet** and **opens notification** write
+that box into the method, imports included. These never appear on the canvas
+and never will: gpui-component presents them imperatively, so they are not
+children of a view — the other end of the same gesture is where they belong,
+which is this button opening that box. Only an empty body is filled: what you
+wrote in a method is the file.
+
 ## What you add to a project
 
 `File > Add to project` copies code into the project and declares it. Code, not

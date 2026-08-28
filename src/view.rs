@@ -463,6 +463,57 @@ fn ensure_handler(source: String, name: &str, shape: registry::HandlerSpec) -> S
     source
 }
 
+/// Fills an empty handler with the body that opens one of the boxes.
+///
+/// The boxes gpui-component presents — a dialog, a sheet, a notification — are
+/// given imperatively and are never children of a view, so they cannot be a
+/// node on the canvas. Their place is the other end of the same gesture: this
+/// button opens that box.
+///
+/// Only an **empty** body is filled. The rule `ensure_handler` follows holds
+/// here too and for a stronger reason: this is not a stub being placed, it is a
+/// method already on disk, and what a developer wrote in it is the file.
+pub fn fill_handler(source: &str, name: &str, kind: &str) -> Result<String, String> {
+    let Some((_, imports, body)) =
+        crate::scaffold::templates::BOXES.iter().find(|(this, _, _)| *this == kind)
+    else {
+        return Err(t!("error.no_such_box", name = kind).into_owned());
+    };
+
+    let Some(offset) = source.find(&format!("fn {name}(")) else {
+        return Err(t!("message.handler_unwritten", name = name).into_owned());
+    };
+    // The brace of the body, not one of the parameters': a signature holds
+    // `&mut Context<Self>` and no braces, but a future one might.
+    let Some(close_paren) = source[offset..].find(") {").map(|index| offset + index) else {
+        return Err(t!("error.handler_unreadable", name = name).into_owned());
+    };
+    let open = close_paren + 2;
+    let Some(close) = matching_brace(source, open) else {
+        return Err(t!("error.handler_unreadable", name = name).into_owned());
+    };
+    if !source[open + 1..close].trim().is_empty() {
+        return Err(t!("error.handler_not_empty", name = name).into_owned());
+    }
+
+    let mut filled = String::with_capacity(source.len() + body.len());
+    filled.push_str(&source[..open + 1]);
+    filled.push_str("\n        ");
+    filled.push_str(body);
+    filled.push_str("\n    ");
+    filled.push_str(&source[close..]);
+
+    // The two parameters the body uses are the ones the stub left unused. Only
+    // within this signature: another handler's are still its own.
+    let signature = &filled[offset..open];
+    let used = signature
+        .replace("_window: &mut Window", "window: &mut Window")
+        .replace("_cx: &mut Context<Self>", "cx: &mut Context<Self>");
+    filled.replace_range(offset..open, &used);
+
+    Ok(ensure_imports(filled, imports))
+}
+
 /// The name of the type whose `render` carries the managed region.
 ///
 /// Taking the first `pub struct` of the file instead sent handler stubs and

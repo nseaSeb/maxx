@@ -711,22 +711,54 @@ impl Workspace {
             | Kind::Path => {
                 match self.prop_input(prop) {
                     Some(state) if matches!(prop.kind, Kind::Handler) => {
-                        row.child(div().flex_1().child(Input::new(state).small())).child(
-                            div()
-                                .id(SharedString::from(format!("goto-{}", prop.label)))
-                                .px_2()
-                                .rounded_sm()
-                                .text_xs()
-                                .cursor_pointer()
-                                .hover(|this| this.bg(theme::hover_bg()))
-                                .child(
-                                    t!("designer.open_in", editor = crate::tools::editor_label(cx))
+                        row.child(div().flex_1().child(Input::new(state).small()))
+                            .child(
+                                div()
+                                    .id(SharedString::from(format!("goto-{}", prop.label)))
+                                    .px_2()
+                                    .rounded_sm()
+                                    .text_xs()
+                                    .cursor_pointer()
+                                    .hover(|this| this.bg(theme::hover_bg()))
+                                    .child(
+                                        t!(
+                                            "designer.open_in",
+                                            editor = crate::tools::editor_label(cx)
+                                        )
                                         .into_owned(),
-                                )
-                                .on_click(
-                                    cx.listener(move |this, _, _, cx| this.open_handler(prop, cx)),
-                                ),
-                        )
+                                    )
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.open_handler(prop, cx)
+                                    })),
+                            )
+                            // The boxes gpui-component presents imperatively, and
+                            // which therefore never appear on the canvas: their
+                            // place is the other end of the same gesture — this
+                            // button opens that box.
+                            .children(crate::scaffold::templates::BOXES.iter().map(
+                                |(kind, _, _)| {
+                                    div()
+                                        .id(SharedString::from(format!("box-{kind}")))
+                                        .px_2()
+                                        .rounded_sm()
+                                        .text_xs()
+                                        .cursor_pointer()
+                                        .hover(|this| this.bg(theme::hover_bg()))
+                                        .tooltip(|window, cx| {
+                                            gpui_component::tooltip::Tooltip::new(crate::tr(
+                                                "designer.opens_desc",
+                                            ))
+                                            .build(window, cx)
+                                        })
+                                        .child(SharedString::from(format!(
+                                            "{} {kind}",
+                                            crate::tr("designer.opens")
+                                        )))
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.fill_handler(prop, kind, cx)
+                                        }))
+                                },
+                            ))
                     }
                     Some(state) if matches!(prop.kind, Kind::Path) => row
                         .child(thumbnail(&current, self.project().map(|p| p.root.as_path())))
