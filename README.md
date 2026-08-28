@@ -8,9 +8,9 @@ an action — and what comes out is an ordinary `gpui` + `gpui-component` projec
 that compiles and runs without maxx, and opens in Zed like any other Rust
 project.
 
-![Editing the demo project in maxx: a component is picked from the catalogue on the right, appears on the canvas, and the generated `src/ui/home.rs` is opened and read back](docs/maxx-demo.gif)
+![The demo project open in maxx: a button is searched for in the component catalogue and dropped into the view, and the structure tree and the inspector fill in with it](docs/maxx-demo.gif)
 
-![The maxx workshop: project explorer on the left, canvas in the middle, structure and properties on the right](docs/maxx.png)
+![The same view at rest: the file explorer on the left, the view itself in the middle, and on the right the structure of what it holds above every property of the selected node](docs/maxx.png)
 
 ## maxx uses Zed, and recommends it
 
