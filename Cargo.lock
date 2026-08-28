@@ -3373,9 +3373,11 @@ dependencies = [
 name = "maxx"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "gpui",
  "gpui-component",
  "image",
+ "notify",
  "proc-macro2",
  "quote",
  "resvg",

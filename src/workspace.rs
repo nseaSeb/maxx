@@ -195,9 +195,17 @@ pub struct Workspace {
     run_state: crate::run::State,
     /// Pid of the running process, so it can be stopped.
     run_pid: Option<u32>,
-    /// Whether the output panel is shown.
     /// The task draining the runner's channel. Dropping it stops the drain.
     run_task: Option<Task<()>>,
+    /// The task draining the watcher's channel. Dropping it stops the drain.
+    ///
+    /// Cleared from the foreground only: dropping a `Task` cancels its future,
+    /// and a future that cancelled itself while being polled would abort the
+    /// process. Replacing the field is therefore what ends the previous drain,
+    /// and the drain itself only ever returns.
+    watch_task: Option<Task<()>>,
+    /// The watcher itself, kept alive here: dropped, it stops watching.
+    watcher: Option<notify::RecommendedWatcher>,
     /// Name box of the state panel.
     state_name_input: Option<Entity<InputState>>,
     /// Search box of the component palette.
@@ -293,6 +301,8 @@ impl Workspace {
             run_state: crate::run::State::Idle,
             run_pid: None,
             run_task: None,
+            watch_task: None,
+            watcher: None,
             state_name_input: None,
             palette_filter: None,
             command_input: None,
@@ -311,6 +321,10 @@ impl Workspace {
             output_scroll: UniformListScrollHandle::new(),
         };
         workspace.refresh_entries();
+        // Same reason as the notice above: a project handed straight to a fresh
+        // window never passes through `set_project`, so the watch is armed here
+        // too or that window never notices an outside edit.
+        workspace.watch_project(cx);
         workspace
     }
 
@@ -335,6 +349,7 @@ impl Workspace {
         self.expanded.clear();
         self.selected = None;
         self.refresh_entries();
+        self.watch_project(cx);
         cx.notify();
     }
 
@@ -347,6 +362,7 @@ impl Workspace {
             return;
         }
         self.project = None;
+        self.watch_project(cx);
         self.views.clear();
         self.active = None;
         // The reader's status line comes before every other branch, welcome

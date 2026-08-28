@@ -1,6 +1,11 @@
 //! Open views: the tab strip, and reading a view from disk or writing it back.
 
+use futures::StreamExt;
+
 use super::*;
+
+/// How long the watcher waits for the disk to fall silent before re-reading.
+const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
 
 impl Workspace {
     /// The view being designed.
@@ -412,6 +417,68 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Watches the open project, so an edit made elsewhere reaches the canvas
+    /// without waiting for the window to come back.
+    ///
+    /// It ends in the same `check_disk` the return of focus runs: this is a
+    /// second trigger for it, not a second way of reloading. Called on both
+    /// sides of the project's life — it starts by dropping whatever was
+    /// watching before, and returns early when there is no project, so closing
+    /// one needs no second method.
+    pub(super) fn watch_project(&mut self, cx: &mut Context<Self>) {
+        self.watch_task = None;
+        self.watcher = None;
+        let Some(root) = self.project.as_ref().map(|project| project.root.clone()) else {
+            return;
+        };
+        let Some((mut receiver, watcher)) = crate::watch::start(&root) else {
+            // Nothing said here either: `watch::start` has already written to
+            // the log, and the check on returning to the window still covers it.
+            return;
+        };
+        self.watcher = Some(watcher);
+
+        self.watch_task = Some(cx.spawn(async move |workspace, cx| {
+            loop {
+                // Awaited rather than polled: a window left open all afternoon
+                // must cost nothing while nothing happens, and a timer ticking
+                // ten times a second forever is what keeps a laptop from idling.
+                if StreamExt::next(&mut receiver).await.is_none() {
+                    return;
+                }
+
+                // Then wait for silence. An editor's save is several events — a
+                // write, a rename, sometimes a temporary file beside it — and
+                // reading between two of them reads a file that is half written:
+                // `View::load` fails on it, `check_disk` drops the failure, and
+                // if the discarded event was the last one the canvas stays stale
+                // until the window is focused again.
+                loop {
+                    cx.background_executor().timer(SETTLE).await;
+                    let mut more = false;
+                    while receiver.try_recv().is_ok() {
+                        more = true;
+                    }
+                    if !more {
+                        break;
+                    }
+                }
+
+                let updated = workspace.update(cx, |workspace, cx| {
+                    // The tree first: it takes no `cx` and notifies nobody,
+                    // where `check_disk` ends on `cx.notify()`. The tree only —
+                    // a `git checkout` unlinks files for an instant, and closing
+                    // a document because git blinked cannot be undone.
+                    workspace.refresh_entries();
+                    workspace.check_disk(cx);
+                });
+                if updated.is_err() {
+                    return;
+                }
+            }
+        }));
+    }
+
     /// Notices files changed outside maxx.
     ///
     /// A view the designer has not touched is reloaded without asking — the
@@ -436,7 +503,14 @@ impl Workspace {
         // Only a view that actually moved invalidates the snapshot; clearing it
         // on every return to the window would swallow the undo step for a text
         // edit interrupted by an alt-tab.
-        if !reloaded.is_empty() || !conflicted.is_empty() {
+        //
+        // A conflict does not move anything on maxx's side, and it is not the
+        // one-off the focus edge made it look like: once a view is dirty and
+        // changed on disk it stays in `conflicted` on every later pass, so
+        // counting it here would drop the snapshot on any unrelated file event
+        // — which, with the watcher, means while someone is typing in the
+        // inspector, and `close_text_edit` then records no undo step at all.
+        if !reloaded.is_empty() {
             self.edit_snapshot = None;
         }
 
@@ -450,10 +524,14 @@ impl Workspace {
                 self.revision += 1;
             }
         }
+        // No `revision` bump here, where the reload above has one: nothing moved
+        // on maxx's side, and `conflicts` is read in one place — the status bar,
+        // which the `cx.notify()` below repaints anyway. The bump was doing
+        // nothing until the watcher arrived; now it would rebuild the inspector
+        // fields, and the caret with them, while someone is typing in one.
         for path in conflicted {
             if self.conflicts.insert(path) {
                 self.message = Some(crate::tr("message.conflict_both"));
-                self.revision += 1;
             }
         }
         cx.notify();

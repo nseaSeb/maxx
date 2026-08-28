@@ -22,6 +22,7 @@ pub mod tabs;
 pub mod theme;
 pub mod tools;
 pub mod view;
+pub mod watch;
 pub mod workspace;
 
 use gpui::{App, Application, SharedString};
