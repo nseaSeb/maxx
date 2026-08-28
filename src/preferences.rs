@@ -274,7 +274,6 @@ fn run_page(workspace: &Workspace) -> SettingPage {
         );
     };
 
-    let root = project.root.clone();
     let name = project.name.clone();
     let config = workspace.run_config().clone();
     let inputs: Vec<_> = workspace.run_inputs().to_vec();
@@ -284,7 +283,6 @@ fn run_page(workspace: &Workspace) -> SettingPage {
     let (profile, features, args) =
         (boxed(RunField::Profile), boxed(RunField::Features), boxed(RunField::Args));
     let line = format!("$ cargo {}", config.arguments("run").join(" "));
-    let _ = root;
 
     SettingPage::new(crate::tr("prefs.run"))
         .group(

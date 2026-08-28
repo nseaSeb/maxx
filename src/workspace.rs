@@ -210,6 +210,11 @@ pub struct Workspace {
     run_inputs: Vec<(crate::projectfile::RunField, Entity<InputState>)>,
     /// The project those boxes were built for, so they are built once.
     run_synced: Option<PathBuf>,
+    /// `[run]` as it stood on disk when the boxes were built.
+    ///
+    /// Kept beside the edited one so a write can tell what changed on which
+    /// side, the way `View::saved` does for a tree.
+    run_loaded: crate::projectfile::Run,
     /// `[run]` as it stands, read once with the boxes rather than per frame.
     ///
     /// Held rather than re-read where it is drawn: the preferences screen
@@ -315,6 +320,7 @@ impl Workspace {
             run_inputs: Vec::new(),
             run_synced: None,
             run_config: crate::projectfile::Run::default(),
+            run_loaded: crate::projectfile::Run::default(),
             watch_task: None,
             watcher: None,
             rename_input: None,

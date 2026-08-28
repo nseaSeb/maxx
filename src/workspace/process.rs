@@ -249,10 +249,12 @@ impl Workspace {
         self.run_inputs.clear();
         let Some(root) = root else {
             self.run_config = crate::projectfile::Run::default();
+            self.run_loaded = crate::projectfile::Run::default();
             return;
         };
 
         self.run_config = crate::projectfile::load(&root).run;
+        self.run_loaded = self.run_config.clone();
         for field in [RunField::Profile, RunField::Features, RunField::Args] {
             let value = self.run_config.get(field);
             let state = cx.new(|cx| InputState::new(window, cx).default_value(value));
@@ -294,7 +296,27 @@ impl Workspace {
         if file.run == self.run_config {
             return;
         }
+
+        // The same decision `check_disk` makes for a view, and it has to be
+        // made here too now that maxx watches the project: `maxx.toml` is one
+        // of the files the watcher reports, and this page holds a copy read
+        // when it was built.
+        if file.run != self.run_loaded {
+            if self.run_config == self.run_loaded {
+                // Nothing to lose on this side: take what is on disk.
+                self.run_config = file.run.clone();
+                self.run_loaded = file.run;
+                // The boxes are rebuilt from it on the next frame.
+                self.run_synced = None;
+            } else {
+                self.message = Some(crate::tr("message.run_changed_on_disk"));
+            }
+            cx.notify();
+            return;
+        }
+
         file.run = self.run_config.clone();
+        self.run_loaded = self.run_config.clone();
         if let Err(error) = crate::projectfile::save(&root, &file) {
             self.message = Some(SharedString::from(error.to_string()));
         }

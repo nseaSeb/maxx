@@ -1455,6 +1455,70 @@ fn what_maxx_does_not_own_is_named_rather_than_rewritten() {
 }
 
 #[test]
+fn a_keyword_or_a_name_with_no_type_is_refused_before_anything_moves() {
+    let root = scratch("maxx_rename_keyword");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::create_view(&root, "view_1").unwrap();
+
+    // `pub mod match;` is a project that stops compiling, and the file would
+    // already have moved by the time the compiler said so.
+    for keyword in ["match", "type", "move", "loop", "impl"] {
+        assert!(
+            scaffold::rename_view(&root, "view_1", keyword).is_err(),
+            "{keyword} must be refused"
+        );
+    }
+    // `_` is a module name Rust accepts and a type name it does not: the type
+    // would be erased rather than renamed.
+    scaffold::rename_view(&root, "view_1", "_").expect_err("a nameless type is refused");
+    scaffold::rename_view(&root, "view_1", "__").expect_err("a nameless type is refused");
+
+    // And nothing moved, on any of them.
+    assert!(root.join("src/ui/view_1.rs").exists());
+    let modules = std::fs::read_to_string(root.join("src/ui/mod.rs")).unwrap();
+    assert!(modules.contains("pub mod view_1;"), "{modules}");
+}
+
+#[test]
+fn a_declaration_carrying_a_comment_is_rewritten_and_not_left_behind() {
+    let root = scratch("maxx_rename_comment");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::create_view(&root, "view_1").unwrap();
+
+    // A line the developer is entitled to write.
+    let mod_path = root.join("src/ui/mod.rs");
+    let annotated = std::fs::read_to_string(&mod_path)
+        .unwrap()
+        .replace("pub mod view_1;", "pub mod view_1; // the one I am working on");
+    std::fs::write(&mod_path, &annotated).unwrap();
+
+    scaffold::rename_view(&root, "view_1", "library").unwrap();
+
+    let modules = std::fs::read_to_string(&mod_path).unwrap();
+    assert!(modules.contains("pub mod library; // the one I am working on"), "{modules}");
+    assert!(!modules.contains("pub mod view_1;"), "{modules}");
+}
+
+#[test]
+fn an_entry_maxx_cannot_rewrite_leaves_the_project_as_it_was() {
+    let root = scratch("maxx_rename_entry_refused");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+
+    // A `main.rs` whose entry site maxx cannot find: it refuses to guess, and
+    // the rename must not stop halfway on that refusal.
+    let main_path = root.join("src/main.rs");
+    std::fs::write(&main_path, "fn main() {}\n").unwrap();
+
+    scaffold::rename_view(&root, "home", "start").expect_err("an unreadable entry is refused");
+
+    assert!(root.join("src/ui/home.rs").exists(), "the file must not have moved");
+    assert!(!root.join("src/ui/start.rs").exists(), "the new file must not be left behind");
+    let modules = std::fs::read_to_string(root.join("src/ui/mod.rs")).unwrap();
+    assert!(modules.contains("pub mod home;"), "{modules}");
+    assert_eq!(maxx::projectfile::entry(&root).as_deref(), Some("home"));
+}
+
+#[test]
 fn a_name_already_taken_or_not_a_name_at_all_is_refused() {
     let root = scratch("maxx_rename_refused");
     scaffold::create_project(&root, "trial", Template::Empty).unwrap();

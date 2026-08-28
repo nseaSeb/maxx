@@ -299,20 +299,27 @@ pub fn set_entry_view(root: &Path, module: &str) -> io::Result<()> {
 /// so this is not a convenience: it is the step between a view being made and
 /// a view being named.
 pub fn rename_view(root: &Path, module: &str, renamed: &str) -> io::Result<Vec<PathBuf>> {
-    if renamed.is_empty()
-        || !renamed.chars().next().is_some_and(|first| first == '_' || first.is_alphabetic())
-        || !renamed.chars().all(|c| c == '_' || c.is_alphanumeric())
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("{renamed} is not a module name"),
-        ));
-    }
     let file = root.join(format!("src/ui/{module}.rs"));
-    let target = root.join(format!("src/ui/{renamed}.rs"));
     if renamed == module {
         return Ok(Vec::new());
     }
+    let refuse = |reason: String| Err(io::Error::new(io::ErrorKind::InvalidInput, reason));
+    if !is_module_name(renamed) {
+        return refuse(format!("{renamed} is not a module name"));
+    }
+    // A keyword passes every character test and then writes `pub mod match;`,
+    // which is a project that stops compiling — after the file has moved.
+    if RUST_KEYWORDS.contains(&renamed) {
+        return refuse(format!("{renamed} is a Rust keyword"));
+    }
+    let renamed_type = to_type_name(renamed);
+    // `_` and `__` are module names Rust accepts, and `to_type_name` answers the
+    // empty string for them: the type would be erased rather than renamed.
+    if renamed_type.is_empty() {
+        return refuse(format!("{renamed} gives no type name"));
+    }
+
+    let target = root.join(format!("src/ui/{renamed}.rs"));
     if target.exists() {
         return Err(io::Error::new(
             io::ErrorKind::AlreadyExists,
@@ -327,46 +334,96 @@ pub fn rename_view(root: &Path, module: &str, renamed: &str) -> io::Result<Vec<P
             format!("{}: no view type to rename", file.display()),
         ));
     };
-    let renamed_type = to_type_name(renamed);
 
     // The entry is read before anything moves: `entry` names a module, and once
     // the file is renamed there is no longer a way to tell whether it was the
     // one the window opened on.
     let was_entry = crate::projectfile::entry(root).as_deref() == Some(module);
 
+    // `src/ui/mod.rs` is read before anything is written, and its rewrite is
+    // required rather than attempted: a rename that cannot reach it would leave
+    // a module declared under a name whose file is gone, and report success.
+    let mod_path = root.join("src/ui/mod.rs");
+    let declarations = std::fs::read_to_string(&mod_path)?;
+    let Some(rewritten) = redeclared(&declarations, module, renamed) else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{}: no `pub mod {module};` to rewrite", mod_path.display()),
+        ));
+    };
+
     // The file first, and the declaration after: a `pub mod` pointing at a file
     // that is not there yet is a project that does not compile, and the window
     // may be closed between the two writes.
     std::fs::write(&target, replace_identifier(&source, &type_name, &renamed_type))?;
+
+    // The entry before the old file goes, and its failure undoes the one write
+    // made so far. `set_entry_view` refuses a `maxx.toml` that does not parse
+    // and a `main.rs` whose entry site it cannot find — both reachable on a
+    // hand-written project — and a rename that stopped halfway there would
+    // leave the file moved, the declaration stale and the window still opening
+    // on a type that is no longer declared anywhere.
+    if was_entry && let Err(error) = set_entry_view(root, renamed) {
+        let _ = std::fs::remove_file(&target);
+        return Err(error);
+    }
+
+    std::fs::write(&mod_path, rewritten)?;
     std::fs::remove_file(&file)?;
-
-    let mod_path = root.join("src/ui/mod.rs");
-    if let Ok(declarations) = std::fs::read_to_string(&mod_path) {
-        // Rewritten in place rather than removed and re-declared: the line keeps
-        // the position the developer gave it, and whatever sits around it.
-        let rewritten: Vec<String> = declarations
-            .lines()
-            .map(|line| {
-                if line.trim() == format!("pub mod {module};") {
-                    line.replace(&format!("pub mod {module};"), &format!("pub mod {renamed};"))
-                } else {
-                    line.to_string()
-                }
-            })
-            .collect();
-        let mut out = rewritten.join("\n");
-        if declarations.ends_with('\n') {
-            out.push('\n');
-        }
-        std::fs::write(&mod_path, out)?;
-    }
-
-    if was_entry {
-        set_entry_view(root, renamed)?;
-    }
 
     Ok(mentions(root, module, &type_name))
 }
+
+/// Whether `name` is spelled the way a module is.
+fn is_module_name(name: &str) -> bool {
+    name.chars().next().is_some_and(|first| first == '_' || first.is_alphabetic())
+        && name.chars().all(|c| c == '_' || c.is_alphanumeric())
+}
+
+/// `src/ui/mod.rs` with one module renamed, or `None` when it declares no such
+/// module.
+///
+/// The declaration is matched as the **start** of the trimmed line, not as the
+/// whole of it: `pub mod home; // the landing view` is a line the developer is
+/// entitled to write, and leaving it alone would leave a module declared under
+/// a name whose file has moved — while `mentions` deliberately does not report
+/// `mod.rs`, so nothing would say so.
+fn redeclared(source: &str, module: &str, renamed: &str) -> Option<String> {
+    let declaration = format!("pub mod {module};");
+    let mut found = false;
+    let lines: Vec<String> = source
+        .lines()
+        .map(|line| {
+            if !found && line.trim_start().starts_with(&declaration) {
+                found = true;
+                line.replacen(&declaration, &format!("pub mod {renamed};"), 1)
+            } else {
+                line.to_string()
+            }
+        })
+        .collect();
+    if !found {
+        return None;
+    }
+    let mut out = lines.join("\n");
+    if source.ends_with('\n') {
+        out.push('\n');
+    }
+    Some(out)
+}
+
+/// The words Rust keeps for itself, which a module cannot be called.
+///
+/// The 2024 list, strict and reserved together: a reserved word is refused by
+/// the compiler just as flatly, and a rename that only fails on the next build
+/// has already moved the file.
+const RUST_KEYWORDS: &[&str] = &[
+    "as", "async", "await", "become", "box", "break", "const", "continue", "crate", "do", "dyn",
+    "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl", "in", "let",
+    "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref", "return",
+    "self", "static", "struct", "super", "trait", "true", "try", "type", "typeof", "unsafe",
+    "unsized", "use", "virtual", "where", "while", "yield",
+];
 
 /// The project's own files that still name a view maxx has just renamed.
 ///
