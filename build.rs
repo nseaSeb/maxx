@@ -68,6 +68,25 @@ fn write_shapes() {
         ));
     }
     std::fs::write(out.join("boxes.rs"), boxes).expect("the boxes must be written");
+
+    // The sub-tree templates, each as the expression it is. Same reason as the
+    // boxes: a call gpui-component drops has to fail here rather than in a
+    // project, on a line maxx wrote.
+    let mut subtrees = String::new();
+    let mut seen: Vec<&str> = Vec::new();
+    for (id, imports, source) in SUBTREES {
+        for import in *imports {
+            if !seen.contains(import) {
+                seen.push(import);
+                subtrees.push_str(import);
+                subtrees.push('\n');
+            }
+        }
+        subtrees.push_str(&format!(
+            "#[allow(dead_code)]\nfn a_{id}() -> impl IntoElement {{\n    {source}\n}}\n"
+        ));
+    }
+    std::fs::write(out.join("subtrees.rs"), subtrees).expect("the templates must be written");
 }
 
 /// The same text, as something `include!` accepts.

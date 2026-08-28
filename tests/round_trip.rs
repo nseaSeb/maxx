@@ -1393,3 +1393,36 @@ impl Render for Home {
     }
 }
 "#;
+
+#[test]
+fn every_subtree_template_reads_back_as_a_tree() {
+    for (id, _, source) in maxx::scaffold::templates::SUBTREES {
+        let node = maxx::parser::parse_expr(source)
+            .unwrap_or_else(|error| panic!("{id} must parse: {error}"));
+        // An opaque node is one maxx cannot take apart, which is exactly what a
+        // template must never be: it is dropped in to be edited.
+        assert!(!node.is_opaque(), "{id} must not be opaque");
+        assert!(!node.children.is_empty(), "{id} must hold something");
+
+        // And it comes back out the way it went in: a template is a piece of
+        // Rust in a table, so the table is the round trip's own fixture.
+        let written = maxx::codegen::render(&node, 0);
+        assert_eq!(written.trim(), source.trim(), "{id} must survive the round trip");
+    }
+}
+
+#[test]
+fn every_subtree_template_wears_a_label() {
+    for (id, _, _) in maxx::scaffold::templates::SUBTREES {
+        assert!(
+            maxx::registry::SUBTREE_LABELS.iter().any(|(this, _)| this == id),
+            "{id} has no label — the palette would show a blank row"
+        );
+    }
+    for (id, _) in maxx::registry::SUBTREE_LABELS {
+        assert!(
+            maxx::scaffold::templates::SUBTREES.iter().any(|(this, _, _)| this == id),
+            "{id} has a label but no expression"
+        );
+    }
+}

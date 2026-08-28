@@ -231,6 +231,14 @@ pub struct StateSpec {
     pub initializer: &'static str,
 }
 
+/// The label each sub-tree template wears in the palette.
+///
+/// Beside the catalogue rather than beside the templates: the expressions live
+/// in `scaffold::templates`, which `build.rs` includes verbatim to compile them
+/// and which therefore holds nothing of the interface.
+pub const SUBTREE_LABELS: &[(&str, &str)] =
+    &[("card", "template.card"), ("toolbar", "template.toolbar"), ("section", "template.section")];
+
 const GAPS: &[&str] = &["gap_0", "gap_1", "gap_2", "gap_3", "gap_4", "gap_6", "gap_8"];
 const PADDINGS: &[&str] = &["p_0", "p_1", "p_2", "p_3", "p_4", "p_6", "p_8"];
 const ALIGNS: &[&str] = &["items_start", "items_center", "items_end"];

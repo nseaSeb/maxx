@@ -215,6 +215,8 @@ pub struct Workspace {
     /// Held rather than re-read where it is drawn: the preferences screen
     /// repaints on every notification, and `maxx.toml` is a file.
     run_config: crate::projectfile::Run,
+    /// Name box of the view panel, where a view is renamed.
+    rename_input: Option<Entity<InputState>>,
     /// Name box of the state panel.
     state_name_input: Option<Entity<InputState>>,
     /// Search box of the component palette.
@@ -315,6 +317,7 @@ impl Workspace {
             run_config: crate::projectfile::Run::default(),
             watch_task: None,
             watcher: None,
+            rename_input: None,
             state_name_input: None,
             palette_filter: None,
             command_input: None,

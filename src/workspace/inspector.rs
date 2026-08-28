@@ -56,6 +56,11 @@ impl Workspace {
         if key == self.synced {
             return;
         }
+        if self.rename_input.is_none() {
+            self.rename_input = Some(cx.new(|cx| {
+                InputState::new(window, cx).placeholder(crate::tr("designer.view_name"))
+            }));
+        }
         if self.state_name_input.is_none() {
             self.state_name_input = Some(cx.new(|cx| {
                 InputState::new(window, cx).placeholder(crate::tr("designer.field_name"))
@@ -209,6 +214,69 @@ impl Workspace {
     pub fn cycle_state_type(&mut self, cx: &mut Context<Self>) {
         self.state_type = (self.state_type + 1) % crate::view::STATE_TYPES.len();
         cx.notify();
+    }
+
+    /// Renames the view the canvas is showing.
+    ///
+    /// Every view maxx creates is called `view_1`, `view_2`, … so this is the
+    /// step between a view being made and a view being named. The occurrences
+    /// maxx does not own are said and left alone: elsewhere in the project the
+    /// old name may be a field, a comment or a string, and a tool that rewrites
+    /// those is a tool nobody lets near a project twice.
+    pub fn rename_view(&mut self, cx: &mut Context<Self>) {
+        let Some(state) = self.rename_input.as_ref() else {
+            return;
+        };
+        let renamed = state.read(cx).value().trim().to_string();
+        if renamed.is_empty() {
+            self.message = Some(crate::tr("message.name_the_view"));
+            cx.notify();
+            return;
+        }
+        let (Some(root), Some(path)) = (
+            self.project.as_ref().map(|project| project.root.clone()),
+            self.view().map(|view| view.path.clone()),
+        ) else {
+            return;
+        };
+        let Some(module) = super::view_module(&root, &path) else {
+            self.message = Some(crate::tr("message.not_a_view"));
+            cx.notify();
+            return;
+        };
+
+        match crate::scaffold::rename_view(&root, &module, &renamed) {
+            Ok(elsewhere) => {
+                // The tab has to follow the file, or the next save writes to
+                // a path that is no longer there. Dropped rather than closed:
+                // `close_view` refuses a dirty one, and the file it would be
+                // protecting has already moved.
+                self.views.retain(|view| view.path != path);
+                self.active = None;
+                self.previous_view = None;
+                self.refresh_entries();
+                self.select_file(root.join(format!("src/ui/{renamed}.rs")), cx);
+                self.message = Some(SharedString::from(if elsewhere.is_empty() {
+                    t!("message.view_renamed", name = renamed).into_owned()
+                } else {
+                    let names: Vec<String> = elsewhere
+                        .iter()
+                        .filter_map(|path| path.strip_prefix(&root).ok())
+                        .map(|path| path.to_string_lossy().into_owned())
+                        .collect();
+                    t!("message.view_renamed_elsewhere", name = renamed, files = names.join(", "))
+                        .into_owned()
+                }));
+            }
+            Err(error) => self.message = Some(SharedString::from(error.to_string())),
+        }
+        self.revision += 1;
+        cx.notify();
+    }
+
+    /// The rename box of the view panel.
+    pub(crate) fn rename_input(&self) -> Option<&Entity<InputState>> {
+        self.rename_input.as_ref()
     }
 
     /// The field-name box of the state panel.
@@ -774,6 +842,44 @@ impl Workspace {
         if view.root.insert(&destination, node) {
             view.selected = destination;
         }
+        cx.notify();
+    }
+
+    /// Drops a sub-tree template in, as one gesture.
+    ///
+    /// The clipboard path, with the source coming from a table instead of the
+    /// system: `parse_expr` is what reads both, which is the whole reason this
+    /// needed no new machinery. A template maxx cannot read is a defect in the
+    /// table and says so, where a clipboard that cannot be read is only a
+    /// clipboard holding something else.
+    pub fn insert_subtree(&mut self, id: &str, cx: &mut Context<Self>) {
+        let Some((_, _, source)) =
+            crate::scaffold::templates::SUBTREES.iter().find(|(this, _, _)| *this == id)
+        else {
+            return;
+        };
+        let node = match crate::parser::parse_expr(source) {
+            Ok(node) if !node.is_opaque() => node,
+            _ => {
+                self.message = Some(SharedString::from(
+                    t!("message.template_unreadable", name = id).into_owned(),
+                ));
+                cx.notify();
+                return;
+            }
+        };
+        let Some(destination) = self.insertion_point(cx) else {
+            return;
+        };
+
+        self.checkpoint();
+        let Some(view) = self.view_mut() else {
+            return;
+        };
+        if view.root.insert(&destination, node) {
+            view.selected = destination;
+        }
+        self.revision += 1;
         cx.notify();
     }
 

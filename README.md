@@ -95,6 +95,18 @@ tree is a second way in for the components the canvas hides under one another.
 What `⌘⌥C` puts on the clipboard is Rust, not a format of maxx's own: a subtree
 copied here pastes into Zed, and an expression written there pastes back.
 
+Under **Templates**, the palette also drops a card, a toolbar or a section in one
+gesture, instead of an empty `v_flex` you then fill. Same road as the clipboard —
+a template is a piece of Rust in a table — so what lands in your file is exactly
+the text the table holds. All three are stateless: a template carrying a field
+would name one your view may not have.
+
+Every view maxx creates is called `view_1`, `view_2`, … The **View** panel above
+the state renames it — the file, its line in `src/ui/mod.rs`, its type, and the
+entry in `main.rs` when it was the view the window opens on. Anywhere else the
+old name is still yours: maxx names those files in the status bar and leaves
+them alone, because there the name may be a field, a comment or a string.
+
 In the project panel, a view opens on the canvas and every other file — a
 `Cargo.toml`, a `README.md`, a `main.rs` with no managed region — opens in the
 code reader: syntax highlighting, line numbers, selection and copy, and no

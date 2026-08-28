@@ -503,6 +503,7 @@ impl Workspace {
                         v_flex()
                             .child(self.render_tree(cx))
                             .child(self.render_inspector(cx))
+                            .child(self.render_view_name(cx))
                             .child(self.render_state(cx))
                             .child(self.render_palette(cx)),
                     ),
@@ -861,6 +862,47 @@ impl Workspace {
     ///
     /// A property can only read what exists, so declaring the field comes
     /// first; binding a property to it is one click away in the inspector.
+    /// The open view, and the box that renames it.
+    ///
+    /// A section of its own above the state: every view maxx creates is called
+    /// `view_1`, `view_2`, … and naming it is the first thing anyone does.
+    fn render_view_name(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let module = self
+            .project()
+            .zip(self.view())
+            .and_then(|(project, view)| crate::workspace::view_module(&project.root, &view.path))
+            .unwrap_or_default();
+
+        v_flex().child(section_title("designer.view")).child(
+            h_flex()
+                .gap_2()
+                .px_3()
+                .py_1()
+                .text_xs()
+                .child(
+                    div()
+                        .text_color(theme::text_muted())
+                        .font_family("Menlo")
+                        .child(SharedString::from(module)),
+                )
+                .when_some(self.rename_input().cloned(), |this, state| {
+                    this.child(div().flex_1().child(Input::new(&state).small()))
+                })
+                .child(
+                    div()
+                        .id("view-rename")
+                        .px_2()
+                        .rounded_sm()
+                        .text_xs()
+                        .cursor_pointer()
+                        .bg(theme::bg())
+                        .hover(|this| this.bg(theme::hover_bg()))
+                        .child(crate::tr("designer.rename"))
+                        .on_click(cx.listener(|this, _, _, cx| this.rename_view(cx))),
+                ),
+        )
+    }
+
     fn render_state(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let fields = self.view().map(|view| view.state_fields()).unwrap_or_default();
         let (type_label, _, _) = crate::view::STATE_TYPES[self.state_type()];
@@ -927,6 +969,11 @@ impl Workspace {
             .iter()
             .filter(|spec| spec.palette && matches_query(spec, &query))
             .collect();
+        let templates: Vec<(&'static str, &'static str)> = registry::SUBTREE_LABELS
+            .iter()
+            .filter(|(id, label)| label_matches(&crate::tr(label), id, &query))
+            .copied()
+            .collect();
 
         v_flex()
             .child(section_title("designer.components"))
@@ -956,6 +1003,22 @@ impl Workspace {
                     })
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.insert_component(spec.id, cx);
+                    }))
+            }))
+            // The templates come after the components and under a title of
+            // their own: they answer the same search box, but a card is not a
+            // component — it is several, already arranged.
+            .children(templates.first().map(|_| section_title("designer.templates")))
+            .children(templates.into_iter().map(|(id, label)| {
+                div()
+                    .id(SharedString::from(format!("template-{id}")))
+                    .px_3()
+                    .py_1()
+                    .cursor_pointer()
+                    .hover(|this| this.bg(theme::hover_bg()))
+                    .child(crate::tr(label))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.insert_subtree(id, cx);
                     }))
             }))
     }

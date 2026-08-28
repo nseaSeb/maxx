@@ -704,6 +704,42 @@ prefs.format_on_save:
 prefs.format_on_save_desc:
   en: "Runs rustfmt on the file after every write, so that what maxx writes follows the project's conventions — its rustfmt.toml included. Careful: rustfmt formats the whole file, not only the region maxx manages. On an already formatted project, that changes nothing elsewhere."
   fr: "Passe rustfmt sur le fichier après chaque écriture, pour que ce que maxx écrit suive les conventions du projet — son rustfmt.toml compris. Attention : rustfmt met en forme le fichier entier, pas seulement la zone que maxx gère. Sur un projet déjà formaté, cela ne change rien ailleurs."
+designer.templates:
+  en: "Templates"
+  fr: "Modèles"
+message.template_unreadable:
+  en: "maxx cannot read its own %{name} template — that is a defect in maxx"
+  fr: "maxx n'arrive pas à lire son propre modèle %{name} — c'est un défaut de maxx"
+template.card:
+  en: "Card"
+  fr: "Carte"
+template.section:
+  en: "Section"
+  fr: "Section"
+template.toolbar:
+  en: "Toolbar"
+  fr: "Barre d'outils"
+designer.rename:
+  en: "Rename"
+  fr: "Renommer"
+designer.view:
+  en: "View"
+  fr: "Vue"
+designer.view_name:
+  en: "new name"
+  fr: "nouveau nom"
+message.name_the_view:
+  en: "type a new name for the view first"
+  fr: "tapez d'abord un nouveau nom pour la vue"
+message.not_a_view:
+  en: "only a view of src/ui/ can be renamed here"
+  fr: "seule une vue de src/ui/ se renomme ici"
+message.view_renamed:
+  en: "renamed to %{name}"
+  fr: "renommée en %{name}"
+message.view_renamed_elsewhere:
+  en: "renamed to %{name} — still named in %{files}, which maxx leaves to you"
+  fr: "renommée en %{name} — encore nommée dans %{files}, que maxx vous laisse"
 designer.opens:
   en: "opens"
   fr: "ouvre"
