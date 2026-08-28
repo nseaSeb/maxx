@@ -90,3 +90,10 @@ mod boxes {
 
     include!(concat!(env!("OUT_DIR"), "/boxes.rs"));
 }
+
+/// The sub-tree templates the palette drops, compiled where they are written.
+mod subtrees {
+    use gpui::prelude::*;
+
+    include!(concat!(env!("OUT_DIR"), "/subtrees.rs"));
+}

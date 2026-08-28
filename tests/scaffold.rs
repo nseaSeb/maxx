@@ -1399,3 +1399,75 @@ fn a_braced_import_already_present_is_not_written_again() {
         "the import was written a second time:\n{source}"
     );
 }
+
+#[test]
+fn renaming_a_view_moves_the_file_the_module_line_and_the_type() {
+    let root = scratch("maxx_rename");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::create_view(&root, "view_1").unwrap();
+
+    let elsewhere = scaffold::rename_view(&root, "view_1", "library").unwrap();
+    assert!(elsewhere.is_empty(), "{elsewhere:?}");
+
+    assert!(!root.join("src/ui/view_1.rs").exists(), "the old file must be gone");
+    let renamed = std::fs::read_to_string(root.join("src/ui/library.rs")).unwrap();
+    assert!(renamed.contains("pub struct Library"), "{renamed}");
+    assert!(renamed.contains("impl Render for Library"), "{renamed}");
+    assert!(!renamed.contains("View1"), "{renamed}");
+
+    let modules = std::fs::read_to_string(root.join("src/ui/mod.rs")).unwrap();
+    assert!(modules.contains("pub mod library;"), "{modules}");
+    assert!(!modules.contains("pub mod view_1;"), "{modules}");
+
+    // The renamed view still reads back as a view.
+    View::load(&root.join("src/ui/library.rs")).expect("the renamed view must read back");
+}
+
+#[test]
+fn renaming_the_entry_view_takes_the_window_with_it() {
+    let root = scratch("maxx_rename_entry");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+
+    scaffold::rename_view(&root, "home", "start").unwrap();
+
+    assert_eq!(maxx::projectfile::entry(&root).as_deref(), Some("start"));
+    let main = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    assert!(main.contains("use crate::ui::start::Start;"), "{main}");
+    assert!(main.contains("Start::new(window, cx)"), "{main}");
+    assert!(!main.contains("Home"), "{main}");
+}
+
+#[test]
+fn what_maxx_does_not_own_is_named_rather_than_rewritten() {
+    let root = scratch("maxx_rename_elsewhere");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::create_view(&root, "view_1").unwrap();
+
+    // A file of the developer's, naming the view: maxx must say so and leave it.
+    let mine = root.join("src/mine.rs");
+    std::fs::write(&mine, "use crate::ui::view_1::View1;\npub fn take(_: View1) {}\n").unwrap();
+
+    let elsewhere = scaffold::rename_view(&root, "view_1", "library").unwrap();
+    assert_eq!(elsewhere, std::slice::from_ref(&mine));
+    let untouched = std::fs::read_to_string(&mine).unwrap();
+    assert!(untouched.contains("View1"), "{untouched}");
+    assert!(untouched.contains("ui::view_1"), "{untouched}");
+}
+
+#[test]
+fn a_name_already_taken_or_not_a_name_at_all_is_refused() {
+    let root = scratch("maxx_rename_refused");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::create_view(&root, "view_1").unwrap();
+
+    scaffold::rename_view(&root, "view_1", "home").expect_err("a name already taken is refused");
+    scaffold::rename_view(&root, "view_1", "2legit")
+        .expect_err("a name that is not one is refused");
+    scaffold::rename_view(&root, "view_1", "").expect_err("an empty name is refused");
+    // And nothing moved.
+    assert!(root.join("src/ui/view_1.rs").exists());
+
+    // The same name is not a rename, and is not an error either.
+    assert!(scaffold::rename_view(&root, "view_1", "view_1").unwrap().is_empty());
+    assert!(root.join("src/ui/view_1.rs").exists());
+}

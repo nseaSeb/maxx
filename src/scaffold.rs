@@ -6,7 +6,7 @@
 
 use rust_i18n::t;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub mod templates;
 pub use templates::{settings_screen_rs, shell_rs};
@@ -284,6 +284,150 @@ pub fn set_entry_view(root: &Path, module: &str) -> io::Result<()> {
 
     std::fs::write(&main_path, joined(&lines, &source))?;
     crate::projectfile::set_entry(root, module)
+}
+
+/// Renames a view: its file, its module line, its type, and the entry when it
+/// was the one the window opens on.
+///
+/// Answers the files that still name the old view and that maxx does not own —
+/// said rather than rewritten. maxx knows three places by construction: the
+/// file itself, `src/ui/mod.rs`, and the entry site in `main.rs`. Everything
+/// else is the developer's code, where the old name may be a field, a comment
+/// or a string, and a blind replacement there is how a tool loses trust.
+///
+/// Every view maxx creates is called `view_1`, `view_2`, … until it is renamed,
+/// so this is not a convenience: it is the step between a view being made and
+/// a view being named.
+pub fn rename_view(root: &Path, module: &str, renamed: &str) -> io::Result<Vec<PathBuf>> {
+    if renamed.is_empty()
+        || !renamed.chars().next().is_some_and(|first| first == '_' || first.is_alphabetic())
+        || !renamed.chars().all(|c| c == '_' || c.is_alphanumeric())
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{renamed} is not a module name"),
+        ));
+    }
+    let file = root.join(format!("src/ui/{module}.rs"));
+    let target = root.join(format!("src/ui/{renamed}.rs"));
+    if renamed == module {
+        return Ok(Vec::new());
+    }
+    if target.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            format!("{} already exists", target.display()),
+        ));
+    }
+
+    let source = std::fs::read_to_string(&file)?;
+    let Some(type_name) = declared_type(&source) else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{}: no view type to rename", file.display()),
+        ));
+    };
+    let renamed_type = to_type_name(renamed);
+
+    // The entry is read before anything moves: `entry` names a module, and once
+    // the file is renamed there is no longer a way to tell whether it was the
+    // one the window opened on.
+    let was_entry = crate::projectfile::entry(root).as_deref() == Some(module);
+
+    // The file first, and the declaration after: a `pub mod` pointing at a file
+    // that is not there yet is a project that does not compile, and the window
+    // may be closed between the two writes.
+    std::fs::write(&target, replace_identifier(&source, &type_name, &renamed_type))?;
+    std::fs::remove_file(&file)?;
+
+    let mod_path = root.join("src/ui/mod.rs");
+    if let Ok(declarations) = std::fs::read_to_string(&mod_path) {
+        // Rewritten in place rather than removed and re-declared: the line keeps
+        // the position the developer gave it, and whatever sits around it.
+        let rewritten: Vec<String> = declarations
+            .lines()
+            .map(|line| {
+                if line.trim() == format!("pub mod {module};") {
+                    line.replace(&format!("pub mod {module};"), &format!("pub mod {renamed};"))
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect();
+        let mut out = rewritten.join("\n");
+        if declarations.ends_with('\n') {
+            out.push('\n');
+        }
+        std::fs::write(&mod_path, out)?;
+    }
+
+    if was_entry {
+        set_entry_view(root, renamed)?;
+    }
+
+    Ok(mentions(root, module, &type_name))
+}
+
+/// The project's own files that still name a view maxx has just renamed.
+///
+/// `src/ui/mod.rs` and `src/main.rs` are left out: those two are the ones maxx
+/// has already rewritten, and naming them would be maxx reporting its own work
+/// as unfinished.
+fn mentions(root: &Path, module: &str, type_name: &str) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let known = [root.join("src/ui/mod.rs"), root.join("src/main.rs")];
+    let mut stack = vec![root.join("src")];
+    while let Some(directory) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.extension().is_none_or(|extension| extension != "rs") || known.contains(&path) {
+                continue;
+            }
+            let Ok(source) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            if source.contains(&format!("ui::{module}"))
+                || replace_identifier(&source, type_name, "\u{0}") != source
+            {
+                found.push(path);
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+/// Replaces `old` by `new` wherever it stands as a whole identifier.
+///
+/// Whole, and not as a substring: renaming `Home` to `Start` must not turn
+/// `HomePage` into `StartPage`, and a project holds both often enough.
+fn replace_identifier(source: &str, old: &str, new: &str) -> String {
+    let boundary = |character: Option<char>| {
+        !character.is_some_and(|character| character.is_alphanumeric() || character == '_')
+    };
+
+    let mut out = String::with_capacity(source.len());
+    let mut rest = source;
+    while let Some(index) = rest.find(old) {
+        let before = rest[..index].chars().next_back();
+        let after = rest[index + old.len()..].chars().next();
+        out.push_str(&rest[..index]);
+        if boundary(before) && boundary(after) {
+            out.push_str(new);
+        } else {
+            out.push_str(old);
+        }
+        rest = &rest[index + old.len()..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// The type a view file declares.

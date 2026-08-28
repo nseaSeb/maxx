@@ -269,3 +269,54 @@ pub const BOXES: &[(&str, &[&str], &str)] = &[
         "window.push_notification(Notification::info(\"Written by maxx.\"), cx);",
     ),
 ];
+
+/// The sub-tree templates the palette drops in one gesture.
+///
+/// Per entry: the identifier the palette uses, the `use` lines the expression
+/// needs, and the expression itself —
+/// ordinary Rust, which `parser::parse_expr` reads into a tree exactly as it
+/// reads the clipboard. No new machinery: a template is a piece of Rust in a
+/// table, the way a component is. Written in `codegen`'s own spelling, which a
+/// test holds to: what a drop puts in the file is then this text, character for
+/// character, rather than a reflowed cousin of it. The label it wears is not
+/// here but in
+/// `registry`, with the interface's other strings: this file is included
+/// verbatim by `build.rs` and holds only what a project gets.
+///
+/// All three are stateless on purpose. A template carrying `&self.field` would
+/// name a field the view may not have, and the paste path rebinds those only
+/// against fields that already exist — a form with real inputs is a template
+/// that has to declare state first, which is a different feature.
+pub const SUBTREES: &[(&str, &[&str], &str)] = &[
+    (
+        "card",
+        &["use gpui_component::label::Label;", "use gpui_component::v_flex;"],
+        "v_flex()\n\
+         \x20   .gap_2()\n\
+         \x20   .p_4()\n\
+         \x20   .border_1()\n\
+         \x20   .rounded_md()\n\
+         \x20   .child(Label::new(\"Title\"))\n\
+         \x20   .child(Label::new(\"Some content\"))",
+    ),
+    (
+        "toolbar",
+        &["use gpui_component::button::{Button, ButtonVariants};", "use gpui_component::h_flex;"],
+        "h_flex()\n\
+         \x20   .gap_2()\n\
+         \x20   .items_center()\n\
+         \x20   .child(Button::new(\"save\").label(\"Save\").primary())\n\
+         \x20   .child(Button::new(\"cancel\").label(\"Cancel\"))",
+    ),
+    (
+        "section",
+        &[
+            "use gpui_component::group_box::GroupBox;",
+            "use gpui_component::label::Label;",
+            "use gpui_component::v_flex;",
+        ],
+        "GroupBox::new()\n\
+         \x20   .title(\"Section\")\n\
+         \x20   .child(v_flex().gap_2().child(Label::new(\"First\")).child(Label::new(\"Second\")))",
+    ),
+];

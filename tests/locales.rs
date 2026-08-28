@@ -60,6 +60,7 @@ const NAMESPACES: &[&str] = &[
     "run",
     "state_type",
     "status",
+    "template",
     "tools",
     "welcome",
 ];

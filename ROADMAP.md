@@ -292,10 +292,24 @@ des données ; `webview` est une dépendance lourde.
 
 ### 3. Le confort — la parité Zed
 
-- **Renommer une vue.** Toutes les pièces existent (`scaffold::create_view`,
-  `workspace::unregister_view`, `view_module`, `explorer::entry_view`) ; il
-  manque la commande qui les enchaîne, et la décision sur les occurrences que
-  maxx ne possède pas — les dire et s'arrêter, comme partout ailleurs.
+- ~~**Renommer une vue.**~~ — fait, et la décision a été celle annoncée : les
+  occurrences que maxx ne possède pas sont **dites et laissées**. maxx connaît
+  trois endroits par construction — le fichier, sa ligne dans `src/ui/mod.rs`,
+  et le site d'entrée de `main.rs` quand c'était la vue d'entrée. Partout
+  ailleurs, l'ancien nom peut être un champ, un commentaire ou une chaîne, et un
+  outil qui réécrit ça est un outil qu'on ne laisse pas approcher deux fois.
+
+  Ce n'est pas un confort : toute vue créée par maxx s'appelle `view_1`,
+  `view_2`… La renommer est le pas entre une vue faite et une vue nommée. La
+  boîte est dans un panneau *Vue*, au-dessus de l'état.
+
+  Le fichier est écrit avant que sa déclaration ne bouge — un `pub mod` qui
+  pointe sur un fichier absent est un projet qui ne compile plus, et la fenêtre
+  peut se fermer entre les deux écritures. La ligne de `mod.rs` est réécrite sur
+  place plutôt que retirée et redéclarée : elle garde la position que le
+  développeur lui a donnée. Et le type est remplacé en tant qu'**identifiant
+  entier** : renommer `Home` en `Start` ne doit pas faire de `HomePage` un
+  `StartPage`.
 - ~~**`⌘P`.**~~ — fait, et ce point était périmé : voir plus haut, c'est la
   même boîte que `⌘K`, remplie d'une seconde source de lignes.
 - ~~**La surveillance du fichier (`notify`).**~~ — fait, et c'était bien le
@@ -323,10 +337,21 @@ des données ; `webview` est une dépendance lourde.
   du focus — personne ne tape à ce moment-là —, destructeur dès qu'il tourne
   pendant la frappe. Un conflit ne déplace rien du côté de maxx : il ne doit ni
   reconstruire les champs de l'inspecteur, ni emporter le pas d'annulation.
-- **Les modèles de sous-arbre.** Un formulaire, une barre latérale, une carte,
-  déposés d'un geste au lieu d'un `v_flex` vide. Aucune machinerie neuve : le
-  presse-papier prouve que `parser::parse_expr` suffit — un modèle est un bout
-  de Rust dans une table, comme le catalogue.
+- ~~**Les modèles de sous-arbre.**~~ — faits, et la prédiction tenait : aucune
+  machinerie neuve. Une carte, une barre d'outils, une section, sous un titre à
+  eux dans la palette, qui répondent à la même recherche. Le chemin est celui du
+  presse-papier — `parser::parse_expr` lit les deux —, la source venant d'une
+  table au lieu du système.
+
+  Les trois sont **sans état**, exprès : un modèle portant `&self.champ`
+  nommerait un champ que la vue n'a peut-être pas, et le collage ne relie qu'à
+  des champs déjà là. Un formulaire avec de vraies zones de saisie est un modèle
+  qui doit d'abord déclarer son état — c'est une autre fonctionnalité.
+
+  La table est écrite dans la graphie de `codegen`, et un test l'y tient : ce
+  qu'un dépôt met dans le fichier est alors ce texte, caractère pour caractère,
+  et non un cousin reformaté. Les expressions sont compilées là où elles sont
+  écrites, comme les corps de boîtes et les formes de projet.
 
 ### 4. Sortir
 
