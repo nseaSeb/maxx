@@ -127,6 +127,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release create "${GITHUB_REF_NAME}" \
-            --title "${GITHUB_REF_NAME}" \
-            --generate-notes
+          # Idempotent, et ce n'est pas de la politesse : un tag redéposé sur un
+          # autre commit relance ce travail, et `gh release create` échoue sur
+          # une version qui existe déjà. La version suit le nom du tag, donc
+          # elle montre le nouveau commit sans qu'on la touche.
+          if gh release view "${GITHUB_REF_NAME}" > /dev/null 2>&1; then
+            echo "La version ${GITHUB_REF_NAME} existe déjà, et suit le tag."
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes
+          fi
