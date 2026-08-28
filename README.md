@@ -306,13 +306,20 @@ nested submenu — is kept exactly as it is.
 ## Files changed outside maxx
 
 maxx keeps a copy of the file in memory, so writing without looking at the disk
-would overwrite whatever was typed in Zed meanwhile. When the window regains
-focus, and again before every save, maxx compares:
+would overwrite whatever was typed in Zed meanwhile. maxx watches the project
+and compares as soon as something is written there — you do not have to click
+back into maxx for the canvas to follow. It compares again when the window
+regains focus, and again before every save:
 
 * the disk changed and the tree was not touched here — automatic reload, the way
   an editor does for an unmodified buffer;
 * both sides changed — the write is refused, the status bar says so, and
   `File > Reload view` (⌘⇧R) or `File > Overwrite file` settles it.
+
+What is watched is `src/` in full, plus the files sitting in the project root —
+not `target/`, which a build would otherwise fill the queue with. So a picture
+dropped into `assets/` from outside is noticed when the window regains focus,
+not before, and the focus check stays for exactly that kind of case.
 
 ## What you write inside the region
 

@@ -316,12 +316,14 @@ ressortir sur trois. Ce qui est garanti est le contenu, pas la colonne.
   l'arborescence, ce que `maxx.toml` porte désormais (l'entrée, `[run]`, les
   deux empreintes), et ce que la zone gérée garde — les expressions opaques et
   les commentaires.
-- **Une capture ou un GIF dans le README.** Pour un outil visuel, c'est
-  l'élément à plus fort rendement de toute cette liste. La démo de `demo/` est
-  faite pour ça : c'est elle qu'il faut photographier.
-- **Compiler la démo en CI.** `cargo check` dans `demo/` prouve que ce que maxx
-  écrit compile encore. Elle n'est pas membre de l'espace de travail, donc rien
-  ne la construit aujourd'hui hors d'une commande explicite.
+- **Un GIF dans le README.** La capture est là (`docs/maxx.png`) ; ce point
+  était périmé pour moitié. Reste l'animation, qui est ce qui manque vraiment à
+  un outil visuel : la démo de `demo/` est faite pour ça, c'est elle qu'il faut
+  filmer.
+- ~~**Compiler la démo en CI.**~~ — fait, et ce point était périmé : le travail
+  « la démo compile » de `.github/workflows/ci.yml` lance `cargo check` dans
+  `demo/`, qui n'est pas membre de l'espace de travail et que rien d'autre ne
+  construit. La ligne barrée deux points plus bas le disait déjà.
 - ~~Les deux avertissements clippy~~ — faits, et la CI est stricte
   (`clippy -D warnings`).
 - ~~CI GitHub Actions~~ — faite, en matrice sur les trois systèmes, plus un

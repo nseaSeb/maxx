@@ -55,8 +55,8 @@ Reste à aligner, par ordre de manque ressenti :
 - **Le glisser-déposer d'une entrée entre deux menus** — fait —, et le
   glisser-déposer dans l'arbre de structure — fait aussi. Il reste à décider
   si le canvas doit accepter un dépôt venant de l'arbre, et l'inverse.
-- **La surveillance du fichier.** Zed recharge un tampon non modifié sans rien
-  demander ; maxx le fait aussi, mais seulement au retour dans la fenêtre.
+- ~~**La surveillance du fichier.**~~ — fait : maxx recharge un tampon non
+  modifié sans rien demander, et sans attendre le retour dans la fenêtre.
 - ~~**Plusieurs vues ouvertes en même temps.**~~ — fait : `⌘⌥→` et `⌘⌥←`
   parcourent la bande comme un anneau — s'arrêter au dernier onglet ne ferait
   rien précisément quand il y a où aller —, et `⌃⇥` revient au fichier
@@ -242,12 +242,33 @@ des données ; `webview` est une dépendance lourde.
   `workspace::unregister_view`, `view_module`, `explorer::entry_view`) ; il
   manque la commande qui les enchaîne, et la décision sur les occurrences que
   maxx ne possède pas — les dire et s'arrêter, comme partout ailleurs.
-- **`⌘P`.** La palette sait déjà chercher par mots dans le désordre et sans
-  accents ; il lui faut une seconde source de lignes.
-- **La surveillance du fichier (`notify`).** `reload_untouched` fait déjà le
-  travail sûr, il ne manque que le déclencheur. Effet : maxx et Zed côte à
-  côte, on tape dans Zed, le canvas suit. C'est le principe « le `.rs` est la
-  vérité » rendu visible, et le meilleur rapport effet/effort de la liste.
+- ~~**`⌘P`.**~~ — fait, et ce point était périmé : voir plus haut, c'est la
+  même boîte que `⌘K`, remplie d'une seconde source de lignes.
+- ~~**La surveillance du fichier (`notify`).**~~ — fait, et c'était bien le
+  seul déclencheur qui manquait : `check_disk` faisait déjà le travail sûr —
+  recharger ce que le designer n'a pas touché, mettre le reste en conflit — mais
+  n'était appelé qu'au retour dans la fenêtre. maxx et Zed côte à côte, on tape
+  dans Zed, le canvas suit sans qu'on clique dans maxx. Le principe « le `.rs`
+  est la vérité » rendu visible.
+
+  Ce qui est surveillé est `src/` en entier, plus les fichiers de la racine, et
+  **pas** la racine en entier : sur Linux une veille récursive pose une veille
+  par répertoire, et `target/` seul peut épuiser `max_user_watches` et emporter
+  la veille entière. Le prix, et il est réel : une image déposée dans `assets/`
+  depuis l'extérieur n'est vue qu'au retour dans la fenêtre — qui reste, comme
+  filet, pour tout ce que la veille ne voit pas.
+
+  Le drain **attend** son canal au lieu de le sonder : une fenêtre ouverte tout
+  l'après-midi ne doit rien coûter, et une minuterie à dix coups par seconde est
+  ce qui empêche une machine de se mettre au repos. Ce que le fil de `cargo run`
+  peut se permettre — il finit —, la veille du projet ne le peut pas.
+
+  Deux défauts latents sont sortis avec le second déclencheur, et c'est la vraie
+  leçon : `check_disk` bumpait `revision` sur un conflit, et vidait
+  `edit_snapshot` sur un conflit. Inoffensif tant qu'il ne tournait qu'au retour
+  du focus — personne ne tape à ce moment-là —, destructeur dès qu'il tourne
+  pendant la frappe. Un conflit ne déplace rien du côté de maxx : il ne doit ni
+  reconstruire les champs de l'inspecteur, ni emporter le pas d'annulation.
 - **Les modèles de sous-arbre.** Un formulaire, une barre latérale, une carte,
   déposés d'un geste au lieu d'un `v_flex` vide. Aucune machinerie neuve : le
   presse-papier prouve que `parser::parse_expr` suffit — un modèle est un bout
