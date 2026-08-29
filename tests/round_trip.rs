@@ -1476,3 +1476,54 @@ fn main() {}
         "the whole statement must not be written again:\n{out}"
     );
 }
+
+/// An import written twice is pointed at, in the file, on the line.
+///
+/// maxx adds; it does not take away what it did not write. One of the two lines
+/// may be the developer's, and removing theirs is a border this program does not
+/// cross — so it says what is wrong and leaves the choice where it belongs.
+#[test]
+fn a_duplicate_import_is_flagged_where_it_is() {
+    let source = "\
+use gpui::prelude::*;
+use gpui_component::button::Button;
+use gpui_component::button::{Button, ButtonVariants};
+
+fn main() {}
+";
+    let flagged = maxx::view::flag_duplicate_imports_for_test(source.to_string());
+    let lines: Vec<&str> = flagged.lines().collect();
+    assert_eq!(lines[2], "// maxx: Button is imported twice — one of these two lines has to go.");
+    assert_eq!(lines[3], "use gpui_component::button::{Button, ButtonVariants};");
+    assert!(flagged.contains("use gpui_component::button::Button;"), "nothing is removed");
+}
+
+/// Saying it a hundred times is saying it once.
+#[test]
+fn the_mark_is_written_once_and_taken_back_when_it_is_fixed() {
+    let broken = "\
+use gpui_component::button::Button;
+use gpui_component::button::{Button, ButtonVariants};
+";
+    let once = maxx::view::flag_duplicate_imports_for_test(broken.to_string());
+    let twice = maxx::view::flag_duplicate_imports_for_test(once.clone());
+    assert_eq!(once, twice, "a second save must not stack a second mark");
+
+    // And once the developer has taken a line away, maxx takes its own back.
+    let fixed = once.replace("use gpui_component::button::Button;\n", "");
+    let cleared = maxx::view::flag_duplicate_imports_for_test(fixed);
+    assert!(!cleared.contains("// maxx:"), "the mark goes when the reason goes:\n{cleared}");
+}
+
+/// A spelling maxx does not read is a spelling maxx says nothing about.
+#[test]
+fn an_import_maxx_cannot_read_is_left_in_peace() {
+    for source in [
+        "use gpui_component::button::*;\nuse gpui_component::button::Button;\n",
+        "use gpui_component::button::Button as B;\nuse gpui_component::button::Button;\n",
+        "use gpui_component::{button::Button, label::Label};\nuse gpui_component::button::Button;\n",
+    ] {
+        let flagged = maxx::view::flag_duplicate_imports_for_test(source.to_string());
+        assert_eq!(flagged, source, "saying nothing beats saying something wrong:\n{flagged}");
+    }
+}

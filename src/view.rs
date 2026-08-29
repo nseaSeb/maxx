@@ -257,7 +257,9 @@ impl View {
         for (handler, shape) in registry::handlers(&self.root) {
             source = ensure_handler(source, &handler, shape);
         }
-        Ok(source)
+        // Last, once every import this save owes has been written: the duplicate
+        // worth saying something about may be one maxx has just made.
+        Ok(flag_duplicate_imports(source))
     }
 
     /// Renders the tree, splices it into the file and writes it to disk.
@@ -297,6 +299,11 @@ pub fn ensure_imports_for_test(source: String, lines: &[&str]) -> String {
     ensure_imports(source, lines)
 }
 
+/// `flag_duplicate_imports`, reachable from the test suite, for the same reason.
+pub fn flag_duplicate_imports_for_test(source: String) -> String {
+    flag_duplicate_imports(source)
+}
+
 fn ensure_imports(source: String, lines: &[&str]) -> String {
     let missing: Vec<String> =
         lines.iter().filter_map(|line| what_is_missing(&source, line)).collect();
@@ -325,6 +332,89 @@ fn ensure_imports(source: String, lines: &[&str]) -> String {
 ///
 /// Comparing whole lines misses `use gpui::{Context, px};`, and appending the
 /// line anyway is a duplicate-import error the user then has to fix by hand.
+/// The mark maxx leaves above a line it has something to say about.
+///
+/// Distinct from [`parser::BEGIN`] and [`parser::END`], which are matched
+/// whole: this one is a prefix, and nothing looks for it but the code that
+/// writes it.
+const NOTE: &str = "// maxx: ";
+
+/// Points at an import written twice, and takes the mark back when it is not.
+///
+/// maxx **adds**; it does not take away what it did not write. A duplicate
+/// import is not valid Rust and the file will not build, so the temptation is to
+/// merge the two lines and be done — but one of them may be the developer's, and
+/// removing their line is a border this program does not cross. A comment says
+/// what is wrong, on the line it is wrong on, and leaves the choice where it
+/// belongs. Rust ignores it; Zed shows it; the compiler would say the same thing
+/// later, and this says it at the save.
+///
+/// Written once and only once: the mark is recognised on the next pass, so a
+/// hundred saves leave one line, and it is taken back — by maxx, from maxx —
+/// as soon as the duplicate is gone.
+fn flag_duplicate_imports(source: String) -> String {
+    // Every previous mark comes off first, so what follows works on the file as
+    // if maxx had never written one. That is what makes it idempotent, and what
+    // takes the mark back when the duplicate is gone — the second pass simply
+    // finds nothing left to flag.
+    let lines: Vec<&str> =
+        source.lines().filter(|line| !line.trim_start().starts_with(NOTE)).collect();
+
+    let mut seen: Vec<(String, String)> = Vec::new();
+    let mut out: Vec<String> = Vec::with_capacity(lines.len() + 1);
+    for line in lines {
+        let names = imported_names(line);
+        let duplicate = names.iter().find(|pair| seen.contains(pair)).cloned();
+        for pair in names {
+            if !seen.contains(&pair) {
+                seen.push(pair);
+            }
+        }
+        if let Some((_, name)) = duplicate {
+            let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+            out.push(format!(
+                "{indent}{NOTE}{name} is imported twice — one of these two lines has to go."
+            ));
+        }
+        out.push(line.to_string());
+    }
+
+    let mut joined = out.join("\n");
+    if source.ends_with('\n') {
+        joined.push('\n');
+    }
+    joined
+}
+
+/// The `(path, name)` pairs one `use` line imports.
+///
+/// Only the shapes maxx itself writes and reads: `use a::b::C;` and
+/// `use a::b::{C, D};`. A glob, an `as` rename or a nested brace is somebody
+/// else's spelling, and saying nothing about it is better than saying something
+/// wrong.
+fn imported_names(line: &str) -> Vec<(String, String)> {
+    let Some(item) = line.trim().strip_prefix("use ").and_then(|rest| rest.strip_suffix(';'))
+    else {
+        return Vec::new();
+    };
+    if item.contains(" as ") || item.contains('*') {
+        return Vec::new();
+    }
+    let Some((path, names)) = item.rsplit_once("::") else {
+        return Vec::new();
+    };
+    match names.strip_prefix('{').and_then(|rest| rest.strip_suffix('}')) {
+        Some(list) if !list.contains('{') => list
+            .split(',')
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(|name| (path.to_string(), name.to_string()))
+            .collect(),
+        Some(_) => Vec::new(),
+        None => vec![(path.to_string(), names.to_string())],
+    }
+}
+
 /// The `use` line to add so that everything `line` names is imported, if any.
 ///
 /// `None` when it all already is. The interesting answer is the third one: a
