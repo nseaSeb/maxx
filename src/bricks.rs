@@ -157,7 +157,7 @@ fn read_one(module: &str, source: &str) -> Option<Brick> {
     // The public struct that *has* the constructor, and not the first one the
     // file declares: a `pub struct CardStyle` written above `pub struct Card`
     // would otherwise be what the palette offered.
-    let (type_name, arity, props) = file.items.iter().find_map(|item| {
+    let (type_name, arity) = file.items.iter().find_map(|item| {
         let syn::Item::Impl(block) = item else {
             return None;
         };
@@ -165,16 +165,6 @@ fn read_one(module: &str, source: &str) -> Option<Brick> {
             return None;
         }
         let name = public.iter().find(|name| impl_of(block, name))?;
-        let props = block
-            .items
-            .iter()
-            .filter_map(|item| {
-                let syn::ImplItem::Fn(function) = item else {
-                    return None;
-                };
-                read_prop(function)
-            })
-            .collect();
         let arity = block.items.iter().find_map(|item| match item {
             syn::ImplItem::Fn(function)
                 if function.sig.ident == "new"
@@ -190,8 +180,28 @@ fn read_one(module: &str, source: &str) -> Option<Brick> {
             }
             _ => None,
         })?;
-        Some((name.clone(), arity, props))
+        Some((name.clone(), arity))
     })?;
+
+    // From every inherent block of that type, not only the one holding `new`:
+    // splitting a builder across two `impl` blocks is ordinary Rust, and a
+    // component written that way had no properties at all in the inspector
+    // while still being offered in the palette.
+    let props = file
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            syn::Item::Impl(block) if block.trait_.is_none() && impl_of(block, &type_name) => {
+                Some(block.items.iter())
+            }
+            _ => None,
+        })
+        .flatten()
+        .filter_map(|item| match item {
+            syn::ImplItem::Fn(function) => read_prop(function),
+            _ => None,
+        })
+        .collect();
 
     Some(Brick {
         type_name,
@@ -210,6 +220,13 @@ fn read_one(module: &str, source: &str) -> Option<Brick> {
 /// and writing `.label()` on the node would be nonsense.
 fn read_prop(function: &syn::ImplItemFn) -> Option<BrickProp> {
     if !matches!(function.vis, syn::Visibility::Public(_)) || function.sig.ident == "new" {
+        return None;
+    }
+    // `child` and `children` are not properties whatever they take: the parser
+    // lifts a single-argument `.child(x)` into a node of the tree, so a field
+    // for one would always read back empty and typing in it would append a
+    // stray call beside the node's real children.
+    if function.sig.ident == "child" || function.sig.ident == "children" {
         return None;
     }
     let mut inputs = function.sig.inputs.iter();
@@ -248,11 +265,15 @@ fn is_text(argument: &syn::FnArg) -> bool {
         return false;
     };
     let rendered = quote::quote!(#typed).to_string().replace(' ', "");
+    // What maxx writes is a bare `"literal"`, so the type has to be one a
+    // literal already is. `s: SharedString` and `s: String` are not: they read
+    // as text and take one, but `.subtitle("Text")` on them is E0308 — a
+    // project that stops compiling on a line maxx wrote, which is the whole
+    // failure this predicate exists to prevent.
     rendered.ends_with("implInto<SharedString>")
-        || rendered.ends_with(":SharedString")
-        || rendered.ends_with(":String")
-        || rendered.ends_with(":&str")
         || rendered.ends_with("implInto<String>")
+        || rendered.ends_with(":&str")
+        || rendered.ends_with(":&'staticstr")
 }
 
 /// Whether `mod.rs` declares this module.
@@ -405,17 +426,52 @@ impl Card {
             "a number is not text"
         );
         // And the four spellings of a string that are.
-        for argument in [
-            "title: impl Into<SharedString>",
-            "title: SharedString",
-            "title: String",
-            "title: &str",
-        ] {
+        for argument in
+            ["title: impl Into<SharedString>", "title: impl Into<String>", "title: &str"]
+        {
             let source = format!(
                 "pub struct Card;\nimpl Card {{ pub fn new({argument}) -> Self {{ Card }} }}\n"
             );
             assert_eq!(read_one("card", &source).map(|b| b.arity), Some(1), "{argument}");
         }
+        // And the two that read as text and are not: `.new("Text")` on them is
+        // E0308, on a line maxx would have written.
+        for argument in ["title: SharedString", "title: String"] {
+            let source = format!(
+                "pub struct Card;\nimpl Card {{ pub fn new({argument}) -> Self {{ Card }} }}\n"
+            );
+            assert!(read_one("card", &source).is_none(), "{argument} does not take a literal");
+        }
+    }
+
+    /// A builder split across two `impl` blocks still has its properties.
+    #[test]
+    fn properties_are_read_from_every_block_of_the_type() {
+        let source = "\
+pub struct Card;
+impl Card {
+    pub fn new() -> Self { Card }
+}
+impl Card {
+    pub fn subtitle(mut self, v: impl Into<SharedString>) -> Self { self }
+}
+";
+        let brick = read_one("card", source).expect("Card");
+        assert_eq!(brick.props, vec![BrickProp { method: "subtitle".into(), text: true }]);
+    }
+
+    /// `child` is a node of the tree, never a property.
+    #[test]
+    fn child_is_not_a_property() {
+        let source = "\
+pub struct Card;
+impl Card {
+    pub fn new() -> Self { Card }
+    pub fn child(mut self, v: impl Into<SharedString>) -> Self { self }
+    pub fn children(mut self) -> Self { self }
+}
+";
+        assert!(read_one("card", source).expect("Card").props.is_empty());
     }
 
     /// The struct that holds the constructor, not the first one in the file.

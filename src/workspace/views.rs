@@ -575,7 +575,16 @@ impl Workspace {
             // the palette only at the next opening of the project. Worse, a
             // `new` whose arguments changed there would go on being dropped in
             // its old shape, which no longer compiles.
-            self.bricks = crate::bricks::read(&root);
+            let bricks = crate::bricks::read(&root);
+            if bricks != self.bricks {
+                self.bricks = bricks;
+                // The inspector's fields are built from these, and its key is
+                // `(revision, selection)` — neither of which moved. Without
+                // this, a `pub fn subtitle` added in Zed while its node is
+                // selected shows a labelled row with no field in it until the
+                // selection has been somewhere else and come back.
+                self.synced = None;
+            }
         }
         cx.notify();
     }

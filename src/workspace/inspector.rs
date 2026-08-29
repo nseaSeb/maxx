@@ -84,18 +84,35 @@ impl Workspace {
             // switch and needs no field.
             if let Some(brick) = self.brick_of(&node).cloned() {
                 for prop in brick.props.iter().filter(|prop| prop.text) {
-                    let value = node
-                        .call(&prop.method)
-                        .and_then(|call| call.args.first())
-                        .and_then(|arg| arg.as_str())
-                        .unwrap_or_default()
-                        .to_string();
+                    // A literal, or nothing yet, is free to type in. Anything
+                    // else is an expression the developer wrote —
+                    // `.subtitle(self.title.clone())` — and no field is offered
+                    // for it: an empty box over their code, whose first
+                    // keystroke replaces it with a string, is the one thing
+                    // this whole file exists to prevent. The same rule
+                    // `registry::editable` states for the catalogue.
+                    let value = match node.call(&prop.method).and_then(|call| call.args.first()) {
+                        None => String::new(),
+                        Some(crate::model::Arg::Str(value)) => value.clone(),
+                        Some(_) => continue,
+                    };
                     let method = prop.method.clone();
                     let state = cx.new(|cx| InputState::new(window, cx).default_value(value));
-                    cx.subscribe(&state, move |this, state, event: &InputEvent, cx| {
-                        if matches!(event, InputEvent::Change) {
+                    cx.subscribe(&state, move |this, state, event: &InputEvent, cx| match event {
+                        InputEvent::Change => {
                             let value = state.read(cx).value().to_string();
                             this.edit_brick_prop(&method, &value, cx);
+                        }
+                        // One undo step per visit to the field, exactly like the
+                        // catalogue's. Without it, typing here was never pushed
+                        // onto the stack at all: the first ⌘Z undid whatever came
+                        // before and took the typing with it, in one go.
+                        InputEvent::Focus => {
+                            this.edit_snapshot =
+                                this.view().map(|view| (view.path.clone(), view.root.clone()));
+                        }
+                        InputEvent::Blur | InputEvent::PressEnter { .. } => {
+                            this.close_text_edit(cx)
                         }
                     })
                     .detach();
