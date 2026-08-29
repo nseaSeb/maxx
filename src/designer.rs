@@ -248,13 +248,18 @@ impl Workspace {
                     )
                     .child(
                         resizable_panel().child(fillable(
-                            div()
+                            v_flex()
                                 .relative()
                                 .size_full()
+                                // Above the scroll: a box that scrolls away from
+                                // what it filters is a box you lose the moment
+                                // it works.
+                                .child(self.render_inspector_header(cx))
                                 .child(
                                     div()
                                         .id("side-panels")
-                                        .size_full()
+                                        .flex_1()
+                                        .min_h(px(0.))
                                         .overflow_y_scroll()
                                         .track_scroll(&self.side_scroll)
                                         .child(

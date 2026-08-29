@@ -32,6 +32,11 @@ pub fn from_colour(colour: Hsla) -> u32 {
 }
 
 impl Workspace {
+    /// The inspector's search box.
+    pub(crate) fn prop_filter(&self) -> Option<&Entity<InputState>> {
+        self.prop_filter.as_ref()
+    }
+
     /// Whether this inspector heading is folded away.
     pub(crate) fn is_folded(&self, group: crate::registry::Group) -> bool {
         self.folded.contains(&group)

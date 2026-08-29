@@ -119,6 +119,9 @@ group.text:
 group.action:
   en: "Action"
   fr: "Action"
+designer.find_a_property:
+  en: "Find a property…"
+  fr: "Trouver une propriété…"
 designer.catalogue:
   en: "From the catalogue"
   fr: "Du catalogue"

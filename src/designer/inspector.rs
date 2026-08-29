@@ -95,11 +95,30 @@ impl Workspace {
             .child(field)
     }
 
+    /// The inspector's heading and search box, drawn outside the scroll.
+    ///
+    /// Apart from the rows for the reason the palette's is: a box that scrolls
+    /// away from what it filters is a box you lose the moment it works.
+    pub(super) fn render_inspector_header(&self, _cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
+            .flex_none()
+            .bg(theme::panel_bg())
+            .child(section_title("designer.properties"))
+            .when_some(self.prop_filter().cloned(), |this, filter| {
+                this.child(div().px_3().pb_2().child(Input::new(&filter).small()))
+            })
+    }
+
     /// Property editor for the selected node, driven by the catalogue.
     pub(super) fn render_inspector(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let view = self.view().expect("checked by the caller");
         let node = view.selected();
         let spec = registry::of(node);
+        let query = self
+            .prop_filter()
+            .map(|filter| filter.read(cx).value().to_string())
+            .unwrap_or_default();
+        let searching = !query.trim().is_empty();
 
         // Built eagerly: `cx` cannot be reborrowed inside the `FnMut` a
         // `.children(map(..))` would need.
@@ -123,12 +142,17 @@ impl Workspace {
                 let of_group: Vec<_> = registry::props(spec)
                     .into_iter()
                     .filter(|prop| registry::group_of(prop) == group)
+                    .filter(|prop| {
+                        crate::designer::label_matches(&crate::tr(prop.label), prop.label, &query)
+                    })
                     .collect();
                 if of_group.is_empty() {
                     continue;
                 }
                 rows.push(self.render_group_heading(group, of_group.len(), cx).into_any_element());
-                if self.is_folded(group) {
+                // A folded heading opens while a search is running: hiding what
+                // was just searched for is the one thing a search must not do.
+                if self.is_folded(group) && !searching {
                     continue;
                 }
                 for prop in of_group {

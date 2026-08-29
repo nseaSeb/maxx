@@ -52,6 +52,16 @@ impl Workspace {
             cx.subscribe(&filter, |_, _, _: &InputEvent, cx| cx.notify()).detach();
             self.palette_filter = Some(filter);
         }
+        // Beside it and for the same reason: built once, since the box is not a
+        // function of the selection and rebuilding it would take the caret away
+        // from whoever is typing in it.
+        if self.prop_filter.is_none() {
+            let filter = cx.new(|cx| {
+                InputState::new(window, cx).placeholder(crate::tr("designer.find_a_property"))
+            });
+            cx.subscribe(&filter, |_, _, _: &InputEvent, cx| cx.notify()).detach();
+            self.prop_filter = Some(filter);
+        }
 
         let key = self.view().map(|view| (self.revision, view.selected.clone()));
         if key == self.synced {

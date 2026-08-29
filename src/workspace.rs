@@ -260,6 +260,11 @@ pub struct Workspace {
     state_name_input: Option<Entity<InputState>>,
     /// Search box of the component palette.
     palette_filter: Option<Entity<InputState>>,
+    /// Search box of the inspector.
+    ///
+    /// Its own, and not the palette's: they filter different lists and are on
+    /// screen at the same time, so one box would answer for both.
+    prop_filter: Option<Entity<InputState>>,
     /// The command palette's box, while it is open.
     command_input: Option<Entity<InputState>>,
     /// What the middle of the window shows.
@@ -497,6 +502,7 @@ impl Workspace {
             rename_input: None,
             state_name_input: None,
             palette_filter: None,
+            prop_filter: None,
             command_input: None,
             commands: Vec::new(),
             palette_files: Vec::new(),
