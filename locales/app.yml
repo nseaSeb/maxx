@@ -182,9 +182,6 @@ error.already_managed:
 error.bad_field_name:
   en: "“%{name}” is not a valid field name"
   fr: "« %{name} » n'est pas un nom de champ valide"
-error.bad_colour:
-  en: "A colour is six hexadecimal digits, e.g. #1e2127"
-  fr: "Une couleur s'écrit en six chiffres hexadécimaux, par exemple #1e2127"
 error.changed_on_disk:
   en: "changed outside maxx — File > Reload, or Overwrite"
   fr: "fichier modifié en dehors de maxx — Fichier > Recharger, ou Écraser"

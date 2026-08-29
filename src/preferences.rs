@@ -21,6 +21,7 @@ use gpui_component::setting::{
 
 use gpui::Entity;
 use gpui_component::Sizable;
+use gpui_component::color_picker::{ColorPicker, ColorPickerState};
 use gpui_component::h_flex;
 use gpui_component::input::{Input, InputState};
 
@@ -297,35 +298,29 @@ fn palette_page(workspace: &Workspace) -> SettingPage {
     SettingPage::new(crate::tr("prefs.palette")).group(group)
 }
 
-/// One role: its name, what it is for, and its two values side by side.
+/// One role: its name, what it is for, and its two colours side by side.
 ///
-/// The two swatches are drawn from the values the file holds and not from the
-/// boxes: a box shows what is being typed, which is not yet what the project
-/// paints with. What is on screen beside the field is therefore always the
-/// truth of the file.
+/// A picker rather than a text box. A colour is chosen by eye, and a field that
+/// takes `#1e2127` asks the one question a palette should never ask — what the
+/// number of the shade you want is. The popup still takes a typed hex, for
+/// whoever arrives with one from a designer.
 fn colour_row(
     swatch: &crate::themefile::Swatch,
-    dark: Option<Entity<InputState>>,
-    light: Option<Entity<InputState>>,
+    dark: Option<Entity<ColorPickerState>>,
+    light: Option<Entity<ColorPickerState>>,
 ) -> SettingItem {
     let name = SharedString::from(swatch.name.clone());
     let doc = SharedString::from(swatch.doc.clone());
-    let (dark_value, light_value) = (swatch.dark, swatch.light);
     SettingItem::render(move |_, _, _| {
-        let field = |state: &Option<Entity<InputState>>, value: u32| -> AnyElement {
-            let chip = div()
-                .w(px(20.))
-                .h(px(20.))
-                .rounded_sm()
-                .border_1()
-                .border_color(theme::border())
-                .bg(gpui::rgb(value));
-            let boxed: AnyElement = match state {
-                Some(state) => Input::new(state).small().into_any_element(),
-                None => div().into_any_element(),
+        let picker =
+            |state: &Option<Entity<ColorPickerState>>, label: &'static str| -> AnyElement {
+                match state {
+                    Some(state) => {
+                        ColorPicker::new(state).small().label(crate::tr(label)).into_any_element()
+                    }
+                    None => div().into_any_element(),
+                }
             };
-            h_flex().gap_2().items_center().child(chip).child(boxed).into_any_element()
-        };
         div()
             .flex()
             .flex_col()
@@ -335,32 +330,9 @@ fn colour_row(
             .child(
                 h_flex()
                     .gap_4()
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(theme::text_muted())
-                                    .child(crate::tr("prefs.palette_dark")),
-                            )
-                            .child(field(&dark, dark_value)),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(theme::text_muted())
-                                    .child(crate::tr("prefs.palette_light")),
-                            )
-                            .child(field(&light, light_value)),
-                    ),
+                    .items_center()
+                    .child(picker(&dark, "prefs.palette_dark"))
+                    .child(picker(&light, "prefs.palette_light")),
             )
             .into_any_element()
     })

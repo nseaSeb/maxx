@@ -209,8 +209,12 @@ pub struct Workspace {
     watch_task: Option<Task<()>>,
     /// The watcher itself, kept alive here: dropped, it stops watching.
     watcher: Option<notify::RecommendedWatcher>,
-    /// Text boxes of the palette page: the role's name, the mode, and the box.
-    palette_inputs: Vec<(String, crate::themefile::Mode, Entity<InputState>)>,
+    /// Pickers of the palette page: the role's name, the mode, and the picker.
+    palette_inputs: Vec<(
+        String,
+        crate::themefile::Mode,
+        Entity<gpui_component::color_picker::ColorPickerState>,
+    )>,
     /// The project those boxes were built for, so they are built once.
     palette_synced: Option<PathBuf>,
     /// `src/theme.rs` as it stands, or `None` when the project has no palette.

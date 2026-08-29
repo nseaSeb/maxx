@@ -1,63 +1,41 @@
-//! The palette page: reading `src/theme.rs` into boxes, and writing back.
+//! The palette page: reading `src/theme.rs` into pickers, and writing back.
 //!
 //! The colours of the **project**, not of maxx. maxx's own two modes are in
 //! `crate::theme` and switch from `View ▸ Light or dark`; what is edited here
 //! is the palette the generated application paints with, and it goes to that
 //! application's own file.
 
-use gpui::{AppContext as _, Context, Entity, SharedString, Window};
-use gpui_component::input::{InputEvent, InputState};
+use gpui::{AppContext as _, Context, Entity, Hsla, Rgba, SharedString, Window};
+use gpui_component::color_picker::{ColorPickerEvent, ColorPickerState};
 
 use crate::themefile::{Mode, ThemeFile};
 use crate::workspace::Workspace;
 
-/// The spelling a colour is typed in, and read back from.
-///
-/// Six digits and a leading `#`, because that is what a designer hands over and
-/// what every other tool shows. The file keeps `0x`, which is what Rust reads;
-/// the two spellings meet here and nowhere else.
-pub fn format_colour(value: u32) -> String {
-    format!("#{value:06x}")
+/// The colour a role holds, as the picker wants it.
+pub fn to_colour(value: u32) -> Hsla {
+    gpui::rgb(value).into()
 }
 
-/// Reads a typed colour, accepting the spellings people actually use.
+/// And back, as the file writes it.
 ///
-/// `#1e2127`, `1e2127`, `0x1e2127`, and the three-digit short form the web made
-/// everyone fluent in. Anything else is refused rather than guessed: a value
-/// half-typed is not a colour, and writing one on every keystroke would put the
-/// project through every state on the way to it.
-pub fn parse_colour(text: &str) -> Option<u32> {
-    let digits = text
-        .trim()
-        .trim_start_matches('#')
-        .trim_start_matches("0x")
-        .trim_start_matches("0X")
-        .trim();
-    if !digits.chars().all(|c| c.is_ascii_hexdigit()) {
-        return None;
-    }
-    match digits.len() {
-        6 => u32::from_str_radix(digits, 16).ok(),
-        // `#abc` is `#aabbcc`, the rule the web taught everyone.
-        3 => {
-            let mut full = String::with_capacity(6);
-            for c in digits.chars() {
-                full.push(c);
-                full.push(c);
-            }
-            u32::from_str_radix(&full, 16).ok()
-        }
-        _ => None,
-    }
+/// Through `Rgba` rather than out of the `Hsla` directly: the file speaks in
+/// twenty-four bits and the picker in hue, saturation and lightness, so the
+/// rounding has to happen once, here, and in the same place both ways — or a
+/// colour picked, written and read back would land one unit beside itself and
+/// creep on every visit.
+pub fn from_colour(colour: Hsla) -> u32 {
+    let rgba: Rgba = colour.into();
+    let byte = |channel: f32| (channel.clamp(0., 1.) * 255.).round() as u32;
+    (byte(rgba.r) << 16) | (byte(rgba.g) << 8) | byte(rgba.b)
 }
 
 impl Workspace {
-    /// Builds the palette page's boxes, once per project.
+    /// Builds the palette page's pickers, once per project.
     ///
     /// Built here rather than where they are drawn, for the reason every other
     /// panel in maxx has: `SettingItem::render` runs on every repaint, and an
-    /// entity created there would be a new one each frame — a field that loses
-    /// the caret as soon as it is typed in.
+    /// entity created there would be a new one each frame — a picker that shuts
+    /// its own popup as soon as it is opened.
     pub(super) fn sync_palette_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let root = self.project.as_ref().map(|project| project.root.clone());
         if self.palette_synced == root {
@@ -76,19 +54,18 @@ impl Workspace {
         for swatch in file.swatches() {
             for mode in [Mode::Dark, Mode::Light] {
                 let name = swatch.name.clone();
-                let value = format_colour(swatch.value(mode));
-                let state = cx.new(|cx| InputState::new(window, cx).default_value(value));
+                let colour = to_colour(swatch.value(mode));
+                let state = cx.new(|cx| ColorPickerState::new(window, cx).default_value(colour));
                 let key = name.clone();
-                cx.subscribe(&state, move |this, state, event: &InputEvent, cx| match event {
-                    // Written when the field is left, not on every keystroke:
-                    // `#1e21` is a state no project should be put through, and
-                    // a source file rewritten per character is a disk write per
-                    // character.
-                    InputEvent::Blur | InputEvent::PressEnter { .. } => {
-                        let text = state.read(cx).value().to_string();
-                        this.set_palette_colour(&key, mode, &text, cx);
-                    }
-                    _ => {}
+                cx.subscribe(&state, move |this, _, event: &ColorPickerEvent, cx| {
+                    // The picker settles on a colour before it says so — it
+                    // emits on the click, not while the cursor travels the
+                    // gradient — so there is no half-picked value to guard
+                    // against here, unlike a text box written per keystroke.
+                    let ColorPickerEvent::Change(Some(colour)) = event else {
+                        return;
+                    };
+                    this.set_palette_colour(&key, mode, from_colour(*colour), cx);
                 })
                 .detach();
                 self.palette_inputs.push((name, mode, state));
@@ -98,36 +75,17 @@ impl Workspace {
     }
 
     /// Writes one colour into `src/theme.rs`.
-    ///
-    /// A refused spelling is said and left in the box rather than wiped: what
-    /// was typed is nearly always one character away from a colour, and taking
-    /// it away would make the correction start from nothing. Nothing is written
-    /// in that case, so the file and the box disagree until it is fixed — which
-    /// is what the message is for.
-    fn set_palette_colour(&mut self, name: &str, mode: Mode, text: &str, cx: &mut Context<Self>) {
+    fn set_palette_colour(&mut self, name: &str, mode: Mode, value: u32, cx: &mut Context<Self>) {
         let Some(file) = self.palette.as_mut() else {
             return;
         };
-        let current = file
-            .swatches()
-            .iter()
-            .find(|swatch| swatch.name == name)
-            .map(|swatch| swatch.value(mode));
-        let Some(current) = current else {
-            return;
-        };
-
-        match parse_colour(text) {
-            Some(value) if value != current => match file.set(name, mode, value) {
-                Ok(true) => self.message = Some(crate::tr("message.palette_saved")),
-                // Nothing to write: the role is gone from the file, or the
-                // value it holds is already the one asked for. Either way the
-                // file has just been re-read, so the screen is on it again.
-                Ok(false) => {}
-                Err(error) => self.message = Some(SharedString::from(error)),
-            },
-            Some(_) => return,
-            None => self.message = Some(crate::tr("error.bad_colour")),
+        match file.set(name, mode, value) {
+            Ok(true) => self.message = Some(crate::tr("message.palette_saved")),
+            // Nothing to write: the role is gone from the file, or the value it
+            // holds is already the one asked for. Either way the file has just
+            // been re-read, so the screen is on it again.
+            Ok(false) => {}
+            Err(error) => self.message = Some(SharedString::from(error)),
         }
         cx.notify();
     }
@@ -137,8 +95,8 @@ impl Workspace {
         self.palette.as_ref()
     }
 
-    /// The boxes of the palette page.
-    pub(crate) fn palette_inputs(&self) -> &[(String, Mode, Entity<InputState>)] {
+    /// The pickers of the palette page.
+    pub(crate) fn palette_inputs(&self) -> &[(String, Mode, Entity<ColorPickerState>)] {
         &self.palette_inputs
     }
 }
@@ -147,28 +105,28 @@ impl Workspace {
 mod tests {
     use super::*;
 
+    /// Every byte of every channel survives the trip to the picker and back.
+    ///
+    /// The picker works in hue, saturation and lightness; the file in
+    /// twenty-four bits. A conversion that lost a unit somewhere would show as
+    /// a palette that drifts a shade darker each time someone opens the page
+    /// and closes it — the kind of thing nobody reports and everybody notices.
     #[test]
-    fn the_spellings_people_use_are_all_read() {
-        assert_eq!(parse_colour("#1e2127"), Some(0x1e2127));
-        assert_eq!(parse_colour("1e2127"), Some(0x1e2127));
-        assert_eq!(parse_colour("0x1e2127"), Some(0x1e2127));
-        assert_eq!(parse_colour("  #1E2127 "), Some(0x1e2127));
-        assert_eq!(parse_colour("#abc"), Some(0xaabbcc), "the short form the web taught");
-    }
-
-    #[test]
-    fn a_half_typed_value_is_refused_rather_than_guessed() {
-        assert_eq!(parse_colour("#1e21"), None);
-        assert_eq!(parse_colour(""), None);
-        assert_eq!(parse_colour("#12345g"), None);
-        assert_eq!(parse_colour("rebeccapurple"), None);
-    }
-
-    #[test]
-    fn a_colour_is_shown_the_way_it_is_read() {
-        for value in [0x000000, 0x1e2127, 0xffffff, 0x0969da] {
-            assert_eq!(parse_colour(&format_colour(value)), Some(value));
+    fn a_colour_survives_the_picker() {
+        for byte in 0u32..=255 {
+            for value in [byte << 16, byte << 8, byte, byte * 0x010101] {
+                assert_eq!(from_colour(to_colour(value)), value, "{value:#08x}");
+            }
         }
-        assert_eq!(format_colour(0x0969da), "#0969da", "the leading zero is kept");
+    }
+
+    /// And the values the template ships with, named.
+    #[test]
+    fn the_template_s_own_colours_survive() {
+        for value in
+            [0x1e2127, 0xfafafa, 0x22262d, 0x61afef, 0x0969da, 0xe06c75, 0xffffff, 0x000000]
+        {
+            assert_eq!(from_colour(to_colour(value)), value, "{value:#08x}");
+        }
     }
 }
