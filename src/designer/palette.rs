@@ -14,6 +14,21 @@ use crate::workspace::Workspace;
 use super::{DragGhost, Dragged, section_title};
 
 impl Workspace {
+    /// The palette's heading and its search box, drawn outside the scroll.
+    ///
+    /// Apart from the list on purpose: inside it, the box you type in scrolled
+    /// away from the results it filters — you searched, the matches appeared,
+    /// and reaching them took the field off the screen.
+    pub(crate) fn render_palette_header(&self, _cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
+            .flex_none()
+            .bg(theme::panel_bg())
+            .child(section_title("designer.components"))
+            .when_some(self.palette_filter().cloned(), |this, filter| {
+                this.child(div().px_3().pb_2().child(Input::new(&filter).small()))
+            })
+    }
+
     /// The component palette. Clicking inserts into the selected container.
     pub(crate) fn render_palette(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let query = self
@@ -42,13 +57,6 @@ impl Workspace {
             .collect();
 
         v_flex()
-            // The search box first, because everything under it answers to what
-            // is typed in it: a list above the box changes while you type and
-            // reads as a list that is not being filtered.
-            .child(section_title("designer.components"))
-            .when_some(self.palette_filter().cloned(), |this, filter| {
-                this.child(div().px_3().pb_1().child(Input::new(&filter).small()))
-            })
             .children(mine.first().map(|_| section_title("designer.project_components")))
             .children(mine.into_iter().map(|brick| {
                 let name = brick.type_name.clone();

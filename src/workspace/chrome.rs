@@ -390,11 +390,18 @@ impl Workspace {
                 resizable_panel().size_range(px(120.)..px(900.)).child(fillable(
                     div()
                         .relative()
+                        .flex()
+                        .flex_col()
                         .size_full()
+                        // The heading and the search box stay put; only the list
+                        // moves. Inside the scroll, the field you type in left
+                        // the screen as soon as you reached what it had found.
+                        .child(self.render_palette_header(cx))
                         .child(
                             div()
                                 .id("left-palette")
-                                .size_full()
+                                .flex_1()
+                                .min_h(px(0.))
                                 .overflow_y_scroll()
                                 .track_scroll(&self.palette_scroll)
                                 .child(self.render_palette(cx)),
