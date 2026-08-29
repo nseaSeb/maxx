@@ -163,8 +163,17 @@ fn write_child(out: &mut String, child: &Node, depth: usize, offset: usize, inne
         // own indentation column.
         out.push_str(".child(\n");
         out.push_str(&INDENT.repeat(depth + 2));
-        out.push_str(&render_with(child, depth + 2, offset));
-        out.push_str(",\n");
+        let block = render_with(child, depth + 2, offset);
+        out.push_str(&block);
+        // The comma only if the chain does not end on a line comment. Written
+        // there it would be *inside* the comment, come back out of the file as
+        // part of its text, and gain another comma at the next save — one per
+        // save, without bound, on the developer's own words. Rust does not ask
+        // for it: the trailing comma of an argument list is optional.
+        if !ends_with_line_comment(&block) {
+            out.push(',');
+        }
+        out.push('\n');
         out.push_str(inner);
         out.push(')');
     } else {
@@ -172,6 +181,15 @@ fn write_child(out: &mut String, child: &Node, depth: usize, offset: usize, inne
         out.push_str(&rendered);
         out.push(')');
     }
+}
+
+/// Whether the last line of `block` is a `//` comment, which swallows whatever
+/// is written after it on the same line.
+///
+/// A block comment is not one: `*/` closes it, so a comma after it stays a
+/// comma.
+fn ends_with_line_comment(block: &str) -> bool {
+    block.lines().next_back().is_some_and(|line| line.trim_start().starts_with("//"))
 }
 
 /// Writes the head of the chain: the constructor, or the verbatim source of an

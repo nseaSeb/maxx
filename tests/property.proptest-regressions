@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 78f7c8297f7063f92e306f534ae20a1a9b55a86e855ad480dc2d92a908f66601 # shrinks to node = Node { base: Known { path: "div", args: [Str("x")] }, calls: [], children: [Node { base: Known { path: "div", args: [] }, calls: [], children: [], comments: [], trailing: [] }], comments: [], trailing: [] }
+cc df7a25dc407bf69b875aaf35b28d76688cd3255eafb86e7e4ac2ed9037de51b2 # shrinks to node = Node { base: Known { path: "div", args: [Str("x")] }, calls: [], children: [Node { base: Known { path: "div", args: [Str("x")] }, calls: [], children: [], comments: [], trailing: ["// what this line is for"] }], comments: [], trailing: [] }

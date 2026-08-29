@@ -1113,6 +1113,24 @@ fn a_comment_inside_a_child_stays_inside_it() {
     assert_eq!(reparse(source), source);
 }
 
+/// A comment on the last line of a child does not collect a comma.
+///
+/// Found by `tests/property.rs`, and the nastiest shape of the class this file
+/// exists for: the comma that closes a broken-out `.child(` argument was
+/// written straight after the chain, so a chain ending on a `//` line took it
+/// *inside* the comment. The next read gave the comment its text plus a comma,
+/// the next save added another, and the developer's own words grew by one
+/// character per save without anything ever failing.
+#[test]
+fn a_trailing_comment_in_a_child_does_not_collect_a_comma() {
+    let source = "v_flex()\n    .child(\n        v_flex()\n            .gap_1()\n            // pourquoi cette marge\n    )";
+    let once = reparse(source);
+    assert_eq!(once, source);
+    // The second pass is the one that used to differ.
+    assert_eq!(reparse(&once), once);
+    assert!(!once.contains(",\n"), "no comma may follow a comment line: {once}");
+}
+
 /// A block comment keeps the shape it was written in.
 #[test]
 fn a_block_comment_keeps_its_alignment() {

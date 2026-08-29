@@ -54,6 +54,7 @@ notify = "7"
 futures = "0.3"
 
 [dev-dependencies]
+proptest = "1.11.0"
 # Already in the tree through gpui: used to rasterise the icon drafts.
 resvg = "0.45"
 
