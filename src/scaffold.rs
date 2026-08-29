@@ -23,7 +23,7 @@ mod window;
 
 pub use assets::add_assets_module;
 pub use assets::{IMAGE_DIRECTORY, import_asset};
-pub use components::add_components_module;
+pub use components::{add_components_module, add_components_module_with};
 pub use menubar::{add_menu_bar, remove_menu_bar};
 pub use modules::is_directory as module_is_directory;
 pub use modules::{
@@ -32,7 +32,7 @@ pub use modules::{
 pub use settings::add_settings_module;
 pub use system::add_system_module;
 pub use templates::{settings_screen_rs, shell_rs};
-pub use theme::add_theme_module;
+pub use theme::{add_theme_module, add_theme_module_with};
 pub use views::{create_view, rename_view, set_entry_view};
 pub use window::add_window_module;
 

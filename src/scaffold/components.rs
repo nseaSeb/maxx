@@ -15,7 +15,7 @@ use std::path::Path;
 
 use super::modules::{header_end, joined, module_version};
 use super::templates::COMPONENTS;
-use super::theme::add_theme_module;
+use super::theme::add_theme_module_with;
 
 /// Copies the component library into the project and declares it.
 ///
@@ -24,8 +24,16 @@ use super::theme::add_theme_module;
 /// from the moment they open it, and a library that overwrites what it finds is
 /// a library nobody dares to edit.
 pub fn add_components_module(root: &Path) -> io::Result<()> {
+    add_components_module_with(root, None)
+}
+
+/// The same, with the palette the project should start from.
+pub fn add_components_module_with(
+    root: &Path,
+    roles: Option<&[(String, u32, u32)]>,
+) -> io::Result<()> {
     // The bricks paint with the project's roles, so the roles have to exist.
-    add_theme_module(root)?;
+    add_theme_module_with(root, roles)?;
 
     let main_path = root.join("src/main.rs");
     let source = std::fs::read_to_string(&main_path)?;

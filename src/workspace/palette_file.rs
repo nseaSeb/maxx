@@ -7,6 +7,7 @@
 
 use gpui::{AppContext as _, Context, Entity, Hsla, Rgba, SharedString, Window};
 use gpui_component::color_picker::{ColorPickerEvent, ColorPickerState};
+use rust_i18n::t;
 
 use crate::themefile::{Mode, ThemeFile};
 use crate::workspace::{Center, Workspace};
@@ -48,11 +49,22 @@ impl Workspace {
                     return;
                 }
             },
-            None => return,
+            None => {
+                self.message = Some(crate::tr("error.no_config_directory"));
+                cx.notify();
+                return;
+            }
         };
         match ThemeFile::open(&path) {
             Some(palette) => self.show(Center::Palette(palette)),
-            None => self.message = Some(crate::tr("error.palette_unreadable")),
+            // 4. Named, because the way out is to open or delete that file and
+            // an error that does not say which file is a dead end: the button
+            // goes on offering to edit what cannot be read.
+            None => {
+                self.message = Some(SharedString::from(
+                    t!("error.palette_unreadable", path = path.display().to_string()).into_owned(),
+                ))
+            }
         }
         cx.notify();
     }
@@ -98,6 +110,10 @@ impl Workspace {
 
     /// Writes one colour into `src/theme.rs`.
     fn set_palette_colour(&mut self, name: &str, mode: Mode, value: u32, cx: &mut Context<Self>) {
+        // Read before the palette is borrowed: what the canvas paints depends
+        // on whether this file belongs to the open project.
+        let root = self.project.as_ref().map(|project| project.root.clone());
+        let root_for_record = root.clone();
         let Some(file) = self.palette_mut() else {
             return;
         };
@@ -118,12 +134,35 @@ impl Workspace {
                 .zip(&after)
                 .any(|(was, now)| was != now && !(was.0 == name && now.0 == name));
         // The canvas paints from its own copy, so a colour just written has to
-        // reach it or the preview shows the value the user just replaced.
-        let preview = crate::preview::Preview::from_file(file);
+        // reach it — but only when the palette being written *is* the project's.
+        // The same editor also serves the user's own default palette, and
+        // painting the open project with those would be showing colours no file
+        // of it holds, until some unrelated event happened to correct it.
+        let preview = root
+            .filter(|root| file.path.starts_with(root))
+            .map(|_| crate::preview::Preview::from_file(file));
+        // The fingerprint follows what was just written. Without this, choosing
+        // a colour in maxx made the file stop matching what maxx had recorded,
+        // so the project silently left the update mechanism — and the branch
+        // that keeps a project's colours through an update could never run for
+        // the very people it was written for. An edit made in Zed still counts
+        // as the developer taking the file over; one made here does not.
+        if matches!(outcome, Ok(true))
+            && let Some(root) = root_for_record
+        {
+            let _ = crate::projectfile::record(
+                &root,
+                "theme",
+                crate::scaffold::module_version("theme").unwrap_or(1),
+                file.source(),
+            );
+        }
         if elsewhere {
             self.palette_synced = None;
         }
-        self.preview = preview;
+        if let Some(preview) = preview {
+            self.preview = preview;
+        }
         match outcome {
             Ok(true) => self.message = Some(crate::tr("message.palette_saved")),
             // Nothing to write: the role is gone from the file, or the value it

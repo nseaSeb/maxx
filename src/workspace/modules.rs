@@ -25,7 +25,7 @@ impl Workspace {
     fn add_module(
         &mut self,
         module: &str,
-        add: fn(&std::path::Path) -> std::io::Result<()>,
+        add: impl FnOnce(&std::path::Path) -> std::io::Result<()>,
         added: &'static str,
         // `added` is a translation key, as everywhere else.
         cx: &mut Context<Self>,
@@ -84,9 +84,10 @@ impl Workspace {
     /// It brings the palette with it: the bricks paint with the project's own
     /// roles, so the roles have to be there before they are.
     pub fn add_components_module(&mut self, cx: &mut Context<Self>) {
+        let roles = crate::settings::palette_roles();
         self.add_module(
             "components",
-            crate::scaffold::add_components_module,
+            |root| crate::scaffold::add_components_module_with(root, roles.as_deref()),
             "message.components_added",
             cx,
         );
@@ -99,7 +100,13 @@ impl Workspace {
     /// second mode onto colours already scattered through the views is the kind
     /// of work nobody does twice.
     pub fn add_theme_module(&mut self, cx: &mut Context<Self>) {
-        self.add_module("theme", crate::scaffold::add_theme_module, "message.theme_added", cx);
+        let roles = crate::settings::palette_roles();
+        self.add_module(
+            "theme",
+            |root| crate::scaffold::add_theme_module_with(root, roles.as_deref()),
+            "message.theme_added",
+            cx,
+        );
     }
 
     /// Copies the settings module into the project.

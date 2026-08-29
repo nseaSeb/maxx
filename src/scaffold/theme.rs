@@ -10,6 +10,17 @@ use super::modules::{header_end, joined, legacy_copy, module_version};
 /// theme, and keeping a second one beside it would let the two disagree — the
 /// window in one mode and its buttons in the other.
 pub fn add_theme_module(root: &Path) -> io::Result<()> {
+    add_theme_module_with(root, None)
+}
+
+/// The same, painted with `roles` when there are any.
+///
+/// The roles come in rather than being read here, and that is not a matter of
+/// taste: reading the user's configuration from inside the scaffolding made
+/// what a project receives depend on the machine it was created on. The suite
+/// then passed or failed according to whether whoever ran it had ever pressed
+/// a button in the preferences — a failure that reproduces nowhere.
+pub fn add_theme_module_with(root: &Path, roles: Option<&[(String, u32, u32)]>) -> io::Result<()> {
     if let Some(error) = legacy_copy(root, "theme") {
         return Err(error);
     }
@@ -25,8 +36,8 @@ pub fn add_theme_module(root: &Path) -> io::Result<()> {
     // project owns the copy either way: what is recorded in `maxx.toml` is the
     // fingerprint of what was actually written, so a project started from a
     // custom palette is still a project maxx recognises as its own.
-    let body = match crate::settings::palette_roles() {
-        Some(roles) => crate::themefile::apply_roles(&theme_rs(), &roles),
+    let body = match roles {
+        Some(roles) => crate::themefile::apply_roles(&theme_rs(), roles),
         None => theme_rs(),
     };
     if !path.exists() {

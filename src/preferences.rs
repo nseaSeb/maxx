@@ -388,8 +388,11 @@ fn file_page(cx: &mut Context<Workspace>) -> SettingPage {
 /// one editor and one writer for both sides, rather than a second screen doing
 /// the same thing to the same shape of file.
 fn default_palette_item() -> SettingItem {
+    // `made` is read once here and not inside the closure: `SettingItem::render`
+    // runs on every repaint, and asking the filesystem whether a file exists
+    // sixty times a second to choose a label is a syscall for nothing.
+    let made = settings::palette_path().is_some_and(|path| path.exists());
     SettingItem::render(move |_, _, _| {
-        let made = settings::palette_path().is_some_and(|path| path.exists());
         let label = if made { "prefs.default_palette_edit" } else { "prefs.default_palette_make" };
         let description =
             if made { "prefs.default_palette_desc" } else { "prefs.default_palette_none_desc" };

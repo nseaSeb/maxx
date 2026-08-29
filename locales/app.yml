@@ -182,9 +182,12 @@ error.already_managed:
 error.bad_field_name:
   en: "“%{name}” is not a valid field name"
   fr: "« %{name} » n'est pas un nom de champ valide"
+error.no_config_directory:
+  en: "maxx cannot find a configuration directory to keep your palette in"
+  fr: "maxx ne trouve pas de répertoire de configuration où garder votre palette"
 error.palette_unreadable:
-  en: "That palette cannot be read"
-  fr: "Cette palette est illisible"
+  en: "%{path} holds no role maxx can read — open or delete that file"
+  fr: "%{path} ne contient aucun rôle lisible — ouvrez ou supprimez ce fichier"
 error.changed_on_disk:
   en: "changed outside maxx — File > Reload, or Overwrite"
   fr: "fichier modifié en dehors de maxx — Fichier > Recharger, ou Écraser"

@@ -177,3 +177,34 @@ fn updating_the_palette_keeps_the_project_s_colours() {
     // And it settled: the fingerprint recorded is the one of what was written.
     assert!(scaffold::outdated_modules(&root).is_empty());
 }
+
+/// Scaffolding answers to its arguments and to nothing else.
+///
+/// The defect this guards against was invisible on the machine that wrote it:
+/// `add_theme_module` read the *user's* configuration directory, so what a
+/// project received depended on whether whoever ran the suite had ever pressed
+/// a button in the preferences. The first developer to use the feature got a
+/// red suite that reproduced nowhere.
+#[test]
+fn a_scaffolded_palette_does_not_depend_on_the_machine() {
+    let scratch = Scratch::new("pure");
+    let root = scratch.project("trial");
+    let template = scaffold::module_body("theme").expect("the template");
+    assert_eq!(
+        std::fs::read_to_string(ThemeFile::path_in(&root)).unwrap(),
+        template,
+        "with no roles given, a project gets the template and nothing else"
+    );
+
+    // And with roles given, exactly those.
+    let other = scratch.0.join("mine");
+    scaffold::create_project(&other, "mine", Template::Empty).unwrap();
+    let mine = vec![("ACCENT".to_string(), 0x123456, 0x654321)];
+    scaffold::add_theme_module_with(&other, Some(&mine)).expect("the palette is added");
+
+    let written = ThemeFile::load(&other).expect("the palette is there");
+    let accent = written.swatches().iter().find(|s| s.name == "ACCENT").unwrap();
+    assert_eq!((accent.dark, accent.light), (0x123456, 0x654321));
+    let background = written.swatches().iter().find(|s| s.name == "BACKGROUND").unwrap();
+    assert_eq!(background.dark, 0x1e2127, "a role not given keeps the template's");
+}
