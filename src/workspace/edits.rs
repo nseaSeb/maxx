@@ -524,6 +524,37 @@ mod tests {
         });
     }
 
+    /// A project component's own source opens in the reader.
+    ///
+    /// The palette shows the brick's name; the file it is written in is one
+    /// click from there. The reader and not an editor: maxx reads, Zed writes.
+    #[gpui::test]
+    fn a_brick_s_source_opens_in_the_reader(cx: &mut TestAppContext) {
+        let scratch = Scratch::new("brick-source");
+        let root = scratch.0.join("trial");
+        scaffold::create_project(&root, "trial", Template::Empty)
+            .expect("the project must be created");
+        scaffold::add_components_module(&root).expect("the components must be added");
+
+        let workspace =
+            cx.update(|cx| cx.new(|cx| Workspace::new(Some(Project::open(root.clone())), cx)));
+
+        workspace.update(cx, |workspace, cx| {
+            assert!(
+                workspace.bricks.iter().any(|brick| brick.module == "card"),
+                "the library maxx just wrote must be readable"
+            );
+            workspace.open_brick_source("card", cx);
+
+            let file = workspace.code().expect("the reader holds the file");
+            assert!(workspace.showing_code(), "and shows it");
+            // The tail, not the whole path: `Project::open` canonicalises, and
+            // on macOS the scratch directory is a symlink — `/var/folders/…`
+            // resolving to `/private/var/folders/…`.
+            assert!(file.path.ends_with("src/components/card.rs"), "{}", file.path.display());
+        });
+    }
+
     /// A component dropped at an index lands at that index, not at the end.
     ///
     /// The tree is the second way into the canvas, and the whole point of the

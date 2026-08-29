@@ -32,6 +32,17 @@ pub fn from_colour(colour: Hsla) -> u32 {
 }
 
 impl Workspace {
+    /// Opens a project component's own file in the reader.
+    ///
+    /// The reader and not an editor: the rule of the house is that maxx reads
+    /// and Zed writes, and `⌘⌥Z` is one keystroke from here.
+    pub(crate) fn open_brick_source(&mut self, module: &str, cx: &mut Context<Self>) {
+        let Some(root) = self.project.as_ref().map(|project| project.root.clone()) else {
+            return;
+        };
+        self.select_file(root.join(format!("src/components/{module}.rs")), cx);
+    }
+
     /// The inspector's search box.
     pub(crate) fn prop_filter(&self) -> Option<&Entity<InputState>> {
         self.prop_filter.as_ref()

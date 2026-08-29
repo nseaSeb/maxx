@@ -3,7 +3,8 @@
 use gpui::prelude::*;
 use gpui::{Context, SharedString, div};
 use gpui_component::input::Input;
-use gpui_component::{Sizable as _, v_flex};
+use gpui_component::tooltip::Tooltip;
+use gpui_component::{Sizable as _, h_flex, v_flex};
 
 use crate::registry::{self};
 use crate::theme;
@@ -60,13 +61,47 @@ impl Workspace {
             .children(mine.first().map(|_| section_title("designer.project_components")))
             .children(mine.into_iter().map(|brick| {
                 let name = brick.type_name.clone();
-                div()
+                let module = brick.module.clone();
+                let doc = SharedString::from(brick.doc.clone());
+                h_flex()
                     .id(SharedString::from(format!("brick-{}", brick.type_name)))
+                    .group(SharedString::from(format!("brick-row-{}", brick.type_name)))
                     .px_3()
                     .py_1()
+                    .gap_2()
+                    .items_center()
                     .cursor_pointer()
                     .hover(|this| this.bg(theme::hover_bg()))
-                    .child(SharedString::from(brick.type_name.clone()))
+                    .child(div().flex_1().child(SharedString::from(brick.type_name.clone())))
+                    // What the brick is written like, one click away. It is the
+                    // project's own file, so the reader can already show it from
+                    // the explorer — what was missing is the way there from
+                    // where the brick is seen rather than from where it is
+                    // filed.
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("brick-source-{}", brick.type_name)))
+                            .invisible()
+                            .group_hover(
+                                SharedString::from(format!("brick-row-{}", brick.type_name)),
+                                |this| this.visible(),
+                            )
+                            .px_1()
+                            .rounded_sm()
+                            .text_xs()
+                            .text_color(theme::text_muted())
+                            .hover(|this| this.text_color(theme::text()))
+                            .child(crate::tr("designer.read_source"))
+                            .tooltip(move |window, cx| Tooltip::new(doc.clone()).build(window, cx))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                // Every ancestor carries a click listener, and
+                                // the outermost runs last: without this the row
+                                // would insert the brick straight after opening
+                                // its source.
+                                cx.stop_propagation();
+                                this.open_brick_source(&module, cx);
+                            })),
+                    )
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.insert_brick(&name, cx);
                     }))
