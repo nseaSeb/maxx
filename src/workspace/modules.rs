@@ -56,6 +56,7 @@ impl Workspace {
 
         self.menu_file = None;
         self.menu_synced = None;
+        self.palette = None;
         self.preferences = false;
         self.refresh_entries();
         // The palette page reads `src/theme.rs`, which may have just appeared or

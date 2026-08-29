@@ -234,6 +234,7 @@ impl Workspace {
         self.message = None;
         self.preferences = false;
         self.menu_file = None;
+        self.palette = None;
         self.code = Some(file);
         self.code_synced = None;
         self.code_revision = self.revision;
@@ -249,6 +250,7 @@ impl Workspace {
         }
         self.preferences = false;
         self.menu_file = None;
+        self.palette = None;
         self.message = None;
         cx.notify();
     }

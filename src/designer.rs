@@ -20,6 +20,7 @@ mod canvas;
 mod inspector;
 mod menus;
 mod palette;
+mod palette_editor;
 mod tree;
 
 pub(crate) use canvas::missing_image;
@@ -52,6 +53,15 @@ impl Workspace {
                 .overflow_hidden()
                 .child(self.render_tabs(cx))
                 .child(self.render_preferences(cx))
+                .into_any_element();
+        }
+        if self.palette.is_some() {
+            // The tab strip stays: it is the way back to an open view.
+            return v_flex()
+                .flex_1()
+                .overflow_hidden()
+                .child(self.render_tabs(cx))
+                .child(self.render_palette_editor(cx))
                 .into_any_element();
         }
         if self.menu_file.is_some() {

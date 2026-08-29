@@ -104,19 +104,40 @@ impl ThemeFile {
         root.join("src/theme.rs")
     }
 
+    /// Whether `path` is a project's palette.
+    ///
+    /// By place and not by name alone: a `theme.rs` under `src/ui/` is a view,
+    /// and opening it in the palette editor would put a designer's file behind
+    /// a screen that cannot draw it.
+    pub fn is_palette_file(path: &Path) -> bool {
+        path.file_name().is_some_and(|name| name == "theme.rs")
+            && path
+                .parent()
+                .and_then(|parent| parent.file_name())
+                .is_some_and(|parent| parent == "src")
+    }
+
     /// Reads the palette of the project rooted at `root`.
     ///
     /// `None` when the project has no palette module — which is the ordinary
     /// case, since it is added on demand — rather than an error: nothing has
     /// gone wrong, there is simply nothing to show.
     pub fn load(root: &Path) -> Option<Self> {
-        let path = Self::path_in(root);
-        let source = std::fs::read_to_string(&path).ok()?;
+        Self::open(&Self::path_in(root))
+    }
+
+    /// The same, from the file itself.
+    ///
+    /// `None` also when nothing in it has the shape of a role: a `src/theme.rs`
+    /// rewritten past recognition is a file, not an empty palette, and the
+    /// caller shows it as one.
+    pub fn open(path: &Path) -> Option<Self> {
+        let source = std::fs::read_to_string(path).ok()?;
         let swatches = read_swatches(&source);
         if swatches.is_empty() {
             return None;
         }
-        Some(Self { path, source, swatches })
+        Some(Self { path: path.to_path_buf(), source, swatches })
     }
 
     /// The roles, in file order.

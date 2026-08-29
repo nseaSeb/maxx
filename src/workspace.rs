@@ -209,16 +209,19 @@ pub struct Workspace {
     watch_task: Option<Task<()>>,
     /// The watcher itself, kept alive here: dropped, it stops watching.
     watcher: Option<notify::RecommendedWatcher>,
-    /// Pickers of the palette page: the role's name, the mode, and the picker.
+    /// The palette being edited, when `src/theme.rs` is what the middle shows.
+    ///
+    /// One of the panel's modes, like [`Workspace::menu_file`]: opening it turns
+    /// the others off, and closing it comes back to the view underneath.
+    pub palette: Option<crate::themefile::ThemeFile>,
+    /// Pickers of that editor: the role's name, the mode, and the picker.
     palette_inputs: Vec<(
         String,
         crate::themefile::Mode,
         Entity<gpui_component::color_picker::ColorPickerState>,
     )>,
-    /// The project those boxes were built for, so they are built once.
+    /// The file those pickers were built for, so they are built once.
     palette_synced: Option<PathBuf>,
-    /// `src/theme.rs` as it stands, or `None` when the project has no palette.
-    palette: Option<crate::themefile::ThemeFile>,
     /// Text boxes of the run page, one per editable field of `[run]`.
     run_inputs: Vec<(crate::projectfile::RunField, Entity<InputState>)>,
     /// The project those boxes were built for, so they are built once.
@@ -377,6 +380,7 @@ impl Workspace {
         self.menu_file = None;
         self.preferences = false;
         self.menu_synced = None;
+        self.palette = None;
         // A window with no project can still hold a file in the reader; showing
         // it under the new project's name would be the previous project's file.
         self.forget_code(|_| true);
@@ -409,6 +413,7 @@ impl Workspace {
         self.menu_file = None;
         self.preferences = false;
         self.menu_synced = None;
+        self.palette = None;
         self.entries.clear();
         self.expanded.clear();
         self.selected = None;

@@ -8,7 +8,7 @@
 use gpui::{AppContext as _, Context, Entity, Hsla, Rgba, SharedString, Window};
 use gpui_component::color_picker::{ColorPickerEvent, ColorPickerState};
 
-use crate::themefile::{Mode, ThemeFile};
+use crate::themefile::Mode;
 use crate::workspace::Workspace;
 
 /// The colour a role holds, as the picker wants it.
@@ -37,18 +37,14 @@ impl Workspace {
     /// entity created there would be a new one each frame — a picker that shuts
     /// its own popup as soon as it is opened.
     pub(super) fn sync_palette_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let root = self.project.as_ref().map(|project| project.root.clone());
-        if self.palette_synced == root {
+        let key = self.palette.as_ref().map(|palette| palette.path.clone());
+        if self.palette_synced == key {
             return;
         }
-        self.palette_synced = root.clone();
+        self.palette_synced = key;
         self.palette_inputs.clear();
-        self.palette = None;
-        let Some(root) = root else {
-            return;
-        };
 
-        let Some(file) = ThemeFile::load(&root) else {
+        let Some(file) = self.palette.clone() else {
             return;
         };
         for swatch in file.swatches() {
@@ -71,7 +67,6 @@ impl Workspace {
                 self.palette_inputs.push((name, mode, state));
             }
         }
-        self.palette = Some(file);
     }
 
     /// Writes one colour into `src/theme.rs`.
@@ -88,11 +83,6 @@ impl Workspace {
             Err(error) => self.message = Some(SharedString::from(error)),
         }
         cx.notify();
-    }
-
-    /// The palette of the open project, when it has one.
-    pub(crate) fn palette(&self) -> Option<&ThemeFile> {
-        self.palette.as_ref()
     }
 
     /// The pickers of the palette page.

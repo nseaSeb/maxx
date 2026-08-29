@@ -131,6 +131,35 @@ impl Workspace {
         self.message = None;
         // Opening anything leaves the preferences, for the same reason.
         self.preferences = false;
+        if crate::themefile::ThemeFile::is_palette_file(&path) {
+            // Already open: leave it be rather than reload, which would drop
+            // the pickers and shut a popup someone is picking from.
+            if self.palette.as_ref().is_some_and(|palette| palette.path == path) {
+                self.selected = Some(path);
+                cx.notify();
+                return;
+            }
+            if self.discard_menu_edits(cx) {
+                return;
+            }
+            self.menu_file = None;
+            self.code = None;
+            match crate::themefile::ThemeFile::open(&path) {
+                Some(palette) => self.palette = Some(palette),
+                // A `src/theme.rs` this reader cannot make sense of is not a
+                // broken palette: it is a file the developer rewrote, and the
+                // code reader shows it rather than an empty screen pretending
+                // there are no colours in it.
+                None => {
+                    self.palette = None;
+                    self.open_code(path.clone(), cx);
+                }
+            }
+            self.selected = Some(path);
+            cx.notify();
+            return;
+        }
+        self.palette = None;
         if MenuFile::is_menu_file(&path) {
             // Already open and edited: reloading would drop those edits.
             if self.menu_file.as_ref().is_some_and(|menus| menus.path == path) {

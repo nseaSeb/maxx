@@ -119,6 +119,7 @@ impl Workspace {
         if self.menu_file.as_ref().is_some_and(|menus| gone(&menus.path)) {
             self.menu_file = None;
             self.menu_synced = None;
+            self.palette = None;
         }
         self.forget_code(gone);
 

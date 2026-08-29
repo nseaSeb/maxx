@@ -21,14 +21,11 @@ use gpui_component::setting::{
 
 use gpui::Entity;
 use gpui_component::Sizable;
-use gpui_component::color_picker::{ColorPicker, ColorPickerState};
-use gpui_component::h_flex;
 use gpui_component::input::{Input, InputState};
 
 use crate::projectfile::RunField;
 use crate::settings;
 use crate::theme;
-use crate::themefile::Mode as PaletteMode;
 use crate::workspace::Workspace;
 
 impl Workspace {
@@ -40,7 +37,6 @@ impl Workspace {
             .page(tools_page())
             .page(projects_page(cx))
             .page(run_page(self))
-            .page(palette_page(self))
             .page(file_page(cx))
             .into_any_element()
     }
@@ -257,85 +253,6 @@ fn projects_page(cx: &mut Context<Workspace>) -> SettingPage {
                 })
             })),
     )
-}
-
-/// The palette of the open project: the roles of its `src/theme.rs`.
-///
-/// A page beside the run one, and for the same reason: these are the
-/// **project's** colours, not the user's, and the group says which file they go
-/// to. maxx's own two modes are elsewhere, under `View`.
-///
-/// The roles are read from the file rather than listed here. A project that
-/// added a `WARNING` gets to edit it, and one that renamed everything still
-/// gets a page — the screen shows what the palette says it holds.
-fn palette_page(workspace: &Workspace) -> SettingPage {
-    let (Some(project), Some(palette)) = (workspace.project(), workspace.palette()) else {
-        return SettingPage::new(crate::tr("prefs.palette")).group(
-            SettingGroup::new()
-                .title(crate::tr("prefs.palette_none"))
-                .description(crate::tr("prefs.palette_none_desc")),
-        );
-    };
-
-    let inputs: Vec<_> = workspace.palette_inputs().to_vec();
-    let boxed = |name: &str, mode: PaletteMode| {
-        inputs
-            .iter()
-            .find(|(this, that, _)| this == name && *that == mode)
-            .map(|(_, _, state)| state.clone())
-    };
-
-    let mut group = SettingGroup::new()
-        .title(project.name.clone())
-        .description(crate::tr("prefs.palette_desc"));
-    for swatch in palette.swatches() {
-        group = group.item(colour_row(
-            swatch,
-            boxed(&swatch.name, PaletteMode::Dark),
-            boxed(&swatch.name, PaletteMode::Light),
-        ));
-    }
-    SettingPage::new(crate::tr("prefs.palette")).group(group)
-}
-
-/// One role: its name, what it is for, and its two colours side by side.
-///
-/// A picker rather than a text box. A colour is chosen by eye, and a field that
-/// takes `#1e2127` asks the one question a palette should never ask — what the
-/// number of the shade you want is. The popup still takes a typed hex, for
-/// whoever arrives with one from a designer.
-fn colour_row(
-    swatch: &crate::themefile::Swatch,
-    dark: Option<Entity<ColorPickerState>>,
-    light: Option<Entity<ColorPickerState>>,
-) -> SettingItem {
-    let name = SharedString::from(swatch.name.clone());
-    let doc = SharedString::from(swatch.doc.clone());
-    SettingItem::render(move |_, _, _| {
-        let picker =
-            |state: &Option<Entity<ColorPickerState>>, label: &'static str| -> AnyElement {
-                match state {
-                    Some(state) => {
-                        ColorPicker::new(state).small().label(crate::tr(label)).into_any_element()
-                    }
-                    None => div().into_any_element(),
-                }
-            };
-        div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .child(div().child(name.clone()))
-            .child(div().text_xs().text_color(theme::text_muted()).child(doc.clone()))
-            .child(
-                h_flex()
-                    .gap_4()
-                    .items_center()
-                    .child(picker(&dark, "prefs.palette_dark"))
-                    .child(picker(&light, "prefs.palette_light")),
-            )
-            .into_any_element()
-    })
 }
 
 /// How the open project is launched: the `[run]` section of its `maxx.toml`.
