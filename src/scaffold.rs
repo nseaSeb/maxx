@@ -8,7 +8,7 @@ use std::io;
 use std::path::Path;
 
 use menubar::menus_rs;
-use views::declare_ui_module;
+use views::{declare_ui_module, view_rs};
 
 pub mod assets;
 pub mod menubar;
@@ -30,7 +30,7 @@ pub use settings::add_settings_module;
 pub use system::add_system_module;
 pub use templates::{settings_screen_rs, shell_rs};
 pub use theme::add_theme_module;
-pub use views::{create_view, rename_view, set_entry_view, view_rs};
+pub use views::{create_view, rename_view, set_entry_view};
 pub use window::add_window_module;
 
 /// The shape a new project is given.

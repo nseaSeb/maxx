@@ -442,7 +442,7 @@ fn is_import_of(line: &str, type_name: &str) -> bool {
 ///
 /// The three calls are ordinary Rust that maxx carries as data: they show in
 /// the inspector, and whoever does not want them removes them there.
-pub fn view_rs(type_name: &str, module: &str) -> String {
+pub(super) fn view_rs(type_name: &str, module: &str) -> String {
     format!(
         r#"use gpui::{{Context, Window, prelude::*}};
 use gpui_component::label::Label;
