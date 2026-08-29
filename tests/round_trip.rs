@@ -1444,3 +1444,35 @@ fn every_subtree_template_wears_a_label() {
         );
     }
 }
+
+/// A braced import whose names are only partly there adds the rest, not itself.
+///
+/// The shape a real project arrived in: `use gpui_component::button::Button;`
+/// already written by an earlier save, and maxx then owing
+/// `use gpui_component::button::{Button, ButtonVariants};` for a `.primary()`.
+/// Every name of a braced needle has to be found before it counts as imported,
+/// so this one was not — and maxx wrote the whole statement, giving the file two
+/// `Button` imports. `E0252`, in the developer's project, on a line maxx wrote.
+#[test]
+fn a_partly_imported_brace_adds_only_what_is_missing() {
+    let source = "\
+use gpui::prelude::*;
+use gpui_component::button::Button;
+
+fn main() {}
+";
+    let out = maxx::view::ensure_imports_for_test(
+        source.to_string(),
+        &["use gpui_component::button::{Button, ButtonVariants};"],
+    );
+    assert_eq!(
+        out.matches("use gpui_component::button::").count(),
+        2,
+        "the plain import stays and one line is added for the trait:\n{out}"
+    );
+    assert!(out.contains("use gpui_component::button::ButtonVariants;"), "{out}");
+    assert!(
+        !out.contains("{Button, ButtonVariants}"),
+        "the whole statement must not be written again:\n{out}"
+    );
+}

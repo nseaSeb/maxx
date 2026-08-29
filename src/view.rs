@@ -289,9 +289,17 @@ fn tree_names(root: &Node, line: &str) -> bool {
     found
 }
 
+/// `ensure_imports`, reachable from the test suite.
+///
+/// The rule it carries is about files maxx did not write, so it is checked on
+/// hand-written shapes rather than only through a whole save.
+pub fn ensure_imports_for_test(source: String, lines: &[&str]) -> String {
+    ensure_imports(source, lines)
+}
+
 fn ensure_imports(source: String, lines: &[&str]) -> String {
-    let missing: Vec<&str> =
-        lines.iter().copied().filter(|line| !already_imported(&source, line)).collect();
+    let missing: Vec<String> =
+        lines.iter().filter_map(|line| what_is_missing(&source, line)).collect();
     if missing.is_empty() {
         return source;
     }
@@ -305,7 +313,7 @@ fn ensure_imports(source: String, lines: &[&str]) -> String {
 
     let mut out = String::with_capacity(source.len() + missing.len() * 48);
     out.push_str(&source[..anchor]);
-    for line in missing {
+    for line in &missing {
         out.push_str(line);
         out.push('\n');
     }
@@ -317,6 +325,50 @@ fn ensure_imports(source: String, lines: &[&str]) -> String {
 ///
 /// Comparing whole lines misses `use gpui::{Context, px};`, and appending the
 /// line anyway is a duplicate-import error the user then has to fix by hand.
+/// The `use` line to add so that everything `line` names is imported, if any.
+///
+/// `None` when it all already is. The interesting answer is the third one: a
+/// braced needle whose names are only PARTLY there gives back a line for the
+/// rest, never itself.
+///
+/// The failure that asks for it arrived in a real project. An earlier save had
+/// written `use gpui_component::button::Button;`; a `.primary()` then made maxx
+/// owe `use gpui_component::button::{Button, ButtonVariants};`. Not every name
+/// of that needle was present — `ButtonVariants` was not — so it counted as
+/// missing and the whole statement was written, leaving the file importing
+/// `Button` twice. `E0252`, in the developer's project, on a line maxx wrote,
+/// and the view stopped opening.
+fn what_is_missing(source: &str, line: &str) -> Option<String> {
+    if already_imported(source, line) {
+        return None;
+    }
+    let Some((path, names)) = line
+        .trim()
+        .strip_prefix("use ")
+        .and_then(|rest| rest.strip_suffix(';'))
+        .and_then(|item| item.rsplit_once("::"))
+    else {
+        return Some(line.to_string());
+    };
+    let Some(list) = names.strip_prefix('{').and_then(|rest| rest.strip_suffix('}')) else {
+        return Some(line.to_string());
+    };
+
+    let rest: Vec<&str> = list
+        .split(',')
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .filter(|name| !already_imported(source, &format!("use {path}::{name};")))
+        .collect();
+    match rest.len() {
+        0 => None,
+        // One name left is written plainly: `use a::{B};` is not what anyone
+        // would have typed, and rustfmt would take the braces off anyway.
+        1 => Some(format!("use {path}::{};", rest[0])),
+        _ => Some(format!("use {path}::{{{}}};", rest.join(", "))),
+    }
+}
+
 fn already_imported(source: &str, line: &str) -> bool {
     if source.contains(line) {
         return true;
