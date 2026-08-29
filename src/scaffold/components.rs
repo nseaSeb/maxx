@@ -85,11 +85,19 @@ fn declare(directory: &Path) -> io::Result<()> {
     let mut lines: Vec<String> = existing.lines().map(str::to_string).collect();
     let mut added = false;
     for (name, _) in COMPONENTS {
-        for line in [format!("mod {name};"), format!("pub use {name}::{};", type_name(name))] {
-            if !lines.iter().any(|existing| existing.trim() == line) {
-                lines.push(line);
-                added = true;
-            }
+        // `mod x;` and `pub mod x;` are the same declaration, and the reader in
+        // `bricks` accepts both: recognising only one here appended a second
+        // `mod badge;` beside the developer's `pub mod badge;` — E0428, in a
+        // file maxx had just written.
+        let declared = format!("mod {name};");
+        if !lines.iter().any(|line| line.trim().trim_start_matches("pub ") == declared) {
+            lines.push(declared);
+            added = true;
+        }
+        let exported = format!("pub use {name}::{};", type_name(name));
+        if !lines.iter().any(|line| line.trim() == exported) {
+            lines.push(exported);
+            added = true;
         }
     }
     if !added {

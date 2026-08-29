@@ -357,13 +357,18 @@ fn flag_duplicate_imports(source: String) -> String {
     // if maxx had never written one. That is what makes it idempotent, and what
     // takes the mark back when the duplicate is gone — the second pass simply
     // finds nothing left to flag.
-    let lines: Vec<&str> =
-        source.lines().filter(|line| !line.trim_start().starts_with(NOTE)).collect();
+    // Only inside the import block, and only a line that is nothing but the
+    // mark: `// maxx: …` inside a string literal, or written by the developer
+    // further down, is not maxx's to take away.
+    let lines: Vec<&str> = source.lines().filter(|line| !is_note(line)).collect();
 
     let mut seen: Vec<(String, String)> = Vec::new();
     let mut out: Vec<String> = Vec::with_capacity(lines.len() + 1);
     for line in lines {
-        let names = imported_names(line);
+        // At column zero, so only the file's own import block. A `use` inside a
+        // `mod tests` or a function shadows rather than clashes, and saying it
+        // is a duplicate would put a mark on perfectly good Rust, at every save.
+        let names = if line.starts_with("use ") { imported_names(line) } else { Vec::new() };
         let duplicate = names.iter().find(|pair| seen.contains(pair)).cloned();
         for pair in names {
             if !seen.contains(&pair) {
@@ -371,19 +376,33 @@ fn flag_duplicate_imports(source: String) -> String {
             }
         }
         if let Some((_, name)) = duplicate {
-            let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
-            out.push(format!(
-                "{indent}{NOTE}{name} is imported twice — one of these two lines has to go."
-            ));
+            // At column zero, like the line it points at and like every note
+            // this pass recognises on the way back in.
+            out.push(format!("{NOTE}{name} is imported twice — one of these two lines has to go."));
         }
         out.push(line.to_string());
     }
 
-    let mut joined = out.join("\n");
+    // The file's own line ending. `lines()` drops the `\r` of a CRLF file and
+    // joining on `\n` would put back only half of it — a whole-file diff for a
+    // change that did not happen, which `scaffold::modules::joined` already
+    // guards against and this had to as well.
+    let ending = if source.contains("\r\n") { "\r\n" } else { "\n" };
+    let mut joined = out.join(ending);
     if source.ends_with('\n') {
-        joined.push('\n');
+        joined.push_str(ending);
     }
     joined
+}
+
+/// Whether this line is one maxx left to point at something.
+///
+/// At column zero, with no indentation: that is where maxx writes one, since the
+/// only lines it has anything to say about are imports, which live there. An
+/// indented `// maxx: …` is a comment the developer wrote — in a function, in a
+/// string — and taking it away would be maxx removing what it did not write.
+fn is_note(line: &str) -> bool {
+    line.starts_with(NOTE)
 }
 
 /// The `(path, name)` pairs one `use` line imports.

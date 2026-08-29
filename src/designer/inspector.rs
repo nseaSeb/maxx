@@ -129,7 +129,11 @@ impl Workspace {
         if spec.is_none()
             && let Some(brick) = self.brick_of(node)
         {
-            for prop in &brick.props {
+            for prop in brick
+                .props
+                .iter()
+                .filter(|prop| crate::designer::label_matches(&prop.method, &prop.method, &query))
+            {
                 rows.push(self.render_brick_prop(node, prop, cx).into_any_element());
             }
         }
@@ -180,7 +184,6 @@ impl Workspace {
         }
 
         v_flex()
-            .child(section_title("designer.properties"))
             .when(node.is_opaque(), |this| {
                 this.child(
                     div()

@@ -1527,3 +1527,50 @@ fn an_import_maxx_cannot_read_is_left_in_peace() {
         assert_eq!(flagged, source, "saying nothing beats saying something wrong:\n{flagged}");
     }
 }
+
+/// A CRLF file stays a CRLF file.
+///
+/// `lines()` drops the `\r` and joining on `\n` puts back only half of it: a
+/// whole-file diff for a change that did not happen. The rule was already
+/// written down for the copied modules; this pass runs on every save and had to
+/// carry it too.
+#[test]
+fn flagging_imports_keeps_the_files_line_endings() {
+    let source = "use gpui::prelude::*;\r\nuse a::b::C;\r\nuse a::b::{C, D};\r\n";
+    let flagged = maxx::view::flag_duplicate_imports_for_test(source.to_string());
+    assert!(flagged.contains("// maxx: C is imported twice"), "{flagged:?}");
+    assert!(!flagged.contains("\n\n"), "no bare newline may appear: {flagged:?}");
+    assert_eq!(flagged.matches("\r\n").count(), flagged.lines().count(), "{flagged:?}");
+}
+
+/// A `use` inside a module shadows; it does not clash.
+#[test]
+fn an_import_in_an_inner_module_is_not_a_duplicate() {
+    let source = "\
+use a::b::C;
+
+#[cfg(test)]
+mod tests {
+    use a::b::C;
+}
+";
+    assert_eq!(
+        maxx::view::flag_duplicate_imports_for_test(source.to_string()),
+        source,
+        "a shadowing import is perfectly good Rust"
+    );
+}
+
+/// And a line that merely looks like maxx's mark is not maxx's to remove.
+#[test]
+fn a_note_the_developer_wrote_is_left_alone() {
+    let source = "\
+use a::b::C;
+
+fn main() {
+    // maxx: their own note, indented, and none of maxx's business
+    let _ = 1;
+}
+";
+    assert_eq!(maxx::view::flag_duplicate_imports_for_test(source.to_string()), source);
+}

@@ -1588,3 +1588,28 @@ fn a_brick_added_later_is_declared_in_the_module_that_holds_them() {
     assert!(now.contains("pub use empty_state::EmptyState;"), "and re-exported:\n{now}");
     assert!(now.contains("// leur ligne à eux"), "their line survived:\n{now}");
 }
+
+/// A component the developer declared `pub mod` is not declared a second time.
+///
+/// The writer recognised only `mod badge;`, the reader in `bricks` accepted
+/// `pub mod badge;` too — so a library added again appended a second
+/// declaration beside theirs. E0428, in a file maxx had just written.
+#[test]
+fn a_public_declaration_is_recognised_as_one() {
+    let root = scratch("maxx_components_pub_mod");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::add_components_module(&root).unwrap();
+
+    let mod_path = root.join("src/components/mod.rs");
+    let theirs = std::fs::read_to_string(&mod_path).unwrap().replace("mod card;", "pub mod card;");
+    std::fs::write(&mod_path, &theirs).unwrap();
+
+    scaffold::add_components_module(&root).expect("adding again must be harmless");
+
+    let now = std::fs::read_to_string(&mod_path).unwrap();
+    assert_eq!(
+        now.lines().filter(|line| line.trim().ends_with("mod card;")).count(),
+        1,
+        "one declaration of card, whichever spelling:\n{now}"
+    );
+}

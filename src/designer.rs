@@ -115,7 +115,10 @@ impl Workspace {
     fn render_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         // A file opened on its own takes the light; a view seen as code keeps
         // its own tab lit, because it is the same document either way.
-        let reading = self.code().is_some_and(|file| !file.of_view);
+        // Shown, not merely held: the document lives under whatever covers it,
+        // so a file open in the reader while a view is on screen would otherwise
+        // light the read tab and leave every view tab dark.
+        let reading = self.showing_code() && self.code().is_some_and(|file| !file.of_view);
         let tabs: Vec<(usize, SharedString, bool, bool)> = self
             .open_views()
             .iter()

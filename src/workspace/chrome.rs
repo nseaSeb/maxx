@@ -31,6 +31,12 @@ impl Workspace {
         if self.preferences() {
             self.show_designer();
         } else {
+            // Asked before leaving, like every other move between modes: the
+            // menu editor's unsaved work now lives *inside* `Center::Menus`, so
+            // showing something else drops it rather than covering it.
+            if self.discard_menu_edits(cx) {
+                return;
+            }
             self.show(Center::Preferences);
         }
         cx.notify();
@@ -78,9 +84,12 @@ impl Workspace {
     }
 
     fn render_main(&self, cx: &mut Context<Self>) -> AnyElement {
-        // Before the welcome screen: the preferences must be reachable when no
-        // project is open, which is exactly when someone is setting maxx up.
-        if self.preferences() {
+        // Before the welcome screen: both are reachable with no project open,
+        // which is exactly when someone is setting maxx up — and the palette
+        // reached from the preferences is a file of maxx's own, not a project's.
+        // Hidden behind the welcome screen, the button that opens it did
+        // nothing and took the preferences away with it.
+        if self.preferences() || self.palette().is_some() {
             return self.render_designer(cx);
         }
         if self.project.is_none() {
@@ -177,7 +186,11 @@ impl Workspace {
 
     fn render_status_bar(&self) -> impl IntoElement {
         let conflict = self.view().is_some_and(|view| self.conflicts.contains(&view.path));
-        if let Some(file) = self.code() {
+        // Only while the reader is what the middle shows. The document outlives
+        // what covers it, so this arm otherwise went on naming a file nobody was
+        // looking at — and swallowed the open view's own dirty and conflict
+        // marks, which is what the line is for.
+        if let Some(file) = self.code().filter(|_| self.showing_code()) {
             let label = match &self.message {
                 Some(message) => message.clone(),
                 // A view seen as code says so: what is on screen is what `⌘S`

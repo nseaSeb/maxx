@@ -135,6 +135,9 @@ impl Workspace {
     /// for both — the alternative was a second screen doing the same thing to
     /// the same shape of file.
     pub fn open_default_palette(&mut self, cx: &mut Context<Self>) {
+        if self.discard_menu_edits(cx) {
+            return;
+        }
         let path = match crate::settings::palette_path() {
             Some(path) if path.exists() => path,
             Some(_) => match crate::settings::create_palette() {
@@ -209,7 +212,6 @@ impl Workspace {
         // Read before the palette is borrowed: what the canvas paints depends
         // on whether this file belongs to the open project.
         let root = self.project.as_ref().map(|project| project.root.clone());
-        let root_for_record = root.clone();
         let Some(file) = self.palette_mut() else {
             return;
         };
@@ -234,9 +236,12 @@ impl Workspace {
         // The same editor also serves the user's own default palette, and
         // painting the open project with those would be showing colours no file
         // of it holds, until some unrelated event happened to correct it.
-        let preview = root
-            .filter(|root| file.path.starts_with(root))
-            .map(|_| crate::preview::Preview::from_file(file));
+        // The project's own palette, or nothing. The same editor also serves the
+        // user's default palette, which is not this project's file: painting the
+        // canvas with it, or recording its text as this project's fingerprint,
+        // would both be describing one file by another.
+        let of_project = root.filter(|root| file.path.starts_with(root));
+        let preview = of_project.as_ref().map(|_| crate::preview::Preview::from_file(file));
         // The fingerprint follows what was just written. Without this, choosing
         // a colour in maxx made the file stop matching what maxx had recorded,
         // so the project silently left the update mechanism — and the branch
@@ -244,7 +249,7 @@ impl Workspace {
         // the very people it was written for. An edit made in Zed still counts
         // as the developer taking the file over; one made here does not.
         if matches!(outcome, Ok(true))
-            && let Some(root) = root_for_record
+            && let Some(root) = of_project
         {
             let _ = crate::projectfile::record(
                 &root,
