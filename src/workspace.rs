@@ -209,6 +209,12 @@ pub struct Workspace {
     watch_task: Option<Task<()>>,
     /// The watcher itself, kept alive here: dropped, it stops watching.
     watcher: Option<notify::RecommendedWatcher>,
+    /// The project's colours, for the canvas to paint its content with.
+    ///
+    /// Read with the project and not with the palette editor: the canvas draws
+    /// whether or not that editor is open, and a preview in maxx's greys is a
+    /// preview of maxx.
+    pub preview: crate::preview::Preview,
     /// The palette being edited, when `src/theme.rs` is what the middle shows.
     ///
     /// One of the panel's modes, like [`Workspace::menu_file`]: opening it turns
@@ -295,6 +301,10 @@ pub struct Workspace {
 
 impl Workspace {
     pub(crate) fn new(project: Option<Project>, cx: &mut Context<Self>) -> Self {
+        let preview = project
+            .as_ref()
+            .map(|project| crate::preview::Preview::read(&project.root))
+            .unwrap_or_default();
         // A project handed straight to a fresh window never passes through
         // `set_project`, so the notice has to be raised here too.
         let outdated = project
@@ -336,6 +346,7 @@ impl Workspace {
             run_inputs: Vec::new(),
             palette_inputs: Vec::new(),
             palette_synced: None,
+            preview,
             palette: None,
             run_synced: None,
             run_config: crate::projectfile::Run::default(),
@@ -381,6 +392,7 @@ impl Workspace {
         self.preferences = false;
         self.menu_synced = None;
         self.palette = None;
+        self.preview = crate::preview::Preview::read(&path);
         // A window with no project can still hold a file in the reader; showing
         // it under the new project's name would be the previous project's file.
         self.forget_code(|_| true);

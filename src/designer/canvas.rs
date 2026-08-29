@@ -13,6 +13,7 @@ use gpui_component::switch::Switch;
 use gpui_component::{h_flex, v_flex};
 
 use crate::model::Node;
+use crate::preview::Preview;
 use crate::registry::{self};
 use crate::theme;
 use gpui::{Pixels, Point};
@@ -75,8 +76,24 @@ impl Workspace {
                             .rounded_md()
                             .border_1()
                             .border_color(theme::border())
-                            .bg(theme::panel_bg())
-                            .child(node_element(&view.root, &[], &view.selected, root, cx)),
+                            // The board is the application's window, so it is
+                            // painted with the application's own colours — the
+                            // roles of its `src/theme.rs`, not maxx's greys. A
+                            // preview in the colours of the workshop is a
+                            // preview of the workshop.
+                            .bg(self.preview.bg())
+                            // Handed down rather than set on each node: gpui
+                            // inherits the text colour, so this reaches every
+                            // label the view holds without the nodes knowing.
+                            .text_color(self.preview.text())
+                            .child(node_element(
+                                &view.root,
+                                &[],
+                                &view.selected,
+                                root,
+                                &self.preview,
+                                cx,
+                            )),
                     ),
             )
             .child(
@@ -96,6 +113,7 @@ pub(super) fn node_element(
     path: &[usize],
     selected: &[usize],
     root: Option<&std::path::Path>,
+    preview: &Preview,
     cx: &mut Context<Workspace>,
 ) -> AnyElement {
     let is_selected = path == selected;
@@ -115,7 +133,12 @@ pub(super) fn node_element(
             })
         })
         .border_1()
-        .border_color(if is_selected { theme::accent() } else { theme::bg() })
+        // Selected, maxx's accent — the outline is tooling and has to stay
+        // legible whatever the project chose. Unselected, the colour of what it
+        // sits on, so the border takes its room without being seen: that is the
+        // project's background now, or it would draw a grey frame around every
+        // node of a coloured board.
+        .border_color(if is_selected { theme::accent() } else { preview.bg() })
         .rounded_sm()
         .cursor_pointer()
         // The chrome carries it rather than the preview: the tooltip needs a
@@ -127,7 +150,7 @@ pub(super) fn node_element(
                 gpui_component::tooltip::Tooltip::new(text.clone()).build(window, cx)
             })
         })
-        .child(preview(node, path, selected, root, cx))
+        .child(node_preview(node, path, selected, root, preview, cx))
         .on_click(cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
             // Every node wraps its children in a listener of its own, so
             // without this the click keeps bubbling and each ancestor
@@ -223,11 +246,12 @@ pub(super) fn is_double_click(event: &gpui::ClickEvent) -> bool {
 }
 
 /// The component itself, as it will look once generated.
-pub(super) fn preview(
+pub(super) fn node_preview(
     node: &Node,
     path: &[usize],
     selected: &[usize],
     root: Option<&std::path::Path>,
+    preview: &Preview,
     cx: &mut Context<Workspace>,
 ) -> AnyElement {
     let text = |index: usize| -> SharedString {
@@ -246,7 +270,7 @@ pub(super) fn preview(
             let vertical = node.base.path() == Some("v_flex");
             apply_placement(apply(base, &node.calls), &node.calls)
                 .min_h(px(16.))
-                .children(children_with_zones(node, path, selected, vertical, root, cx))
+                .children(children_with_zones(node, path, selected, vertical, root, preview, cx))
                 .into_any_element()
         }
         Some("Label::new") => Label::new(text(0)).into_any_element(),
@@ -294,7 +318,7 @@ pub(super) fn preview(
             .into_any_element(),
         Some("GroupBox::new") => GroupBox::new()
             .title(call_text(node, "title", &crate::tr("component.group_box")))
-            .children(children_with_zones(node, path, selected, true, root, cx))
+            .children(children_with_zones(node, path, selected, true, root, preview, cx))
             .into_any_element(),
         Some("Divider::horizontal") => match node.call("label") {
             Some(_) => Divider::horizontal().label(call_text(node, "label", "")).into_any_element(),
@@ -306,7 +330,7 @@ pub(super) fn preview(
             apply(div(), &node.calls).h(px(20.)).into_any_element()
         }
         Some("div") => apply_placement(apply(div(), &node.calls), &node.calls)
-            .children(children_with_zones(node, path, selected, true, root, cx))
+            .children(children_with_zones(node, path, selected, true, root, preview, cx))
             .into_any_element(),
         Some("Button::new") => Button::new(SharedString::from(format!("preview-{path:?}")))
             .label(call_text(node, "label", &crate::tr("component.button")))
@@ -330,18 +354,18 @@ pub(super) fn preview(
         // argument: their preview therefore has to carry the drop zones.
         Some("Link::new") => {
             gpui_component::link::Link::new(SharedString::from(format!("preview-{path:?}")))
-                .children(children_with_zones(node, path, selected, false, root, cx))
+                .children(children_with_zones(node, path, selected, false, root, preview, cx))
                 .into_any_element()
         }
         Some("Tag::new") => tag_variant(node)
-            .children(children_with_zones(node, path, selected, false, root, cx))
+            .children(children_with_zones(node, path, selected, false, root, preview, cx))
             .into_any_element(),
         Some("Badge::new") => gpui_component::badge::Badge::new()
             .count(call_whole(node, "count").unwrap_or(0))
             // Both numbers, or a count of 30 beyond 9 still draws “30” on the
             // canvas and “9+” in the running application.
             .max(call_whole(node, "max").unwrap_or(99))
-            .children(children_with_zones(node, path, selected, false, root, cx))
+            .children(children_with_zones(node, path, selected, false, root, preview, cx))
             .into_any_element(),
         Some("Skeleton::new") => {
             apply(gpui_component::skeleton::Skeleton::new(), &node.calls).into_any_element()

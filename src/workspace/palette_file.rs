@@ -81,6 +81,9 @@ impl Workspace {
         if file.role_names() != before {
             self.palette_synced = None;
         }
+        // The canvas paints from its own copy, so a colour just written has to
+        // reach it or the preview shows the value the user just replaced.
+        self.preview = crate::preview::Preview::from_file(file);
         match outcome {
             Ok(true) => self.message = Some(crate::tr("message.palette_saved")),
             // Nothing to write: the role is gone from the file, or the value it

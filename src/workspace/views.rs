@@ -572,6 +572,15 @@ impl Workspace {
             && palette.reload()
         {
             self.palette_synced = None;
+            self.preview = crate::preview::Preview::from_file(palette);
+        }
+        // And the canvas follows the file even when nobody has the palette
+        // open, which is the ordinary case: it is the preview, not the editor,
+        // that has to tell the truth about the project's colours.
+        if self.palette.is_none()
+            && let Some(root) = self.project.as_ref().map(|project| project.root.clone())
+        {
+            self.preview = crate::preview::Preview::read(&root);
         }
         cx.notify();
     }

@@ -12,6 +12,7 @@ pub mod model;
 pub mod palette;
 pub mod parser;
 pub mod preferences;
+pub mod preview;
 pub mod project;
 pub mod projectfile;
 pub mod registry;

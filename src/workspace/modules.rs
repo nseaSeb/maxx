@@ -154,6 +154,7 @@ impl Workspace {
             palette.reload();
         }
         self.palette_synced = None;
+        self.preview = crate::preview::Preview::read(&root);
         self.message = Some(SharedString::from(if failed.is_empty() {
             t!("message.modules_updated", modules = updated.join(", ")).into_owned()
         } else {

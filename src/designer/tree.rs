@@ -5,6 +5,7 @@ use gpui::{AnyElement, Context, SharedString, div, px};
 use gpui_component::v_flex;
 
 use crate::model::{Node, Path};
+use crate::preview::Preview;
 use crate::registry::{self};
 use crate::theme;
 use gpui::{Pixels, Point};
@@ -170,6 +171,7 @@ pub(super) fn children_with_zones(
     selected: &[usize],
     vertical: bool,
     root: Option<&std::path::Path>,
+    preview: &Preview,
     cx: &mut Context<Workspace>,
 ) -> Vec<AnyElement> {
     let mut out = Vec::with_capacity(node.children.len() * 2 + 1);
@@ -177,7 +179,7 @@ pub(super) fn children_with_zones(
     for (index, child) in node.children.iter().enumerate() {
         let mut child_path = path.to_vec();
         child_path.push(index);
-        out.push(node_element(child, &child_path, selected, root, cx));
+        out.push(node_element(child, &child_path, selected, root, preview, cx));
         out.push(drop_zone(path.to_vec(), index + 1, vertical, cx));
     }
     out
