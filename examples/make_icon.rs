@@ -1,13 +1,14 @@
-//! Rasterise `assets/icon.svg` en `assets/icon-1024.png`, d'où vient l'`.icns`.
+//! Rasterises `assets/icon.svg` into `assets/icon-1024.png`, which the `.icns`
+//! is cut from.
 //!
-//! Le dessin est en SVG parce que c'est la seule forme qui se corrige : une
-//! dent d'engrenage se déplace dans un fichier texte, pas dans un million de
-//! pixels. Rien à installer pour le lire — `resvg` est déjà dans l'arbre, tiré
-//! par gpui, qui s'en sert pour ses propres icônes.
+//! The drawing is SVG because that is the only shape that can be corrected: a
+//! gear tooth moves in a text file, not in a million pixels. Nothing to install
+//! to read it — `resvg` is already in the tree, pulled in by gpui, which uses it
+//! for its own icons.
 //!
 //! ```sh
 //! cargo run --example make_icon
-//! # puis, pour l'.icns : voir README.md
+//! # then, for the .icns: see README.md
 //! ```
 
 fn main() {

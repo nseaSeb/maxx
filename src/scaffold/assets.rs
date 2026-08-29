@@ -38,8 +38,8 @@ pub fn import_asset(root: &Path, file: &Path) -> Result<String, String> {
     // already in the project is not a file maxx can draw, and accepting one it
     // would then refuse to open is the two paths disagreeing about the same
     // picture.
-    // Une taille qu'on ne sait pas lire n'est pas zéro : la traiter ainsi
-    // laisserait passer la lecture entière que ce plafond existe pour éviter.
+    // A size that cannot be read is not zero: treating it as zero would let
+    // through the very whole-file read this ceiling exists to prevent.
     let size = std::fs::metadata(&resolved).map_err(|error| error.to_string())?.len();
     if size > crate::project::MAX_IMAGE_BYTES {
         return Err(t!("error.file_too_large", size = size / 1024).into_owned());

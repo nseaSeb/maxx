@@ -1,6 +1,6 @@
-# Sa propre racine d'espace de travail : la démo est un projet ordinaire, pas
-# un membre de maxx. `cargo check` à la racine du dépôt ne la compile donc pas,
-# et elle se construit seule, exactement comme un projet que vous auriez généré.
+# Its own workspace root: the demo is an ordinary project, not a member of
+# maxx. `cargo check` at the repository root therefore does not compile it, and
+# it builds on its own, exactly like a project you would have generated.
 [workspace]
 
 [package]
@@ -10,9 +10,9 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
-# `runtime_shaders` compile les shaders Metal au lancement plutôt qu'à la
-# compilation : Xcode 26 livre le toolchain Metal en composant séparé, et sans
-# cette feature le build échoue sur un outil `metal` introuvable.
+# `runtime_shaders` compiles the Metal shaders at startup rather than at build
+# time: Xcode 26 ships the Metal toolchain as a separate component, and without
+# this feature the build fails on a `metal` tool it cannot find.
 gpui = { version = "0.2.2", features = ["runtime_shaders"] }
 gpui-component = "0.5.1"
 serde = { version = "1", features = ["derive"] }

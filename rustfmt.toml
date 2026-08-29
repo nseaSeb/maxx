@@ -1,11 +1,11 @@
-# Une seule dérogation aux réglages par défaut.
+# One single departure from the defaults.
 #
-# `Max` laisse une expression courte tenir sur sa ligne au lieu de l'éclater en
-# une ligne par élément. C'est ce qui préserve les tables du catalogue, dans
-# `registry.rs` — le fichier qu'on invite les autres à étendre, et celui où
-# lire une liste de styles à raison d'un mot par ligne serait une punition.
+# `Max` lets a short expression stay on its own line instead of exploding into
+# one line per element. That is what keeps the catalogue tables readable in
+# `registry/catalogue.rs` — the file others are invited to extend, and the one
+# where reading a list of styles at one word per line would be a punishment.
 #
-# La démo a son propre rustfmt.toml, vide : elle doit être mise en forme comme
-# un projet généré ailleurs, donc au rustfmt par défaut, et ce fichier-ci ne la
-# concerne pas.
+# The demo has its own rustfmt.toml, empty: it has to be formatted like a
+# project generated anywhere else, so with plain default rustfmt, and this file
+# does not concern it.
 use_small_heuristics = "Max"

@@ -8,15 +8,14 @@ repository = "https://github.com/nseaSeb/maxx"
 readme = "README.md"
 keywords = ["gpui", "gui", "designer", "codegen"]
 categories = ["development-tools", "gui"]
-# Les chaînes `&& let` (actions.rs, workspace.rs) demandent 1.88 ; l'édition
-# 2024 seule laisserait croire à 1.85.
+# The `&& let` chains (actions.rs, workspace.rs) need 1.88; edition 2024 alone
+# would suggest 1.85.
 rust-version = "1.88"
-# Ce que le paquet crates.io n'emporte pas : les médias du README, qui pèsent
-# quatre méga-octets à eux seuls et que personne ne télécharge en installant
-# maxx. crates.io résout les liens relatifs du README contre `repository`,
-# donc les images continuent de s'afficher — depuis GitHub. `assets/icon.svg`
-# et les deux petits PNG restent : la source de l'icône est corrigeable, et
-# `cargo run --example make_icon` la relit.
+# What the crates.io package leaves behind: the README's media, four megabytes
+# on their own, which nobody downloads when installing maxx. crates.io resolves
+# the README's relative links against `repository`, so the images keep showing
+# — from GitHub. `assets/icon.svg` and the two small PNGs stay: the icon's
+# source is correctable, and `cargo run --example make_icon` reads it back.
 exclude = ["docs/", "assets/maxx.icns"]
 
 [dependencies]
@@ -31,31 +30,31 @@ gpui-component = { version = "0.5.1", features = ["tree-sitter-languages"] }
 syn = { version = "3", features = ["full", "extra-traits"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"
-# Déjà compilés dans l'arbre par gpui : les prendre en dépendance directe ne
-# coûte rien de plus au build.
+# Already compiled in the tree by gpui: taking them as direct dependencies
+# costs the build nothing more.
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"                 # lecture unique de l'ancien settings.toml
-serde_json_lenient = "0.2"   # le JSON à commentaires, celui que Zed lit
+toml = "0.8"                 # one-off read of the old settings.toml
+serde_json_lenient = "0.2"   # JSON with comments, the kind Zed reads
 schemars = "1"
-# Déjà dans l'arbre : gpui-component y met ses propres chaînes, et
-# `set_locale` y écrit le même global que celui-ci. Le prendre en dépendance
-# directe ne coûte donc rien au build.
+# Already in the tree: gpui-component puts its own strings there, and
+# `set_locale` writes the same global as this one does. Taking it as a direct
+# dependency therefore costs the build nothing.
 rust-i18n = "3"
-# Déjà dans l'arbre en 0.25 par gpui, qui décode les images avec : `image_dimensions`
-# n'en lit que l'en-tête, et c'est ce qui permet de dire à l'inspecteur combien
-# de pixels fait vraiment la photographie qu'on vient de poser.
+# Already in the tree at 0.25 through gpui, which decodes images with it:
+# `image_dimensions` reads only the header, and that is what lets the inspector
+# say how many pixels the photograph just dropped really has.
 image = "0.25"
-# Déjà dans l'arbre par gpui-component : le prendre en dépendance directe ne
-# coûte rien de plus au build. C'est ce qui prévient maxx qu'un éditeur vient
-# d'écrire dans le projet ouvert.
+# Already in the tree through gpui-component: taking it as a direct dependency
+# costs the build nothing more. It is what tells maxx an editor has just
+# written into the open project.
 notify = "7"
-# Déjà dans l'arbre par gpui, qui construit tout son exécuteur dessus. Ce qu'on
-# lui prend tient en une chose : un canal qu'on peut attendre, pour que la veille
-# du projet ne réveille pas la fenêtre dix fois par seconde à ne rien faire.
+# Already in the tree through gpui, which builds its whole executor on it. What
+# we take from it is one thing: a channel that can be awaited, so that watching
+# the project does not wake the window ten times a second to do nothing.
 futures = "0.3"
 
 [dev-dependencies]
-# Déjà dans l'arbre par gpui : sert à rasteriser les essais d'icône.
+# Already in the tree through gpui: used to rasterise the icon drafts.
 resvg = "0.45"
 
 [profile.dev]
@@ -64,16 +63,16 @@ opt-level = 0
 [profile.dev.package."*"]
 opt-level = 2
 
-# Le profil de la CI, et la raison d'être de chaque ligne.
+# The CI's profile, and the reason for each line.
 #
-# `[profile.dev.package."*"]` compile les 750 crates de dépendances en O2 pour
-# que l'interface soit fluide pendant le développement. La CI n'ouvre aucune
-# fenêtre : elle paie cette optimisation sans jamais en profiter, et c'est la
-# part dominante de son temps. Ici, les dépendances repassent en O0.
+# `[profile.dev.package."*"]` compiles the 750 dependency crates at O2 so the
+# interface is smooth during development. The CI opens no window: it pays for
+# that optimisation without ever benefiting from it, and that is the dominant
+# part of its time. Here, the dependencies go back to O0.
 #
-# Et pas d'informations de débogage : personne ne pose de point d'arrêt dans un
-# runner, alors que leur écriture — les PDB sur Windows — pèse lourd à l'édition
-# de liens, répétée pour chacun des binaires de test.
+# And no debug information: nobody sets a breakpoint in a runner, while writing
+# it — the PDBs on Windows — weighs heavily at link time, repeated for each of
+# the test binaries.
 [profile.ci]
 inherits = "test"
 debug = false

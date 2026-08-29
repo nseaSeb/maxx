@@ -1,13 +1,12 @@
-# Les fins de ligne sont LF dans le dépôt, et LF à l'extraction — y compris sur
-# Windows.
+# Line endings are LF in the repository, and LF on checkout — Windows included.
 #
-# Ce n'est pas une préférence : les tests lisent des fichiers versionnés et les
-# comparent à ce que maxx écrit, qui est toujours en LF. Une extraction en CRLF
-# fait échouer ces comparaisons pour une raison qui n'a rien à voir avec le
-# code. C'est exactement ce qui a fait rougir la première CI Windows.
+# This is not a preference: the tests read versioned files and compare them to
+# what maxx writes, which is always LF. A CRLF checkout makes those comparisons
+# fail for a reason that has nothing to do with the code. That is exactly what
+# turned the first Windows CI red.
 * text=auto eol=lf
 
-# Le verrou et les gabarits sont lus par des tests : jamais de conversion.
+# The lock file and the templates are read by tests: never convert them.
 Cargo.lock -text
 demo/** -text
 

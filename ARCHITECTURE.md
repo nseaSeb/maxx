@@ -263,7 +263,7 @@ dizaines de milliers de fichiers que rustc écrit.
 
 Il n'y a pas d'équivalent local pour Windows : Docker sur un Mac lance des
 conteneurs Linux, un conteneur Windows exigeant un hôte Windows.
-`scripts/verifier-linux.sh` rejoue la branche Linux, et c'est tout ce qu'on
+`scripts/verify-linux.sh` rejoue la branche Linux, et c'est tout ce qu'on
 peut rejouer.
 
 Sur un dépôt public, les runners standard sont gratuits et illimités : les

@@ -596,9 +596,9 @@ pub(super) fn apply<T: Styled>(mut element: T, calls: &[Call]) -> T {
             "text_lg" => element.text_lg(),
             "text_xl" => element.text_xl(),
             "text_2xl" => element.text_2xl(),
-            // La graisse s'écrit `font_weight(FontWeight::…)` depuis qu'on a
-            // découvert que `font_medium()` n'existe pas : c'est le nom de
-            // l'appel qu'il faut suivre ici, pas celui de la variante.
+            // Weight is written `font_weight(FontWeight::…)` since we found out
+            // that `font_medium()` does not exist: what has to be followed here
+            // is the name of the call, not the name of the variant.
             "font_weight" => match argument.as_str() {
                 "FontWeight::MEDIUM" => element.font_weight(gpui::FontWeight::MEDIUM),
                 "FontWeight::SEMIBOLD" => element.font_weight(gpui::FontWeight::SEMIBOLD),

@@ -1,25 +1,26 @@
-# Ce que cette CI prouve, et ce qu'elle ne prouve pas.
+# What this CI proves, and what it does not.
 #
-# Elle prouve que maxx compile et que sa suite passe. Rien dans maxx n'est
-# propre à macOS, mais il est écrit sur un Mac, et une ligne comme
-# `std::os::unix::process::CommandExt` suffit à casser Windows sans que
-# personne le voie.
+# It proves that maxx compiles and that its suite passes. Nothing in maxx is
+# macOS-specific, but it is written on a Mac, and one line such as
+# `std::os::unix::process::CommandExt` is enough to break Windows without
+# anyone seeing it.
 #
-# Elle ne prouve pas que l'interface est utilisable. Aucun test n'ouvre de
-# fenêtre — ils portent sur le modèle, le parseur, les gabarits et les
-# réglages. Il faut qu'un humain lance maxx une fois par système.
+# It does not prove that the interface is usable. No test opens a window — they
+# cover the model, the parser, the templates and the settings. A human has to
+# launch maxx once per system.
 #
-# Ce qu'elle coûte. Sur un dépôt public, les runners standard sont gratuits et
-# illimités : les trois systèmes tournent donc à chaque poussée, et le filet
-# sert enfin à chaque fois qu'il pourrait attraper quelque chose.
+# What it costs. On a public repository the standard runners are free and
+# unlimited: the three systems therefore run on every push, and the net finally
+# serves every time it could catch something.
 #
-# Tant que le dépôt était privé, ce n'était pas tenable — les minutes y sont
-# comptées avec des multiplicateurs, ×1 sur Linux, ×2 sur Windows et ×10 sur
-# macOS, si bien qu'un seul run complet à froid coûtait près de 400 minutes
-# facturées sur un quota mensuel de 2 000. D'où le dosage qui a précédé, et qui
-# n'a plus lieu d'être. Si le dépôt redevenait privé, il faudrait le remettre.
+# While the repository was private this was not tenable — minutes there are
+# counted with multipliers, ×1 on Linux, ×2 on Windows and ×10 on macOS, so
+# that a single cold full run cost close to 400 billed minutes out of a monthly
+# quota of 2,000. Hence the rationing that came before, which no longer has a
+# reason to exist. Should the repository go private again, it would have to
+# come back.
 #
-# Reste vrai : une poussée qui ne touche que de la documentation ne lance rien.
+# Still true: a push that touches only documentation runs nothing.
 
 name: CI
 
@@ -31,13 +32,13 @@ on:
     paths-ignore: ["**/*.md", "LICENSE", ".gitignore"]
   workflow_dispatch:
   schedule:
-    # Gardé même si chaque poussée vérifie tout : il attrape ce qui casse sans
-    # qu'on ait rien changé — une mise à jour de runner, un outil qui bouge.
+    # Kept even though every push checks everything: it catches what breaks
+    # without anything having changed — a runner update, a tool that moves.
     - cron: "0 6 * * 1"
 
-# Une poussée qui en remplace une autre annule celle d'avant : sur une branche
-# où l'on pousse plusieurs fois d'affilée, c'est là qu'est le vrai gain. Jamais
-# sur `main`, pour ne pas perdre un résultat qu'on attend.
+# A push that replaces another cancels the earlier one: on a branch where you
+# push several times in a row, that is where the real gain is. Never on `main`,
+# so as not to lose a result someone is waiting for.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -46,13 +47,13 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  verifier:
-    name: ${{ matrix.systeme }}
-    runs-on: ${{ matrix.systeme }}
+  verify:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        systeme: [macos-latest, ubuntu-latest, windows-latest]
+        os: [macos-latest, ubuntu-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -61,10 +62,10 @@ jobs:
         with:
           components: clippy
 
-      # gpui dessine avec Vulkan sur Linux et parle à Wayland comme à X11 ; ses
-      # crates de fontes veulent fontconfig. Sans ces paquets, la compilation
-      # échoue sur des en-têtes C introuvables, pas sur du Rust.
-      - name: Dépendances système (Linux)
+      # gpui draws with Vulkan on Linux and speaks Wayland as well as X11; its
+      # font crates want fontconfig. Without these packages the build fails on
+      # missing C headers, not on Rust.
+      - name: System dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -80,10 +81,10 @@ jobs:
             cmake \
             clang
 
-      # Defender inspecte chaque fichier que le compilateur écrit, et rustc en
-      # écrit des dizaines de milliers. C'est la première cause de lenteur des
-      # runners Windows, et une exclusion la fait tomber.
-      - name: Écarter Defender du répertoire de compilation (Windows)
+      # Defender inspects every file the compiler writes, and rustc writes tens
+      # of thousands of them. It is the first cause of slowness on Windows
+      # runners, and one exclusion brings it down.
+      - name: Keep Defender out of the build directory (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -95,44 +96,44 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      # Pas de `cargo check` séparé : clippy fait le même travail. Mesuré sur le
-      # premier run Windows, `check` puis `clippy` coûtaient 18 min et 16 s —
-      # clippy ne payait rien parce que check avait tout préparé. Le retirer ne
-      # gagne donc presque rien : c'est `cargo test` qui coûte, parce que lui
-      # doit produire du code machine là où les deux autres s'arrêtent aux
-      # métadonnées.
-      # Ne compile rien : c'est la vérification la moins chère de toutes, et
-      # elle évite qu'un `cargo fmt` de contributeur noie son vrai changement
-      # dans un reformatage de fichier entier.
-      - name: Mise en forme
+      # No separate `cargo check`: clippy does the same work. Measured on the
+      # first Windows run, `check` then `clippy` cost 18 min 16 s — clippy paid
+      # nothing because check had prepared everything. Removing it therefore
+      # gains almost nothing: it is `cargo test` that costs, because it has to
+      # produce machine code where the other two stop at metadata.
+      #
+      # Compiles nothing: this is the cheapest check of them all, and it keeps a
+      # contributor's `cargo fmt` from drowning their real change in a
+      # whole-file reformat.
+      - name: Formatting
         run: cargo fmt --check
 
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
-      # Le profil `ci` : dépendances en O0 et pas d'informations de débogage.
-      # La CI n'ouvre aucune fenêtre, elle n'a donc rien à gagner à optimiser
-      # 750 crates, et personne n'y pose de point d'arrêt.
+      # The `ci` profile: dependencies at O0 and no debug information. The CI
+      # opens no window, so it has nothing to gain from optimising 750 crates,
+      # and nobody sets a breakpoint in it.
       - name: Tests
         run: cargo test --profile ci
 
   demo:
-    name: la démo compile
+    name: the demo compiles
     runs-on: macos-latest
-    # Le filtre par fichier touché a été retiré : `github.event.commits.*.modified`
-    # est un tableau de tableaux, et le `join` par-dessus ne donne pas ce qu'on
-    # croit — la démo a été sautée sur une poussée qui modifiait pourtant
-    # src/scaffold.rs. Un travail qui se saute quand il devrait tourner est pire
-    # qu'un travail qui tourne pour rien, surtout à deux minutes avec le cache.
+    # The touched-file filter was removed: `github.event.commits.*.modified` is
+    # an array of arrays, and the `join` over it does not give what you would
+    # think — the demo was skipped on a push that did modify src/scaffold.rs. A
+    # job that skips itself when it should run is worse than a job that runs
+    # for nothing, especially at two minutes with the cache.
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: demo
-      # La démo n'est pas membre de l'espace de travail : rien ne la construit
-      # sans commande explicite. Elle est pourtant la preuve que ce que maxx
-      # écrit compile encore.
-      - name: Compilation de la démo
+      # The demo is not a workspace member: nothing builds it without an
+      # explicit command. It is nonetheless the proof that what maxx writes
+      # still compiles.
+      - name: Build the demo
         working-directory: demo
         run: cargo check

@@ -1,15 +1,15 @@
-# Le portail de publication : ce qui doit être vrai avant qu'une version sorte.
+# The release gate: what has to be true before a version goes out.
 #
-# La CI ordinaire donne un signal rapide sur macOS à chaque poussée. Celle-ci
-# est l'inverse : rare, complète, et sans indulgence. Elle part sur un tag
-# `v*`, et sur demande quand on veut la passer à blanc avant d'étiqueter.
+# The ordinary CI gives a fast signal on macOS at every push. This one is the
+# opposite: rare, complete, and unforgiving. It starts on a `v*` tag, and on
+# demand when you want a dry run before tagging.
 #
-# Une remarque qui vaut d'être dite : un tag est le pire endroit pour
-# *découvrir* une casse, puisque le commit est déjà celui qu'on voulait
-# publier. Ce portail ne remplace donc pas le filet hebdomadaire, il le double
-# au moment où l'erreur coûte le plus cher.
+# One remark worth making: a tag is the worst place to *discover* a breakage,
+# since the commit is already the one you meant to publish. This gate therefore
+# does not replace the weekly net, it doubles it at the moment an error costs
+# the most.
 
-name: Publication
+name: Release
 
 on:
   push:
@@ -20,13 +20,13 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  verifier:
-    name: ${{ matrix.systeme }}
-    runs-on: ${{ matrix.systeme }}
+  verify:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        systeme: [macos-latest, ubuntu-latest, windows-latest]
+        os: [macos-latest, ubuntu-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +34,7 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      - name: Dépendances système (Linux)
+      - name: System dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -50,7 +50,7 @@ jobs:
             cmake \
             clang
 
-      - name: Écarter Defender du répertoire de compilation (Windows)
+      - name: Keep Defender out of the build directory (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -62,10 +62,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      # Ne compile rien : c'est la vérification la moins chère de toutes, et
-      # elle évite qu'un `cargo fmt` de contributeur noie son vrai changement
-      # dans un reformatage de fichier entier.
-      - name: Mise en forme
+      # Compiles nothing: this is the cheapest check of them all, and it keeps a
+      # contributor's `cargo fmt` from drowning their real change in a
+      # whole-file reformat.
+      - name: Formatting
         run: cargo fmt --check
 
       - name: Clippy
@@ -74,39 +74,39 @@ jobs:
       - name: Tests
         run: cargo test
 
-      # Ce que la CI ordinaire ne fait jamais : construire en release. Une
-      # optimisation peut révéler ce qu'un build de debug tolère.
-      - name: Construction
+      # What the ordinary CI never does: build in release. An optimisation can
+      # reveal what a debug build tolerates.
+      - name: Build
         run: cargo build --release
 
-  paquet:
-    name: le paquet se tient
+  package:
+    name: the package holds together
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      # `cargo package --list` dit ce qui partirait sur crates.io. Deux pièges
-      # qu'il attrape : un fichier oublié, et surtout `Cargo.lock`, que
-      # `build.rs` lit pour connaître la version de gpui — sans lui, la version
-      # affichée par la fenêtre « À propos » deviendrait « inconnue ».
-      - name: Ce qui partirait
+      # `cargo package --list` says what would go out on crates.io. Two traps it
+      # catches: a forgotten file, and above all `Cargo.lock`, which `build.rs`
+      # reads to learn gpui's version — without it, the version the "About"
+      # window shows would become "unknown".
+      - name: What would go out
         run: |
           set -euo pipefail
-          cargo package --list --allow-dirty > paquet.txt
-          cat paquet.txt
-          grep -qx "build.rs" paquet.txt || { echo "build.rs manque au paquet"; exit 1; }
-          grep -qx "Cargo.lock" paquet.txt || {
-            echo "Cargo.lock manque : build.rs ne saurait plus lire la version de gpui"
+          cargo package --list --allow-dirty > package.txt
+          cat package.txt
+          grep -qx "build.rs" package.txt || { echo "build.rs is missing from the package"; exit 1; }
+          grep -qx "Cargo.lock" package.txt || {
+            echo "Cargo.lock is missing: build.rs could no longer read gpui's version"
             exit 1
           }
-          grep -q "^demo/" paquet.txt && { echo "la démo n'a rien à faire dans le paquet"; exit 1; }
+          grep -q "^demo/" package.txt && { echo "the demo has no business in the package"; exit 1; }
           exit 0
 
-  publier:
-    name: ouvrir la version
-    needs: [verifier, paquet]
+  publish:
+    name: open the release
+    needs: [verify, package]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -114,25 +114,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Aucun binaire n'est attaché, et c'est délibéré : maxx s'adresse à des
-      # gens qui compilent. Un exécutable joint ici serait une distribution au
-      # sens des licences — Apache-2.0 pour gpui, MPL-2.0 pour option-ext —
-      # avec les mentions à faire voyager avec lui. Publier la source n'en
-      # demande aucune, et `cargo install` suffit à qui a de quoi construire.
+      # No binary is attached, and that is deliberate: maxx addresses people who
+      # compile. An executable attached here would be a distribution in the
+      # licensing sense — Apache-2.0 for gpui, MPL-2.0 for option-ext — with the
+      # notices that have to travel with it. Publishing the source demands none
+      # of them, and `cargo install` is enough for anyone with a toolchain.
       #
-      # Par le client `gh` plutôt qu'une action tierce : chaque action tierce
-      # est une surface de plus sur un dépôt public.
-      - name: Ouvrir
+      # Through the `gh` client rather than a third-party action: every
+      # third-party action is one more surface on a public repository.
+      - name: Open
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # Idempotent, et ce n'est pas de la politesse : un tag redéposé sur un
-          # autre commit relance ce travail, et `gh release create` échoue sur
-          # une version qui existe déjà. La version suit le nom du tag, donc
-          # elle montre le nouveau commit sans qu'on la touche.
+          # Idempotent, and not out of politeness: a tag moved onto another
+          # commit re-runs this job, and `gh release create` fails on a release
+          # that already exists. The release follows the tag's name, so it shows
+          # the new commit without anyone touching it.
           if gh release view "${GITHUB_REF_NAME}" > /dev/null 2>&1; then
-            echo "La version ${GITHUB_REF_NAME} existe déjà, et suit le tag."
+            echo "Release ${GITHUB_REF_NAME} already exists, and follows the tag."
           else
             gh release create "${GITHUB_REF_NAME}" \
               --title "${GITHUB_REF_NAME}" \
