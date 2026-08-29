@@ -3,7 +3,9 @@
 
 mod chrome;
 mod code;
+mod edits;
 mod explorer;
+mod handlers;
 mod inspector;
 mod menus;
 mod modules;
