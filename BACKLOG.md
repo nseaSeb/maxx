@@ -93,7 +93,7 @@ ressortir sur trois. Ce qui est garanti est le contenu, pas la colonne.
   Ce qui reste de ce côté : les icônes offertes sont vingt-deux sur les
   quatre-vingt-huit que porte `IconName`, parce que chacune doit aussi être
   dessinable par le canvas — `IconName` n'a pas de `FromStr`, donc
-  `designer::icon_named` est une table, tenue à la liste du catalogue par
+  `designer::canvas::icon_named` est une table, tenue à la liste du catalogue par
   `tests/catalogue.rs`.
 
 - ~~Liste déroulante~~ — faite. Elle a demandé de généraliser la machinerie du
@@ -321,7 +321,7 @@ ressortir sur trois. Ce qui est garanti est le contenu, pas la colonne.
   25 Mo ; le GIF versionné en fait 3,5 (800 px, 10 images/s, 64 couleurs) et
   reste hors du paquet crates.io par `exclude`.
 - ~~**Compiler la démo en CI.**~~ — fait, et ce point était périmé : le travail
-  « la démo compile » de `.github/workflows/ci.yml` lance `cargo check` dans
+  « the demo compiles » de `.github/workflows/ci.yml` lance `cargo check` dans
   `demo/`, qui n'est pas membre de l'espace de travail et que rien d'autre ne
   construit. La ligne barrée deux points plus bas le disait déjà.
 - ~~Les deux avertissements clippy~~ — faits, et la CI est stricte

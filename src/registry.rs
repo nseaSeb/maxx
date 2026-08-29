@@ -16,7 +16,7 @@ pub use state::{
     unique_input_field, write_binding,
 };
 
-pub use catalogue::{CATALOGUE, COMMON};
+pub use catalogue::{CATALOGUE, COMMON, INTERACTIVE, TEXT_COMMON};
 use props::path_arg;
 
 /// How a property maps onto the builder chain.

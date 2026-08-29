@@ -390,11 +390,12 @@ demand.
 | `src/model.rs` | the tree: base, calls, arguments, opaque nodes |
 | `src/codegen.rs` | model → Rust text |
 | `src/parser.rs` | Rust text → model, markers and textual splicing |
-| `src/registry.rs` | the component catalogue — the only place to extend |
+| `src/registry/catalogue.rs` | the component catalogue — the only place to extend |
+| `src/registry/` | what the inspector may read and write, state fields, element ids |
 | `src/view.rs` | one open view: loading, saving, insertions |
-| `src/scaffold.rs` | project and view templates |
-| `src/designer.rs` | canvas, structure, inspector, palette |
-| `src/workspace.rs` | the window, the state, the commands |
+| `src/scaffold/` | project and view templates, one module per template |
+| `src/designer/` | canvas, structure, inspector, palette — one module each |
+| `src/workspace/` | the window, the state, the commands |
 | `src/about.rs` | the About window |
 
 How it all fits together, and why: [`ARCHITECTURE.md`](ARCHITECTURE.md).

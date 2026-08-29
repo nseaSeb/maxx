@@ -60,7 +60,7 @@ const SLIDER_AXES: &[&str] = &["horizontal", "vertical"];
 ///
 /// A choice out of the eighty-eight `IconName` carries: a list that long is not
 /// a list one picks from, and every name here is drawn on the canvas by
-/// `designer::icon_named`, which is what `tests/catalogue.rs` holds the two
+/// `designer::canvas::icon_named`, which is what `tests/catalogue.rs` holds the two
 /// sides to.
 const ICONS: &[&str] = &[
     "IconName::Check",

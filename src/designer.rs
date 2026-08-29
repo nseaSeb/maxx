@@ -1,7 +1,4 @@
-//! The workshop's own window: the canvas, the tree, the inspector and the
-//! palette, each in its own module.
-
-//! The designer: canvas, tree, inspector and palette.
+//! The designer: canvas, tree, inspector and palette, each in its own module.
 //!
 //! These are render methods on [`Workspace`] rather than a separate view, so
 //! that the tree stays the single source and every panel is recomputed from it
@@ -26,7 +23,7 @@ mod palette;
 mod tree;
 
 pub(crate) use canvas::missing_image;
-pub use palette::label_matches;
+pub use palette::{label_matches, matches_query};
 
 impl Workspace {
     /// The width the inspector should take, and the place where the width the

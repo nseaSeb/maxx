@@ -8,6 +8,10 @@
 #
 # Cargo's cache is mounted from a named volume: the first pass compiles 750
 # crates, the ones after it do not.
+#
+# That volume was called `maxx-cible-linux` until the repository moved to
+# English. If you ran the script before that, the first run after it rebuilds
+# the cache once, and `docker volume rm maxx-cible-linux` reclaims the old one.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
