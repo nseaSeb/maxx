@@ -5,7 +5,7 @@
 //! is the palette the generated application paints with, and it goes to that
 //! application's own file.
 
-use gpui::{AppContext as _, Context, Entity, Window};
+use gpui::{AppContext as _, Context, Entity, SharedString, Window};
 use gpui_component::input::{InputEvent, InputState};
 
 use crate::themefile::{Mode, ThemeFile};
@@ -118,14 +118,14 @@ impl Workspace {
         };
 
         match parse_colour(text) {
-            Some(value) if value != current => {
-                if file.set(name, mode, value) {
-                    match file.save() {
-                        Ok(()) => self.message = Some(crate::tr("message.palette_saved")),
-                        Err(error) => self.message = Some(error.into()),
-                    }
-                }
-            }
+            Some(value) if value != current => match file.set(name, mode, value) {
+                Ok(true) => self.message = Some(crate::tr("message.palette_saved")),
+                // Nothing to write: the role is gone from the file, or the
+                // value it holds is already the one asked for. Either way the
+                // file has just been re-read, so the screen is on it again.
+                Ok(false) => {}
+                Err(error) => self.message = Some(SharedString::from(error)),
+            },
             Some(_) => return,
             None => self.message = Some(crate::tr("error.bad_colour")),
         }

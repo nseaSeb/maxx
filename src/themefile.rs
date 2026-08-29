@@ -21,6 +21,12 @@
 //! offering to update it. That is the rule that already holds for the module
 //! edited by hand in Zed, and choosing a colour is exactly as much of a claim
 //! on the file.
+//!
+//! And the copy this holds is never what gets written back. It is what the
+//! screen draws from, and it goes stale the moment anything else touches the
+//! file — the developer in Zed, or `File ▸ Update copied modules`. Every write
+//! therefore re-reads the file first and locates the literal in *those* bytes;
+//! see [`ThemeFile::set`].
 
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -118,30 +124,45 @@ impl ThemeFile {
         &self.swatches
     }
 
-    /// Sets one value, in memory.
+    /// Sets one value, and writes the file.
     ///
-    /// Answers whether anything moved: an unknown role, or a value already
-    /// there, writes nothing — which is what keeps a repaint from turning into
-    /// a disk write.
-    pub fn set(&mut self, name: &str, mode: Mode, value: u32) -> bool {
-        let Some(swatch) = self.swatches.iter().find(|swatch| swatch.name == name) else {
-            return false;
+    /// Reading and writing are one step on purpose. The copy held in memory is
+    /// what the screen draws from, and it goes stale the moment anything else
+    /// touches the file — the developer editing it in Zed, which maxx itself
+    /// invites them to do, or `File ▸ Update copied modules` rewriting it. A
+    /// write built on that copy would put the old file back and take their work
+    /// with it, and nothing would say so. So the bytes patched here are the
+    /// bytes on disk, read a moment ago, and the literal is located in *those*.
+    ///
+    /// Answers whether anything moved. A role that is gone from the file, or a
+    /// value already equal to the one asked for, writes nothing — which is also
+    /// what keeps a repaint from turning into a disk write.
+    pub fn set(&mut self, name: &str, mode: Mode, value: u32) -> Result<bool, String> {
+        let source = std::fs::read_to_string(&self.path).map_err(|error| error.to_string())?;
+        let swatches = read_swatches(&source);
+
+        let Some(swatch) = swatches.iter().find(|swatch| swatch.name == name) else {
+            // The role was renamed or removed under us. Take what the file says
+            // and write nothing: it is theirs.
+            self.source = source;
+            self.swatches = swatches;
+            return Ok(false);
         };
         if swatch.value(mode) == value {
-            return false;
+            self.source = source;
+            self.swatches = swatches;
+            return Ok(false);
         }
-        let range = swatch.range(mode);
-        self.source.replace_range(range, &format!("{value:#08x}"));
+
+        let mut patched = source;
+        patched.replace_range(swatch.range(mode), &format!("{value:#08x}"));
+        std::fs::write(&self.path, &patched).map_err(|error| error.to_string())?;
         // The offsets of everything after the patch have moved; re-reading is
         // both the simplest way to restore them and the only one that cannot
         // drift out of step with the write above.
-        self.swatches = read_swatches(&self.source);
-        true
-    }
-
-    /// Writes the file back.
-    pub fn save(&self) -> Result<(), String> {
-        std::fs::write(&self.path, &self.source).map_err(|error| error.to_string())
+        self.swatches = read_swatches(&patched);
+        self.source = patched;
+        Ok(true)
     }
 
     /// The source as it stands, for the tests and for whoever wants to look.
@@ -267,6 +288,34 @@ mod tests {
         crate::scaffold::module_body("theme").expect("the palette template")
     }
 
+    /// A palette file of this test's own, removed when it is dropped.
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn with(source: &str, name: &str) -> Self {
+            let root =
+                std::env::temp_dir().join(format!("maxx-themefile-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(root.join("src")).expect("the directory must be creatable");
+            std::fs::write(ThemeFile::path_in(&root), source).expect("the file must be writable");
+            Self(root)
+        }
+
+        fn load(&self) -> ThemeFile {
+            ThemeFile::load(&self.0).expect("the palette must load")
+        }
+
+        fn source(&self) -> String {
+            std::fs::read_to_string(ThemeFile::path_in(&self.0)).expect("the file must be readable")
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     #[test]
     fn every_role_of_the_template_is_read() {
         let swatches = read_swatches(&sample());
@@ -293,46 +342,67 @@ mod tests {
     }
 
     /// A write moves the value and nothing else.
-    ///
-    /// The assertion that matters is the second one: the file is a module the
-    /// developer owns, so everything around the six characters that changed has
-    /// to come out byte for byte.
     #[test]
     fn setting_a_value_touches_only_its_literal() {
-        let source = sample();
-        let mut file = ThemeFile {
-            path: PathBuf::from("src/theme.rs"),
-            source: source.clone(),
-            swatches: read_swatches(&source),
-        };
-        assert!(file.set("ACCENT", Mode::Light, 0x123456));
+        let scratch = Scratch::with(&sample(), "only-literal");
+        let mut file = scratch.load();
+        assert_eq!(file.set("ACCENT", Mode::Light, 0x123456), Ok(true));
 
-        assert!(
-            file.source()
-                .contains("pub const ACCENT: Role = Role { dark: 0x61afef, light: 0x123456 };")
-        );
-        let before = source.replace("light: 0x0969da };", "light: 0x123456 };");
-        assert_eq!(file.source(), before, "nothing but the literal moved");
+        assert_eq!(scratch.source(), sample().replace("light: 0x0969da };", "light: 0x123456 };"));
         assert_eq!(file.swatches()[7].light, 0x123456, "and the offsets were rebuilt");
     }
 
     #[test]
     fn a_value_already_there_writes_nothing() {
-        let source = sample();
-        let mut file = ThemeFile {
-            path: PathBuf::from("src/theme.rs"),
-            source: source.clone(),
-            swatches: read_swatches(&source),
-        };
-        assert!(!file.set("ACCENT", Mode::Light, 0x0969da), "the same value is not a change");
-        assert!(!file.set("NOWHERE", Mode::Dark, 0x000000), "an unknown role is not a change");
-        assert_eq!(file.source(), source);
+        let scratch = Scratch::with(&sample(), "no-op");
+        let mut file = scratch.load();
+        assert_eq!(file.set("ACCENT", Mode::Light, 0x0969da), Ok(false), "the same value");
+        assert_eq!(file.set("NOWHERE", Mode::Dark, 0x000000), Ok(false), "an unknown role");
+        assert_eq!(scratch.source(), sample());
+    }
+
+    /// What was written into the file after it was read is not overwritten.
+    ///
+    /// The failure this guards against had no symptom: the developer edits
+    /// `src/theme.rs` in Zed — which maxx invites them to do — comes back,
+    /// changes one colour, and their work is silently replaced by the copy maxx
+    /// happened to be holding. Nothing errors, and the file looks plausible.
+    #[test]
+    fn an_edit_made_after_loading_survives_the_next_write() {
+        let scratch = Scratch::with(&sample(), "stale");
+        let mut file = scratch.load();
+
+        // Their edit, after maxx read the file and while it still holds a copy.
+        let theirs = format!(
+            "{}\n/// The colour of a warning.\npub const WARNING: Role = Role {{ dark: 0xd19a66, light: 0x9a6700 }};\n",
+            sample()
+        );
+        std::fs::write(ThemeFile::path_in(&scratch.0), &theirs).unwrap();
+
+        assert_eq!(file.set("ACCENT", Mode::Light, 0x123456), Ok(true));
+
+        let after = scratch.source();
+        assert!(after.contains("pub const WARNING"), "their role survived: {after}");
+        assert_eq!(after, theirs.replace("light: 0x0969da };", "light: 0x123456 };"));
+    }
+
+    /// A role that disappeared under us is not put back.
+    #[test]
+    fn a_role_removed_after_loading_is_not_written_again() {
+        let scratch = Scratch::with(&sample(), "removed");
+        let mut file = scratch.load();
+
+        let theirs = sample().replace(
+            "/// Accent, for what the eye should land on first.\npub const ACCENT: Role = Role { dark: 0x61afef, light: 0x0969da };\n",
+            "",
+        );
+        std::fs::write(ThemeFile::path_in(&scratch.0), &theirs).unwrap();
+
+        assert_eq!(file.set("ACCENT", Mode::Light, 0x123456), Ok(false), "nothing to write");
+        assert_eq!(scratch.source(), theirs, "and nothing was written");
     }
 
     /// A role the developer added is read like the others.
-    ///
-    /// The point of reading the file rather than a fixed list: the palette is
-    /// theirs, and a project that needs a `WARNING` should get to edit it.
     #[test]
     fn a_role_added_by_hand_is_read_too() {
         let source = format!(

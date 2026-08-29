@@ -58,6 +58,9 @@ impl Workspace {
         self.menu_synced = None;
         self.preferences = false;
         self.refresh_entries();
+        // The palette page reads `src/theme.rs`, which may have just appeared or
+        // moved: the boxes are rebuilt from it on the next frame.
+        self.palette_synced = None;
         self.selected = Some(path);
         self.message = Some(SharedString::from(match (had_file, had_declaration) {
             (true, true) => t!("message.module_already_there", module = module).into_owned(),
@@ -142,6 +145,9 @@ impl Workspace {
         }
 
         self.refresh_entries();
+        // `theme` may be among them, and its file has just been rewritten:
+        // the palette boxes are rebuilt from it on the next frame.
+        self.palette_synced = None;
         self.message = Some(SharedString::from(if failed.is_empty() {
             t!("message.modules_updated", modules = updated.join(", ")).into_owned()
         } else {

@@ -81,8 +81,7 @@ fn writing_a_colour_leaves_the_rest_of_the_file_alone() {
     std::fs::write(&path, &with_theirs).unwrap();
 
     let mut palette = ThemeFile::load(&root).expect("the palette is there");
-    assert!(palette.set("ACCENT", Mode::Light, 0x123456));
-    palette.save().unwrap();
+    assert_eq!(palette.set("ACCENT", Mode::Light, 0x123456), Ok(true));
 
     let after = std::fs::read_to_string(&path).unwrap();
     assert_eq!(
@@ -113,8 +112,7 @@ fn a_role_added_by_hand_is_offered_and_written() {
 
     let mut palette = ThemeFile::load(&root).expect("the palette is there");
     assert_eq!(palette.swatches().len(), 11, "their role counts too");
-    assert!(palette.set("WARNING", Mode::Dark, 0x00ff00));
-    palette.save().unwrap();
+    assert_eq!(palette.set("WARNING", Mode::Dark, 0x00ff00), Ok(true));
 
     let after = std::fs::read_to_string(&path).unwrap();
     assert!(after.contains("pub const WARNING: Role = Role { dark: 0x00ff00, light: 0x9a6700 };"));
@@ -135,10 +133,11 @@ fn the_written_palette_still_compiles() {
     let mut palette = ThemeFile::load(&root).expect("the palette is there");
     for (index, swatch) in palette.swatches().to_vec().iter().enumerate() {
         let value = (index as u32 * 0x111111) & 0xffffff;
-        palette.set(&swatch.name, Mode::Dark, value);
-        palette.set(&swatch.name, Mode::Light, 0xffffff - value);
+        palette.set(&swatch.name, Mode::Dark, value).expect("the palette must be writable");
+        palette
+            .set(&swatch.name, Mode::Light, 0xffffff - value)
+            .expect("the palette must be writable");
     }
-    palette.save().unwrap();
 
     let status = std::process::Command::new("cargo")
         .arg("check")
