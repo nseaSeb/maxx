@@ -26,9 +26,18 @@ propriété Action sur l'interrupteur, la case à cocher et le bouton radio.
 
 Ce qui reste de ce côté :
 
-- **Éditer la palette dans maxx.** `src/theme.rs` est un module copié, pas une
-  zone gérée : maxx l'écrit et ne le relit pas. Lui donner des marqueurs, comme
-  `src/menus.rs` en a, en ferait un écran de plus.
+- ~~**Éditer la palette dans maxx.**~~ — fait, et sans marqueurs. La solution
+  retenue n'est pas une zone gérée mais une **rustine** : `src/themefile.rs`
+  lit les rôles du fichier et n'en réécrit que les huit caractères du littéral
+  changé, comme `parser::splice` dans une vue et comme la rustine de réglages
+  dans un JSON. Le module reste celui du développeur — commentaires, rôles
+  ajoutés, ordre — et ce que le lecteur ne reconnaît pas n'est ni montré ni
+  touché. La page vit dans l'écran des réglages, à côté de celle d'exécution.
+
+  Ce qu'il a fallu trancher : écrire dedans fait diverger le fichier de toutes
+  les versions du gabarit, donc maxx cesse d'y proposer ses mises à jour. C'est
+  la règle qui vaut déjà pour un module édité à la main dans Zed, et choisir une
+  couleur est exactement autant une prise de possession.
 - **Une palette par projet.** Aujourd'hui les valeurs du gabarit sont les mêmes
   pour tout le monde ; c'est un point de départ, pas une identité.
 

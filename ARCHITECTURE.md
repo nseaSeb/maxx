@@ -51,6 +51,8 @@ parseur servent à garantir.
 | `workspace/chrome.rs` | la coque : titre, écran d'accueil, barre d'état, `Render` |
 | `workspace/process.rs` | `cargo run` et le panneau de sortie |
 | `workspace/modules.rs` | les modules copiés dans le projet |
+| `workspace/palette_file.rs` | les couleurs du projet, lues et écrites depuis l'écran |
+| `themefile.rs` | `src/theme.rs` d'un projet : ses rôles, et la rustine qui en change un |
 | `designer.rs` | ce qui tient les panneaux ensemble : onglets, bande latérale, fantôme de glisser |
 | `designer/canvas.rs` | la vue telle qu'elle sera dessinée |
 | `designer/tree.rs` | la structure, et l'endroit où un nœud déposé atterrit |
