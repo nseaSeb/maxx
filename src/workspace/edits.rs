@@ -153,6 +153,51 @@ impl Workspace {
     /// needed no new machinery. A template maxx cannot read is a defect in the
     /// table and says so, where a clipboard that cannot be read is only a
     /// clipboard holding something else.
+    /// Drops one of the project's own components into the view.
+    ///
+    /// The same road a template takes — an expression parsed and inserted —
+    /// with the import the view needs to name the type. What lands is a
+    /// `Base::Known`, so it moves, renames and deletes like anything else on
+    /// the canvas; a component maxx could not write as a call would land opaque
+    /// instead, which is why `bricks` does not offer one.
+    pub fn insert_brick(&mut self, type_name: &str, cx: &mut Context<Self>) {
+        let Some(brick) = self.bricks.iter().find(|brick| brick.type_name == type_name).cloned()
+        else {
+            return;
+        };
+        let source = brick.expression();
+        let node = match crate::parser::parse_expr(&source) {
+            Ok(node) if !node.is_opaque() => node,
+            _ => {
+                self.message = Some(SharedString::from(
+                    t!("message.template_unreadable", name = brick.type_name).into_owned(),
+                ));
+                cx.notify();
+                return;
+            }
+        };
+        let Some(destination) = self.insertion_point(cx) else {
+            return;
+        };
+
+        self.checkpoint();
+        let import = brick.import();
+        let Some(view) = self.view_mut() else {
+            return;
+        };
+        if view.root.insert(&destination, node) {
+            view.selected = destination;
+            // Remembered rather than written: the file is spliced at the save,
+            // and that is where every other import a view owes is worked out.
+            // A view naming a type it has not imported does not compile, and it
+            // would be maxx's own omission the developer found in Zed.
+            if !view.extra_imports.contains(&import) {
+                view.extra_imports.push(import);
+            }
+        }
+        cx.notify();
+    }
+
     pub fn insert_subtree(&mut self, id: &str, cx: &mut Context<Self>) {
         let Some((_, _, source)) =
             crate::scaffold::templates::SUBTREES.iter().find(|(this, _, _)| *this == id)

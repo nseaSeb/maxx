@@ -95,6 +95,9 @@ context.view_code:
 designer.add:
   en: "Add"
   fr: "Ajouter"
+designer.project_components:
+  en: "Of this project"
+  fr: "De ce projet"
 designer.components:
   en: "Components"
   fr: "Composants"

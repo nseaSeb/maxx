@@ -494,6 +494,42 @@ fn the_component_library_compiles_where_a_view_uses_it() {
     assert!(status.success(), "a view using the component library must compile");
 }
 
+/// A component of the project, dropped from the palette, compiled for real.
+///
+/// The loop the library was written to close: maxx writes the bricks, reads
+/// them back out of the developer's own source, offers them, and what it drops
+/// is a view that builds. Ignored like its neighbours:
+/// `cargo test --test project -- --ignored`.
+#[test]
+#[ignore = "builds a whole project"]
+fn a_brick_dropped_from_the_palette_compiles() {
+    let root = scratch("maxx_brick_drop");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::add_components_module(&root).expect("the components must be added");
+
+    let bricks = maxx::bricks::read(&root);
+    assert!(!bricks.is_empty(), "the library maxx just wrote must be readable");
+
+    let path = root.join("src/ui/home.rs");
+    let mut view = View::load(&path).expect("the fresh view must read back");
+    for brick in &bricks {
+        let node = maxx::parser::parse_expr(&brick.expression())
+            .unwrap_or_else(|error| panic!("{}: {error}", brick.type_name));
+        assert!(!node.is_opaque(), "{}", brick.expression());
+        let at = vec![view.root.children.len()];
+        assert!(view.root.insert(&at, node));
+        view.extra_imports.push(brick.import());
+    }
+    view.save().expect("the view must save");
+
+    let status = std::process::Command::new("cargo")
+        .arg("check")
+        .current_dir(&root)
+        .status()
+        .expect("cargo must run");
+    assert!(status.success(), "a view built from the project's own bricks must compile");
+}
+
 /// The whole catalogue, dropped into one view, compiled for real.
 ///
 /// Ignored like its neighbour above, and run by hand after touching the

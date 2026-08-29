@@ -203,6 +203,8 @@ pub struct Workspace {
     watch_task: Option<Task<()>>,
     /// The watcher itself, kept alive here: dropped, it stops watching.
     watcher: Option<notify::RecommendedWatcher>,
+    /// The components the project itself holds, offered in the palette.
+    pub bricks: Vec<crate::bricks::Brick>,
     /// The project's colours, for the canvas to paint its content with.
     ///
     /// Read with the project and not with the palette editor: the canvas draws
@@ -394,6 +396,8 @@ impl Workspace {
             .as_ref()
             .map(|project| crate::preview::Preview::read(&project.root))
             .unwrap_or_default();
+        let bricks =
+            project.as_ref().map(|project| crate::bricks::read(&project.root)).unwrap_or_default();
         // A project handed straight to a fresh window never passes through
         // `set_project`, so the notice has to be raised here too.
         let outdated = project
@@ -434,6 +438,7 @@ impl Workspace {
             run_inputs: Vec::new(),
             palette_inputs: Vec::new(),
             palette_synced: None,
+            bricks,
             preview,
             run_synced: None,
             run_config: crate::projectfile::Run::default(),
@@ -477,6 +482,7 @@ impl Workspace {
         self.announce_outdated_modules(&path);
         self.menu_synced = None;
         self.preview = crate::preview::Preview::read(&path);
+        self.bricks = crate::bricks::read(&path);
         // A window with no project can still hold a file in the reader; showing
         // it under the new project's name would be the previous project's file.
         // Before leaving the modes, not after: `forget_code` also drops the

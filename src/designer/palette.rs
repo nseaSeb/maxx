@@ -30,7 +30,32 @@ impl Workspace {
             .copied()
             .collect();
 
+        // The project's own, answering the same search box. Their section comes
+        // first: once a project has components of its own, they are what it is
+        // built from, and hunting for them under thirty of maxx's would say the
+        // opposite.
+        let mine: Vec<_> = self
+            .bricks
+            .iter()
+            .filter(|brick| label_matches(&brick.type_name, &brick.doc, &query))
+            .cloned()
+            .collect();
+
         v_flex()
+            .children(mine.first().map(|_| section_title("designer.project_components")))
+            .children(mine.into_iter().map(|brick| {
+                let name = brick.type_name.clone();
+                div()
+                    .id(SharedString::from(format!("brick-{}", brick.type_name)))
+                    .px_3()
+                    .py_1()
+                    .cursor_pointer()
+                    .hover(|this| this.bg(theme::hover_bg()))
+                    .child(SharedString::from(brick.type_name.clone()))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.insert_brick(&name, cx);
+                    }))
+            }))
             .child(section_title("designer.components"))
             .when_some(self.palette_filter().cloned(), |this, filter| {
                 this.child(div().px_3().pb_1().child(Input::new(&filter).small()))

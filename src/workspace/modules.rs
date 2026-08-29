@@ -65,6 +65,9 @@ impl Workspace {
         self.menu_synced = None;
         self.show_designer();
         self.refresh_entries();
+        // And the palette of components: a library that just arrived has bricks
+        // to offer, and nothing else would go looking for them.
+        self.bricks = crate::bricks::read(&root);
         // The palette page reads `src/theme.rs`, which may have just appeared or
         // moved: the boxes are rebuilt from it on the next frame.
         self.palette_synced = None;
@@ -181,6 +184,7 @@ impl Workspace {
         }
         self.palette_synced = None;
         self.preview = crate::preview::Preview::read(&root);
+        self.bricks = crate::bricks::read(&root);
         self.message = Some(SharedString::from(if failed.is_empty() {
             t!("message.modules_updated", modules = updated.join(", ")).into_owned()
         } else {

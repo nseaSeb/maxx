@@ -3,6 +3,7 @@
 
 pub mod about;
 pub mod actions;
+pub mod bricks;
 pub mod codegen;
 pub mod designer;
 pub mod menu_model;

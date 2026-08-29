@@ -57,6 +57,15 @@ pub struct View {
     pub past: Vec<Node>,
     /// Redo stack for this view.
     pub future: Vec<Node>,
+    /// `use` lines this view owes to something the catalogue does not know.
+    ///
+    /// The catalogue's own imports are worked out from the tree at every save,
+    /// because a `Spec` carries them. A component of the project carries none —
+    /// maxx read it out of the developer's own source — so the one line naming
+    /// it is remembered here, from the drop to the save. Nothing is lost on a
+    /// reload: by then the line is in the file, and `ensure_imports` will find
+    /// it already there.
+    pub extra_imports: Vec<String>,
 }
 
 impl View {
@@ -72,6 +81,7 @@ impl View {
             selected: Vec::new(),
             past: Vec::new(),
             future: Vec::new(),
+            extra_imports: Vec::new(),
         })
     }
 
@@ -228,7 +238,9 @@ impl View {
         let block = codegen::render_for_splice(&self.root, region.width());
 
         let mut source = parser::splice(&self.source, &block).map_err(|error| error.to_string())?;
-        source = ensure_imports(source, &registry::imports(&self.root));
+        let mut needed = registry::imports(&self.root);
+        needed.extend(self.extra_imports.iter().map(String::as_str));
+        source = ensure_imports(source, &needed);
         for (field, state) in state_fields_needed(&self.root) {
             source = ensure_state_field(source, &field, &state);
         }
