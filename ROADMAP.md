@@ -136,7 +136,7 @@ laissée.*
 
 Les deux points qui restaient sont faits, et le chantier est clos :
 
-- **`title_bar` dans une forme de projet.** Les deux formes qui ont une coquille
+- ~~**`title_bar` dans une forme de projet.**~~ — fait. Les deux formes qui ont une coquille
   — *Barre latérale et contenu*, *Avec des réglages* — dessinent leur propre
   barre de titre ; la forme *Vide* garde celle du système, n'ayant rien à mettre
   dans une barre à elle. La décision se prend à deux endroits qui doivent
@@ -150,7 +150,7 @@ Les deux points qui restaient sont faits, et le chantier est clos :
   latérale et la barre de titre le lisent au même endroit, et ne peuvent plus
   finir par se contredire.
 
-- **Éditer `[run]`.** Une page *Exécution* dans l'écran des réglages, et non un
+- ~~**Éditer `[run]`.**~~ — fait. Une page *Exécution* dans l'écran des réglages, et non un
   écran de plus : quatre champs ne valent pas une deuxième barre latérale. Ce
   qu'elle porte est dit plutôt que dessiné — ce sont les réglages du **projet**,
   pas ceux de l'utilisateur, et ils partent dans son `maxx.toml`. La commande

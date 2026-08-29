@@ -280,7 +280,7 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    fn new(project: Option<Project>, cx: &mut Context<Self>) -> Self {
+    pub(crate) fn new(project: Option<Project>, cx: &mut Context<Self>) -> Self {
         // A project handed straight to a fresh window never passes through
         // `set_project`, so the notice has to be raised here too.
         let outdated = project

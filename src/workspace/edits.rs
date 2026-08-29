@@ -322,3 +322,183 @@ impl Workspace {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! The commands above, driven the way the window drives them.
+    //!
+    //! These are unit tests rather than integration ones on purpose: what they
+    //! hold is internal — `select_file`, `Workspace::new`, the private fields
+    //! they read — and moving them to `tests/` would mean widening the crate's
+    //! public API to reach them. A test is not a reason to promise a signature
+    //! to anyone downstream.
+    //!
+    //! No window is opened. `TestAppContext` gives a real `App`, real entities
+    //! and a real update cycle, which is everything these commands touch; what
+    //! it does not give is pixels, so nothing here can say what a click lands
+    //! on. That is the one part of the designer still checked by hand.
+
+    use std::path::PathBuf;
+
+    use gpui::{AppContext as _, TestAppContext};
+
+    use crate::model::{Base, Node};
+    use crate::project::Project;
+    use crate::scaffold::{self, Template};
+    use crate::workspace::Workspace;
+
+    /// A scratch directory of this test's own, removed when it is dropped.
+    ///
+    /// `MAXX_SCRATCH` is honoured for the same reason the rest of the suite
+    /// honours it: a generated project shares one cargo target directory, and
+    /// pointing them all at the same place is what keeps a scaffold test at
+    /// seconds rather than minutes.
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new(name: &str) -> Self {
+            let base = std::env::var_os("MAXX_SCRATCH")
+                .map(PathBuf::from)
+                .unwrap_or_else(std::env::temp_dir);
+            let root = base.join(format!("maxx-edits-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(&root).expect("the scratch directory must be creatable");
+            Self(root)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// A workspace over a freshly created project, with its `home` view open.
+    ///
+    /// The empty shape, because what is being tested is the tree of one view
+    /// and not the shell around it.
+    fn workspace_on_a_view(scratch: &Scratch, cx: &mut TestAppContext) -> gpui::Entity<Workspace> {
+        let root = scratch.0.join("trial");
+        scaffold::create_project(&root, "trial", Template::Empty)
+            .expect("the project must be created");
+        let view_path = root.join("src/ui/home.rs");
+
+        let workspace = cx.update(|cx| cx.new(|cx| Workspace::new(Some(Project::open(root)), cx)));
+        workspace.update(cx, |workspace, cx| {
+            workspace.select_file(view_path, cx);
+            assert!(workspace.view().is_some(), "the view must open");
+        });
+        workspace
+    }
+
+    /// The path of every node of the tree, as its constructor name.
+    fn shape(node: &Node) -> Vec<String> {
+        let mut out = Vec::new();
+        node.walk(&mut |path, node| {
+            let name = match &node.base {
+                Base::Known { path, .. } => path.clone(),
+                Base::Opaque(source) => source.clone(),
+            };
+            out.push(format!("{path:?} {name}"));
+        });
+        out
+    }
+
+    /// A component dropped at an index lands at that index, not at the end.
+    ///
+    /// The tree is the second way into the canvas, and the whole point of the
+    /// drop zones is that they place a node *between* two others. Appending
+    /// would look like it worked everywhere but the one place it matters.
+    #[gpui::test]
+    fn a_component_dropped_between_two_children_lands_between_them(cx: &mut TestAppContext) {
+        let scratch = Scratch::new("drop-between");
+        let workspace = workspace_on_a_view(&scratch, cx);
+
+        workspace.update(cx, |workspace, cx| {
+            // The generated view is not empty — it opens on a Label — so the
+            // count is read rather than assumed.
+            let before = workspace.view().expect("open").root.children.len();
+
+            workspace.drop_at(&[], 0, crate::designer::Dragged::Component("label"), cx);
+            workspace.drop_at(&[], 1, crate::designer::Dragged::Component("button"), cx);
+            // Between the two, and this is the whole feature in one assertion:
+            // a second drop at index 1 must push the button along, not follow it.
+            workspace.drop_at(&[], 1, crate::designer::Dragged::Component("button"), cx);
+
+            let root = &workspace.view().expect("open").root;
+            let names: Vec<_> = root
+                .children
+                .iter()
+                .map(|child| child.base.path().unwrap_or("opaque").to_string())
+                .collect();
+            assert_eq!(names.len(), before + 3, "three more children: {names:?}");
+            assert_eq!(names[0], "Label::new", "the first drop is still first: {names:?}");
+            assert_eq!(names[1], "Button::new", "the last drop took index 1: {names:?}");
+            assert_eq!(names[2], "Button::new", "and pushed the other one along: {names:?}");
+        });
+    }
+
+    /// Undo puts back exactly the tree that was there.
+    ///
+    /// A checkpoint taken after the edit rather than before it looks right on
+    /// the first `⌘Z` and loses one step on the second; comparing the whole
+    /// shape rather than a count is what makes that visible.
+    #[gpui::test]
+    fn undo_and_redo_walk_the_same_trees(cx: &mut TestAppContext) {
+        let scratch = Scratch::new("undo");
+        let workspace = workspace_on_a_view(&scratch, cx);
+
+        workspace.update(cx, |workspace, cx| {
+            let empty = shape(&workspace.view().expect("open").root);
+
+            workspace.drop_at(&[], 0, crate::designer::Dragged::Component("label"), cx);
+            let one = shape(&workspace.view().expect("open").root);
+            workspace.drop_at(&[], 1, crate::designer::Dragged::Component("button"), cx);
+            let two = shape(&workspace.view().expect("open").root);
+            assert_ne!(one, empty);
+            assert_ne!(two, one);
+
+            workspace.undo(cx);
+            assert_eq!(shape(&workspace.view().expect("open").root), one, "one step back");
+            workspace.undo(cx);
+            assert_eq!(shape(&workspace.view().expect("open").root), empty, "two steps back");
+            workspace.redo(cx);
+            assert_eq!(shape(&workspace.view().expect("open").root), one, "and forward again");
+            workspace.redo(cx);
+            assert_eq!(shape(&workspace.view().expect("open").root), two);
+        });
+    }
+
+    /// A duplicated input gets a state field of its own.
+    ///
+    /// The copy would otherwise share the original's `&self.field`: two boxes
+    /// on the screen, one `Entity` behind them, and typing in either showing in
+    /// both. It compiles, so only this says it.
+    #[gpui::test]
+    fn a_duplicated_input_does_not_share_the_original_s_state(cx: &mut TestAppContext) {
+        let scratch = Scratch::new("duplicate");
+        let workspace = workspace_on_a_view(&scratch, cx);
+
+        workspace.update(cx, |workspace, cx| {
+            workspace.drop_at(&[], 0, crate::designer::Dragged::Component("input"), cx);
+            workspace.select(vec![0], cx);
+            workspace.duplicate_selected(cx);
+
+            let root = &workspace.view().expect("open").root;
+            let inputs: Vec<_> = root
+                .children
+                .iter()
+                .filter(|child| child.base.path() == Some("Input::new"))
+                .collect();
+            assert_eq!(inputs.len(), 2, "the copy sits beside the original");
+
+            let field = |node: &Node| match &node.base {
+                Base::Known { args, .. } => args.first().map(|arg| arg.to_source()),
+                Base::Opaque(_) => None,
+            };
+            let original = field(inputs[0]).expect("the original binds a field");
+            let copy = field(inputs[1]).expect("the copy binds a field");
+            assert_ne!(original, copy, "two boxes cannot share one entity: {original} / {copy}");
+        });
+    }
+}

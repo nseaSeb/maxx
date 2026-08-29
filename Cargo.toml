@@ -54,9 +54,14 @@ notify = "7"
 futures = "0.3"
 
 [dev-dependencies]
+# The invariant behind `tests/round_trip.rs`, checked on trees nobody wrote.
 proptest = "1.11.0"
 # Already in the tree through gpui: used to rasterise the icon drafts.
 resvg = "0.45"
+# The same gpui, plus what it takes to run an application without a screen:
+# `#[gpui::test]` and `TestAppContext`. Under `cargo test` only — a release
+# build never sees the feature, and the window that ships is the real one.
+gpui = { version = "0.2.2", features = ["runtime_shaders", "test-support"] }
 
 [profile.dev]
 opt-level = 0

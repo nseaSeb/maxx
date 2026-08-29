@@ -209,7 +209,9 @@ ressortir sur trois. Ce qui est garanti est le contenu, pas la colonne.
 
 ## Confort
 
-- **Renommer une vue.** maxx sait en créer une, la supprimer et en adopter une,
+- ~~**Renommer une vue.**~~ — fait : le champ de l'inspecteur, `scaffold::rename_view`,
+  et huit essais dans `tests/scaffold.rs`. Ce qui suit dit ce qu'il a fallu
+  trancher. maxx sait en créer une, la supprimer et en adopter une,
   mais pas la renommer — et l'argument qui justifie le nom généré s'appuie
   pourtant là-dessus (`views.rs`, `new_view` : « `view_2` is renamable in Zed in
   two seconds »). C'est vrai du fichier, pas de la vue : il faut aussi la ligne
@@ -406,7 +408,7 @@ Ce qui reste de ce côté :
 - **Le pluriel** est écrit à la main là où il apparaît — trois branches dans la
   description des projets récents. `rust-i18n` sait faire mieux ; trois branches
   ne le justifiaient pas encore.
-- **Les commentaires du code de maxx** sont toujours en français, alors que
+- ~~**Les commentaires du code de maxx**~~ — faits en anglais. Ils étaient en français, alors que
   le README, le code généré et l'interface sont en anglais. C'est le dernier
   morceau, et il ne se règle qu'en le lisant en entier.
 
