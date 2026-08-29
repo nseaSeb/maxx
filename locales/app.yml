@@ -293,6 +293,9 @@ menu.add_settings:
 menu.add_system:
   en: "The system module"
   fr: "Le module système"
+menu.add_components:
+  en: "The components"
+  fr: "Les composants"
 menu.add_theme:
   en: "The palette"
   fr: "La palette"
@@ -617,6 +620,9 @@ message.saved:
 message.palette_saved:
   en: "Palette saved"
   fr: "Palette enregistrée"
+message.components_added:
+  en: "The components are in src/components — yours from here"
+  fr: "Les composants sont dans src/components — ils sont à vous"
 message.select_entry_first:
   en: "select an item in the explorer first"
   fr: "sélectionnez d'abord un élément dans l'explorateur"

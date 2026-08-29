@@ -53,6 +53,32 @@ mod ui {
     }
 }
 
+/// The part of `src/theme.rs` the components call.
+///
+/// Hand-written, like the `settings` stand-in below, because `build.rs` cannot
+/// reach the template that writes it. What keeps the two in step is not care:
+/// `scaffold::components` holds a test asserting that every role a component
+/// names is declared by `theme_rs`.
+mod theme {
+    use gpui::{App, Rgba, rgb};
+
+    pub struct Role {
+        pub dark: u32,
+        pub light: u32,
+    }
+
+    impl Role {
+        pub fn get(&self, _cx: &App) -> Rgba {
+            rgb(self.dark)
+        }
+    }
+
+    pub const PANEL: Role = Role { dark: 0x22262d, light: 0xf3f3f3 };
+    pub const BORDER: Role = Role { dark: 0x2f343d, light: 0xdfdfdf };
+    pub const TEXT: Role = Role { dark: 0xc8ccd4, light: 0x24292f };
+    pub const TEXT_MUTED: Role = Role { dark: 0x7f8896, light: 0x6b7280 };
+}
+
 /// The part of `src/settings.rs` the settings screen calls.
 mod settings {
     #[derive(Clone, Debug, Default)]
@@ -89,6 +115,16 @@ mod boxes {
     use gpui::{App, Window};
 
     include!(concat!(env!("OUT_DIR"), "/boxes.rs"));
+}
+
+/// The component library, compiled where it is written.
+///
+/// The bricks are written against `crate::theme`, so the stand-in above has to
+/// carry the roles they name — a component reaching for a role the palette
+/// template does not declare is a project that stops compiling on a file maxx
+/// wrote, and this is where that has to be said.
+mod components {
+    include!(concat!(env!("OUT_DIR"), "/components.rs"));
 }
 
 /// The sub-tree templates the palette drops, compiled where they are written.

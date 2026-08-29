@@ -73,6 +73,19 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Copies the component library into the project.
+    ///
+    /// It brings the palette with it: the bricks paint with the project's own
+    /// roles, so the roles have to be there before they are.
+    pub fn add_components_module(&mut self, cx: &mut Context<Self>) {
+        self.add_module(
+            "components",
+            crate::scaffold::add_components_module,
+            "message.components_added",
+            cx,
+        );
+    }
+
     /// Copies the palette into the project.
     ///
     /// Two modes from the start, because the choice belongs to whoever reads

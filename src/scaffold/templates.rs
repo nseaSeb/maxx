@@ -320,3 +320,195 @@ pub const SUBTREES: &[(&str, &[&str], &str)] = &[
          \x20   .child(v_flex().gap_2().child(Label::new(\"First\")).child(Label::new(\"Second\")))",
     ),
 ];
+
+// The components maxx copies into a project, each as one file of `src/components/`.
+//
+// Real components, not the sub-trees above. The difference is the one that
+// matters on the third day of a project: a sub-tree is pasted, so ten cards are
+// ten copies and changing the look is ten edits; a component is a type, so ten
+// cards are ten calls and changing the look is one file.
+//
+// They are written against the project's own `theme` module, which is why
+// adding them adds that too. A brick that carries its own colours would ignore
+// the palette the developer just chose.
+//
+// The shape is deliberate and it is a contract: `pub fn new(..)` for what the
+// component cannot do without, `pub fn x(mut self, ..) -> Self` for what it can.
+// It is the shape gpui-component itself uses, the shape a Rust developer
+// expects — and the shape maxx will read back to offer these in the catalogue.
+pub const COMPONENTS: &[(&str, &str)] = &[
+    (
+        "card",
+        r#"//! A titled box, with anything inside it.
+
+use gpui::prelude::*;
+use gpui::{AnyElement, App, FontWeight, IntoElement, RenderOnce, SharedString, Window, div};
+use gpui_component::v_flex;
+
+use crate::theme;
+
+/// A box with a title, an optional subtitle, and whatever it is given.
+#[derive(IntoElement)]
+pub struct Card {
+    title: SharedString,
+    subtitle: Option<SharedString>,
+    children: Vec<AnyElement>,
+}
+
+impl Card {
+    /// A card with its title. The one thing a card cannot do without.
+    pub fn new(title: impl Into<SharedString>) -> Self {
+        Self { title: title.into(), subtitle: None, children: Vec::new() }
+    }
+
+    /// A line under the title, for what the title does not say.
+    pub fn subtitle(mut self, subtitle: impl Into<SharedString>) -> Self {
+        self.subtitle = Some(subtitle.into());
+        self
+    }
+}
+
+impl ParentElement for Card {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl RenderOnce for Card {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        v_flex()
+            .gap_2()
+            .p_4()
+            .rounded_md()
+            .border_1()
+            .border_color(theme::BORDER.get(cx))
+            .bg(theme::PANEL.get(cx))
+            .child(
+                div()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(theme::TEXT.get(cx))
+                    .child(self.title),
+            )
+            .children(self.subtitle.map(|subtitle| {
+                div().text_sm().text_color(theme::TEXT_MUTED.get(cx)).child(subtitle)
+            }))
+            .children(self.children)
+    }
+}
+"#,
+    ),
+    (
+        "toolbar",
+        r#"//! A row of controls, with a gap and an alignment already decided.
+
+use gpui::prelude::*;
+use gpui::{AnyElement, App, IntoElement, RenderOnce, Window};
+use gpui_component::h_flex;
+
+use crate::theme;
+
+/// A horizontal bar for buttons and the like.
+#[derive(IntoElement)]
+pub struct Toolbar {
+    children: Vec<AnyElement>,
+    separated: bool,
+}
+
+impl Toolbar {
+    /// An empty toolbar.
+    pub fn new() -> Self {
+        Self { children: Vec::new(), separated: false }
+    }
+
+    /// A line under the bar, when it sits above what it acts on.
+    pub fn separated(mut self) -> Self {
+        self.separated = true;
+        self
+    }
+}
+
+impl Default for Toolbar {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ParentElement for Toolbar {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl RenderOnce for Toolbar {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        h_flex()
+            .gap_2()
+            .items_center()
+            .px_3()
+            .py_2()
+            .when(self.separated, |this| {
+                this.border_b_1().border_color(theme::BORDER.get(cx))
+            })
+            .children(self.children)
+    }
+}
+"#,
+    ),
+    (
+        "empty_state",
+        r#"//! What a screen shows before it has anything to show.
+
+use gpui::prelude::*;
+use gpui::{AnyElement, App, IntoElement, RenderOnce, SharedString, Window, div};
+use gpui_component::v_flex;
+
+use crate::theme;
+
+/// The screen every application needs and nobody writes on the first day: a
+/// title, a line saying what to do, and room for the button that does it.
+#[derive(IntoElement)]
+pub struct EmptyState {
+    title: SharedString,
+    hint: Option<SharedString>,
+    children: Vec<AnyElement>,
+}
+
+impl EmptyState {
+    /// The state with its title.
+    pub fn new(title: impl Into<SharedString>) -> Self {
+        Self { title: title.into(), hint: None, children: Vec::new() }
+    }
+
+    /// What the reader should do about it.
+    pub fn hint(mut self, hint: impl Into<SharedString>) -> Self {
+        self.hint = Some(hint.into());
+        self
+    }
+}
+
+impl ParentElement for EmptyState {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl RenderOnce for EmptyState {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        v_flex()
+            .flex_1()
+            .items_center()
+            .justify_center()
+            .gap_2()
+            .p_8()
+            .child(div().text_lg().text_color(theme::TEXT.get(cx)).child(self.title))
+            .children(
+                self.hint.map(|hint| {
+                    div().text_sm().text_color(theme::TEXT_MUTED.get(cx)).child(hint)
+                }),
+            )
+            .children(self.children)
+    }
+}
+"#,
+    ),
+];

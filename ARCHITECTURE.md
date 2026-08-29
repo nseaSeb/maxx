@@ -37,6 +37,7 @@ parseur servent à garantir.
 | `scaffold/views.rs` | créer une vue, la renommer, désigner celle qui ouvre la fenêtre |
 | `scaffold/modules.rs` | les modules copiés : versions, empreintes, mise à jour |
 | `scaffold/{system,settings,theme,assets,window}.rs` | un module copié et son gabarit |
+| `scaffold/components.rs` | la bibliothèque de briques copiée dans `src/components/` |
 | `scaffold/menubar.rs` | la barre de menus écrite dans le projet |
 | `scaffold/templates.rs` | les coquilles, compilées par `examples/shapes.rs` |
 | `project.rs` | l'arborescence de fichiers montrée dans l'explorateur |

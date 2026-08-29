@@ -88,6 +88,7 @@ pub fn app_menus(cx: &App) -> Vec<Menu> {
                         MenuItem::action(tr("menu.add_system"), AddSystemModule),
                         MenuItem::action(tr("menu.add_settings"), AddSettingsModule),
                         MenuItem::action(tr("menu.add_theme"), AddThemeModule),
+                        MenuItem::action(tr("menu.add_components"), AddComponentsModule),
                         MenuItem::separator(),
                         MenuItem::action(tr("menu.update_modules"), UpdateModules),
                     ],

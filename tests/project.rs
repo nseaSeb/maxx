@@ -455,6 +455,45 @@ fn every_shape_compiles() {
     }
 }
 
+/// The component library, used by a view, compiled for real.
+///
+/// Ignored like its neighbours, and run after touching `templates::COMPONENTS`:
+/// `cargo test --test project -- --ignored`. `examples/shapes.rs` proves each
+/// brick compiles on its own; this proves the rest — the `mod.rs` maxx
+/// generates, the re-exports a view writes against, the `mod components;` line
+/// in `main.rs`, and the palette the bricks reach for.
+#[test]
+#[ignore = "builds a whole project"]
+fn the_component_library_compiles_where_a_view_uses_it() {
+    let root = scratch("maxx_components_build");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::add_components_module(&root).expect("the components must be added");
+
+    // Used, and not merely present: a library that compiles alone and not at
+    // its call site has proved nothing about the shape it offers.
+    let path = root.join("src/ui/home.rs");
+    let source = std::fs::read_to_string(&path).unwrap();
+    let source = source.replace(
+        "use gpui_component::v_flex;",
+        "use gpui_component::v_flex;\n\nuse crate::components::{Card, EmptyState, Toolbar};",
+    );
+    let source = source.replace(
+        "            .child(Label::new(\"Welcome\"))",
+        "            .child(Toolbar::new().separated().child(Label::new(\"Bar\")))\n\
+         \x20           .child(Card::new(\"Title\").subtitle(\"Subtitle\").child(Label::new(\"In\")))\n\
+         \x20           .child(EmptyState::new(\"Nothing here\").hint(\"Add something\"))",
+    );
+    assert!(source.contains("Card::new"), "the view must actually use the library");
+    std::fs::write(&path, source).unwrap();
+
+    let status = std::process::Command::new("cargo")
+        .arg("check")
+        .current_dir(&root)
+        .status()
+        .expect("cargo must run");
+    assert!(status.success(), "a view using the component library must compile");
+}
+
 /// The whole catalogue, dropped into one view, compiled for real.
 ///
 /// Ignored like its neighbour above, and run by hand after touching the

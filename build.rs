@@ -87,6 +87,17 @@ fn write_shapes() {
         ));
     }
     std::fs::write(out.join("subtrees.rs"), subtrees).expect("the templates must be written");
+
+    // The component library, each brick in a module of its own — the shape it
+    // has in a project, so that a `use super::…` that only works when the files
+    // are flattened fails here rather than there.
+    let mut components = String::new();
+    for (name, body) in COMPONENTS {
+        components.push_str(&format!("pub mod {name} {{\n"));
+        components.push_str(&as_module_body(body));
+        components.push_str("}\n");
+    }
+    std::fs::write(out.join("components.rs"), components).expect("the components must be written");
 }
 
 /// The same text, as something `include!` accepts.

@@ -14,8 +14,14 @@ use super::window::window_rs;
 /// holds the fingerprint of each one and fails when a template moves without
 /// its version following — the guard against a fix that never reaches the
 /// projects carrying the old copy.
-pub const MODULES: &[(&str, u32)] =
-    &[("system", 1), ("settings", 1), ("theme", 1), ("assets", 1), ("window", 1)];
+pub const MODULES: &[(&str, u32)] = &[
+    ("system", 1),
+    ("settings", 1),
+    ("theme", 1),
+    ("assets", 1),
+    ("window", 1),
+    ("components", 1),
+];
 
 /// The name each module carried before it was renamed to English.
 ///
@@ -53,6 +59,9 @@ pub fn module_body(module: &str) -> Option<String> {
         "theme" => Some(theme_rs()),
         "assets" => Some(assets_rs()),
         "window" => Some(window_rs()),
+        // A directory rather than one file: the body is every component in
+        // turn, which is what its fingerprint is taken over.
+        "components" => Some(super::components::module_body()),
         _ => None,
     }
 }
