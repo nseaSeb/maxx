@@ -8,8 +8,8 @@
 use gpui::{AppContext as _, Context, Entity, Hsla, Rgba, SharedString, Window};
 use gpui_component::color_picker::{ColorPickerEvent, ColorPickerState};
 
-use crate::themefile::Mode;
-use crate::workspace::Workspace;
+use crate::themefile::{Mode, ThemeFile};
+use crate::workspace::{Center, Workspace};
 
 /// The colour a role holds, as the picker wants it.
 pub fn to_colour(value: u32) -> Hsla {
@@ -30,6 +30,33 @@ pub fn from_colour(colour: Hsla) -> u32 {
 }
 
 impl Workspace {
+    /// Opens the palette new projects start from, creating it if it is not
+    /// there yet.
+    ///
+    /// The same editor as a project's own, on a file that lives in maxx's
+    /// directory rather than in a project. One reader, one editor, one writer
+    /// for both — the alternative was a second screen doing the same thing to
+    /// the same shape of file.
+    pub fn open_default_palette(&mut self, cx: &mut Context<Self>) {
+        let path = match crate::settings::palette_path() {
+            Some(path) if path.exists() => path,
+            Some(_) => match crate::settings::create_palette() {
+                Ok(path) => path,
+                Err(error) => {
+                    self.message = Some(SharedString::from(error));
+                    cx.notify();
+                    return;
+                }
+            },
+            None => return,
+        };
+        match ThemeFile::open(&path) {
+            Some(palette) => self.show(Center::Palette(palette)),
+            None => self.message = Some(crate::tr("error.palette_unreadable")),
+        }
+        cx.notify();
+    }
+
     /// Builds the palette page's pickers, once per project.
     ///
     /// Built here rather than where they are drawn, for the reason every other

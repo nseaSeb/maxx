@@ -21,7 +21,14 @@ pub fn add_theme_module(root: &Path) -> io::Result<()> {
     }
 
     let path = root.join("src/theme.rs");
-    let body = theme_rs();
+    // Their colours if they have chosen any, the template's otherwise. The
+    // project owns the copy either way: what is recorded in `maxx.toml` is the
+    // fingerprint of what was actually written, so a project started from a
+    // custom palette is still a project maxx recognises as its own.
+    let body = match crate::settings::palette_roles() {
+        Some(roles) => crate::themefile::apply_roles(&theme_rs(), &roles),
+        None => theme_rs(),
+    };
     if !path.exists() {
         std::fs::write(&path, &body)?;
         crate::projectfile::record(root, "theme", module_version("theme").unwrap_or(1), &body)?;

@@ -155,6 +155,37 @@ pub fn state_path() -> Option<PathBuf> {
     Some(directory()?.join("state.json"))
 }
 
+/// The user's own palette, which new projects start from.
+///
+/// A `theme.rs` and not a section of the settings, so that one reader, one
+/// editor and one writer serve both sides: it is the very file a project gets,
+/// sitting in maxx's own directory. `BACKLOG.md` asked for "a palette per
+/// project"; what people actually want is *their* palette in every project they
+/// start, and a project owns its copy from the moment it has one.
+pub fn palette_path() -> Option<PathBuf> {
+    Some(directory()?.join("palette.rs"))
+}
+
+/// The roles of that palette, when the user has one.
+///
+/// `None` when they have not made one — the ordinary case, and the one where a
+/// project starts from the template as it always did.
+pub fn palette_roles() -> Option<Vec<(String, u32, u32)>> {
+    let file = crate::themefile::ThemeFile::open(&palette_path()?)?;
+    Some(file.roles())
+}
+
+/// Writes the user's palette from the template, for them to edit.
+pub fn create_palette() -> Result<PathBuf, String> {
+    let path = palette_path().ok_or_else(|| "no configuration directory".to_string())?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let body = crate::scaffold::module_body("theme").ok_or_else(|| "no palette".to_string())?;
+    std::fs::write(&path, body).map_err(|error| error.to_string())?;
+    Ok(path)
+}
+
 /// The JSON Schema maxx writes beside the settings, for editor completion.
 pub fn schema_path() -> Option<PathBuf> {
     Some(directory()?.join("settings-schema.json"))

@@ -92,6 +92,11 @@ pub fn outdated_modules(root: &Path) -> Vec<String> {
     outdated
 }
 
+/// The roles a palette source holds, for an update that keeps them.
+fn read_roles(source: &str) -> Vec<(String, u32, u32)> {
+    crate::themefile::ThemeFile::from_source(source).roles()
+}
+
 /// Whether a module is a directory rather than a single file.
 ///
 /// `components` is a library, so it is `src/components/` with one file per
@@ -145,6 +150,16 @@ pub fn update_module(root: &Path, module: &str) -> io::Result<()> {
             format!("{module} has been modified — maxx does not replace it"),
         ));
     }
+
+    // The palette is the one module whose *values* belong to the project:
+    // bringing the code around them up to date is not a reason to repaint
+    // somebody's application in maxx's colours. Computed before the write and
+    // not inside it, because what is recorded below has to be what was written.
+    let body = if module == "theme" {
+        crate::themefile::apply_roles(&body, &read_roles(&current))
+    } else {
+        body
+    };
 
     if is_directory(module) {
         super::components::rewrite(root)?;

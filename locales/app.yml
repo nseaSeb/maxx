@@ -182,6 +182,9 @@ error.already_managed:
 error.bad_field_name:
   en: "“%{name}” is not a valid field name"
   fr: "« %{name} » n'est pas un nom de champ valide"
+error.palette_unreadable:
+  en: "That palette cannot be read"
+  fr: "Cette palette est illisible"
 error.changed_on_disk:
   en: "changed outside maxx — File > Reload, or Overwrite"
   fr: "fichier modifié en dehors de maxx — Fichier > Recharger, ou Écraser"
@@ -803,6 +806,27 @@ prefs.run_features:
 prefs.run_features_desc:
   en: "Switched on with --features, separated by commas. Empty means none."
   fr: "Allumées avec --features, séparées par des virgules. Vide, aucune."
+prefs.default_palette:
+  en: "Your palette"
+  fr: "Votre palette"
+prefs.default_palette_group:
+  en: "The colours a new project starts with"
+  fr: "Les couleurs avec lesquelles un nouveau projet démarre"
+prefs.default_palette_group_desc:
+  en: "A theme.rs of your own, in maxx's own directory. A project created after it copies its values, and owns that copy from the moment it has it."
+  fr: "Un theme.rs à vous, dans le répertoire de maxx. Un projet créé ensuite en recopie les valeurs, et cette copie est la sienne dès qu'il l'a."
+prefs.default_palette_desc:
+  en: "Edited in the same screen a project's palette is."
+  fr: "S'édite dans le même écran que la palette d'un projet."
+prefs.default_palette_none_desc:
+  en: "You have none yet, so a project starts with maxx's own values."
+  fr: "Vous n'en avez pas encore : un projet démarre donc avec les valeurs de maxx."
+prefs.default_palette_edit:
+  en: "Edit"
+  fr: "Modifier"
+prefs.default_palette_make:
+  en: "Create it"
+  fr: "La créer"
 prefs.palette_desc:
   en: "The colours the project paints with, in src/theme.rs. Only the value being changed is rewritten, so anything else in the file stays as it was written."
   fr: "Les couleurs avec lesquelles le projet dessine, dans src/theme.rs. Seule la valeur modifiée est réécrite : tout le reste du fichier reste tel qu'il a été écrit."

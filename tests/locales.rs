@@ -70,6 +70,13 @@ fn is_key(value: &str) -> bool {
     let Some((head, rest)) = value.split_once('.') else {
         return false;
     };
+    // A file name is not a key, and it can look exactly like one: `palette.rs`
+    // has a namespace maxx uses and a lowercase tail. Every namespace here is a
+    // word that also names a module, so this will keep happening.
+    const EXTENSIONS: &[&str] = &["rs", "json", "toml", "yml", "yaml", "md", "png", "gif", "icns"];
+    if EXTENSIONS.contains(&value.rsplit('.').next().unwrap_or_default()) {
+        return false;
+    }
     NAMESPACES.contains(&head)
         && !rest.is_empty()
         && rest

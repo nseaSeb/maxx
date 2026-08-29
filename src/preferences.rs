@@ -47,6 +47,12 @@ fn appearance_page() -> SettingPage {
     SettingPage::new(crate::tr("prefs.appearance"))
         .group(
             SettingGroup::new()
+                .title(crate::tr("prefs.default_palette_group"))
+                .description(crate::tr("prefs.default_palette_group_desc"))
+                .item(default_palette_item()),
+        )
+        .group(
+            SettingGroup::new()
                 .title(crate::tr("prefs.panels"))
                 .description(crate::tr("prefs.panels_desc"))
                 .item(
@@ -372,6 +378,40 @@ fn file_page(cx: &mut Context<Workspace>) -> SettingPage {
                 })
             })),
     )
+}
+
+/// The palette new projects start from.
+///
+/// Here and not on a page of its own: it is one thing, and it belongs beside
+/// the other choices a person makes about how their work looks. The button
+/// opens the ordinary palette editor on maxx's own `palette.rs` — one reader,
+/// one editor and one writer for both sides, rather than a second screen doing
+/// the same thing to the same shape of file.
+fn default_palette_item() -> SettingItem {
+    SettingItem::render(move |_, _, _| {
+        let made = settings::palette_path().is_some_and(|path| path.exists());
+        let label = if made { "prefs.default_palette_edit" } else { "prefs.default_palette_make" };
+        let description =
+            if made { "prefs.default_palette_desc" } else { "prefs.default_palette_none_desc" };
+        div()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .child(div().child(crate::tr("prefs.default_palette")))
+            .child(
+                div()
+                    .w_full()
+                    .text_xs()
+                    .text_color(theme::text_muted())
+                    .child(crate::tr(description)),
+            )
+            .child(action_button("prefs-default-palette", label, false, |cx| {
+                crate::actions::with_active_workspace(cx, |workspace, _, cx| {
+                    workspace.open_default_palette(cx);
+                });
+            }))
+            .into_any_element()
+    })
 }
 
 /// A small button inside a settings group.

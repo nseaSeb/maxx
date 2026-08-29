@@ -126,6 +126,14 @@ impl ThemeFile {
         Self::open(&Self::path_in(root))
     }
 
+    /// A palette held in memory, for a caller that has the text and no file.
+    ///
+    /// Its path is empty, so writing through it would fail — which is the point:
+    /// this is for reading a source that is not on disk, and nothing more.
+    pub fn from_source(source: &str) -> Self {
+        Self { path: PathBuf::new(), swatches: read_swatches(source), source: source.to_string() }
+    }
+
     /// The same, from the file itself.
     ///
     /// `None` also when nothing in it has the shape of a role: a `src/theme.rs`
@@ -226,6 +234,44 @@ impl ThemeFile {
     pub fn source(&self) -> &str {
         &self.source
     }
+}
+
+/// The same palette, painted with the roles given.
+///
+/// A pure rewrite of the text, by the same patch the editor makes on disk: only
+/// the literals move, so the doc comments, the `Role` type and the accessors
+/// around them are whatever `template` said they were.
+///
+/// It serves two callers that look unrelated and are not. A project created
+/// while the user has a palette of their own starts with **their** colours;
+/// and a palette module brought up to date keeps the colours the project is
+/// already painted with, because updating the code around a value is not a
+/// reason to repaint somebody's application.
+///
+/// A role the template does not have is ignored — it belongs to a palette that
+/// grew elsewhere, and inventing a place for it here is not this function's
+/// business.
+pub fn apply_roles(template: &str, roles: &[(String, u32, u32)]) -> String {
+    let mut out = template.to_string();
+    for (name, dark, light) in roles {
+        for mode in [Mode::Dark, Mode::Light] {
+            // Re-read each time: the patch before it moved every offset after
+            // itself, and a range from the previous pass points into the middle
+            // of a literal now.
+            let Some(swatch) = read_swatches(&out).into_iter().find(|s| &s.name == name) else {
+                break;
+            };
+            let value = match mode {
+                Mode::Dark => *dark,
+                Mode::Light => *light,
+            };
+            if swatch.value(mode) == value {
+                continue;
+            }
+            out.replace_range(swatch.range(mode), &format!("{value:#08x}"));
+        }
+    }
+    out
 }
 
 /// Finds every `pub const NAME: Role = Role { dark: 0x…, light: 0x… };`.
@@ -531,6 +577,41 @@ pub const FINE: Role = Role { dark: 0x111111, light: 0x222222 };
 
         assert!(file.reload(), "the file moved");
         assert!(file.role_names().contains(&"WARNING".to_string()), "{:?}", file.role_names());
+    }
+
+    /// A template painted with someone else's roles keeps everything else.
+    #[test]
+    fn applying_roles_moves_the_values_and_nothing_else() {
+        let template = sample();
+        let mine = vec![
+            ("BACKGROUND".to_string(), 0x001122, 0xffeedd),
+            ("ACCENT".to_string(), 0x445566, 0x778899),
+            // A role the template does not have: ignored, not invented.
+            ("WARNING".to_string(), 0x010203, 0x040506),
+        ];
+        let painted = apply_roles(&template, &mine);
+
+        let swatches = read_swatches(&painted);
+        let role = |name: &str| swatches.iter().find(|s| s.name == name).expect(name);
+        assert_eq!((role("BACKGROUND").dark, role("BACKGROUND").light), (0x001122, 0xffeedd));
+        assert_eq!((role("ACCENT").dark, role("ACCENT").light), (0x445566, 0x778899));
+        assert_eq!(role("PANEL").dark, 0x22262d, "a role not given keeps the template's");
+        assert!(!painted.contains("WARNING"), "a role the template lacks is not added");
+
+        // The text around the literals is the template's, to the byte.
+        let expected = template
+            .replace("dark: 0x1e2127, light: 0xfafafa", "dark: 0x001122, light: 0xffeedd")
+            .replace("dark: 0x61afef, light: 0x0969da", "dark: 0x445566, light: 0x778899");
+        assert_eq!(painted, expected);
+    }
+
+    /// And painting with what is already there changes nothing at all.
+    #[test]
+    fn applying_the_roles_it_already_has_is_the_same_text() {
+        let template = sample();
+        let roles: Vec<_> =
+            read_swatches(&template).into_iter().map(|s| (s.name, s.dark, s.light)).collect();
+        assert_eq!(apply_roles(&template, &roles), template);
     }
 
     /// The field name is matched whole.

@@ -470,7 +470,7 @@ fn scaffold_project(template: crate::scaffold::Template, cx: &mut App) {
 }
 
 /// Runs `f` against the workspace of the frontmost window, if there is one.
-fn with_active_workspace(
+pub(crate) fn with_active_workspace(
     cx: &mut App,
     f: impl FnOnce(&mut Workspace, &mut gpui::Window, &mut gpui::Context<Workspace>) + 'static,
 ) {

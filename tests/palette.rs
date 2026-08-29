@@ -146,3 +146,34 @@ fn the_written_palette_still_compiles() {
         .expect("cargo must run");
     assert!(status.success(), "the palette maxx wrote must compile");
 }
+
+/// A palette module brought up to date keeps the colours it was painted with.
+///
+/// The rule this states: the *values* of that file belong to the project, and
+/// the code around them belongs to maxx. Bringing an accessor or a doc comment
+/// up to date is not a reason to repaint somebody's application — and the whole
+/// mechanism that makes updates possible would otherwise be a trap for anyone
+/// who had chosen a colour.
+#[test]
+fn updating_the_palette_keeps_the_project_s_colours() {
+    let scratch = Scratch::new("update-keeps");
+    let root = scratch.project("trial");
+
+    // Their colour, written the way maxx writes one.
+    let mut palette = ThemeFile::load(&root).expect("the palette is there");
+    assert_eq!(palette.set("ACCENT", Mode::Dark, 0x123456), Ok(true));
+
+    // A project recorded as behind: what `File ▸ Update copied modules` acts on.
+    let body = std::fs::read_to_string(ThemeFile::path_in(&root)).unwrap();
+    maxx::projectfile::record(&root, "theme", 0, &body).unwrap();
+    assert_eq!(scaffold::outdated_modules(&root), vec!["theme".to_string()]);
+
+    scaffold::update_module(&root, "theme").expect("the update must go through");
+
+    let after = ThemeFile::load(&root).expect("still there");
+    let accent = after.swatches().iter().find(|s| s.name == "ACCENT").unwrap();
+    assert_eq!(accent.dark, 0x123456, "their colour survived the update");
+    assert_eq!(accent.light, 0x0969da, "and the one they did not touch is unchanged");
+    // And it settled: the fingerprint recorded is the one of what was written.
+    assert!(scaffold::outdated_modules(&root).is_empty());
+}
