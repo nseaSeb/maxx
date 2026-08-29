@@ -32,6 +32,22 @@ pub fn from_colour(colour: Hsla) -> u32 {
 }
 
 impl Workspace {
+    /// Whether this inspector heading is folded away.
+    pub(crate) fn is_folded(&self, group: crate::registry::Group) -> bool {
+        self.folded.contains(&group)
+    }
+
+    /// Folds a heading, or opens it.
+    pub(crate) fn toggle_group(&mut self, group: crate::registry::Group, cx: &mut Context<Self>) {
+        match self.folded.iter().position(|folded| *folded == group) {
+            Some(index) => {
+                self.folded.remove(index);
+            }
+            None => self.folded.push(group),
+        }
+        cx.notify();
+    }
+
     /// The project component a node was built from, if it is one.
     ///
     /// Matched on the constructor path, the way `registry::of` matches the

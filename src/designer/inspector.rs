@@ -18,6 +18,44 @@ use super::canvas::thumbnail;
 use super::section_title;
 
 impl Workspace {
+    /// One heading of the inspector, and the count it hides when folded.
+    ///
+    /// The count is what makes a folded heading worth reading: `Appearance 5`
+    /// says there is something under it, where a bare title says only that the
+    /// heading exists.
+    fn render_group_heading(
+        &self,
+        group: registry::Group,
+        count: usize,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let folded = self.is_folded(group);
+        h_flex()
+            .id(SharedString::from(format!("group-{group:?}")))
+            .px_3()
+            .py_1p5()
+            .gap_2()
+            .items_center()
+            .border_t_1()
+            .border_color(theme::border())
+            .cursor_pointer()
+            .hover(|this| this.bg(theme::hover_bg()))
+            .child(div().w(px(10.)).text_xs().text_color(theme::text_muted()).child(if folded {
+                "\u{25b8}"
+            } else {
+                "\u{25be}"
+            }))
+            .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(crate::tr(group.label())))
+            .child(
+                div()
+                    .ml_auto()
+                    .text_xs()
+                    .text_color(theme::text_muted())
+                    .child(SharedString::from(count.to_string())),
+            )
+            .on_click(cx.listener(move |this, _, _, cx| this.toggle_group(group, cx)))
+    }
+
     /// One builder method of a project component, as a row of the inspector.
     fn render_brick_prop(
         &self,
@@ -77,8 +115,25 @@ impl Workspace {
             }
         }
         if let Some(spec) = spec {
-            for prop in registry::props(spec) {
-                rows.push(self.render_prop(node, spec, prop, cx).into_any_element());
+            // Under headings rather than in one run: twenty rows in the order
+            // the catalogue happens to declare them is a list you read from the
+            // top every time, and folding what you are not working on is the
+            // whole point of naming them.
+            for group in registry::Group::ALL {
+                let of_group: Vec<_> = registry::props(spec)
+                    .into_iter()
+                    .filter(|prop| registry::group_of(prop) == group)
+                    .collect();
+                if of_group.is_empty() {
+                    continue;
+                }
+                rows.push(self.render_group_heading(group, of_group.len(), cx).into_any_element());
+                if self.is_folded(group) {
+                    continue;
+                }
+                for prop in of_group {
+                    rows.push(self.render_prop(node, spec, prop, cx).into_any_element());
+                }
             }
 
             // Everything the model carries and no property owns. Shown rather

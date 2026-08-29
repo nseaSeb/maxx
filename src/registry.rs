@@ -156,6 +156,124 @@ pub struct Prop {
     pub kind: Kind,
 }
 
+/// The heading a property is shown under in the inspector.
+///
+/// Five, and no more: a sixth would be a heading nobody scans past. The order
+/// they are declared in is the order they are drawn — what a node *is* before
+/// what it *looks like*, and what it *does* last.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Group {
+    /// Where it sits and how it takes room.
+    Layout,
+    /// The air around and inside it.
+    Spacing,
+    /// What it looks like.
+    Appearance,
+    /// The words it carries and how they are set.
+    Text,
+    /// What it does when someone uses it.
+    Action,
+}
+
+impl Group {
+    /// The five, in the order the inspector draws them.
+    pub const ALL: [Group; 5] =
+        [Group::Layout, Group::Spacing, Group::Appearance, Group::Text, Group::Action];
+
+    /// Translation key of the heading.
+    pub fn label(self) -> &'static str {
+        match self {
+            Group::Layout => "group.layout",
+            Group::Spacing => "group.spacing",
+            Group::Appearance => "group.appearance",
+            Group::Text => "group.text",
+            Group::Action => "group.action",
+        }
+    }
+}
+
+/// Which heading each property belongs under.
+///
+/// A table keyed on the label rather than a field on [`Prop`], and the reason is
+/// that the label already *is* the property's identity: `prop.gap` means one
+/// thing wherever it appears, so two entries of the catalogue naming it want the
+/// same heading. A field would have asked the same question seventy-one times
+/// and let two answers disagree.
+///
+/// `tests/catalogue.rs` holds every label of the catalogue to this table, so a
+/// property added without a heading fails there rather than turning up under
+/// whatever the fallback happens to be.
+const GROUPS: &[(&str, Group)] = &[
+    // Where it sits and how it takes room.
+    ("prop.align", Group::Layout),
+    ("prop.axis", Group::Layout),
+    ("prop.fit", Group::Layout),
+    ("prop.flex", Group::Layout),
+    ("prop.height", Group::Layout),
+    ("prop.scroll", Group::Layout),
+    ("prop.scrollbar", Group::Layout),
+    ("prop.size", Group::Layout),
+    ("prop.width", Group::Layout),
+    // The air around and inside it.
+    ("prop.gap", Group::Spacing),
+    ("prop.padding", Group::Spacing),
+    // What it looks like.
+    ("prop.background", Group::Appearance),
+    ("prop.checked", Group::Appearance),
+    ("prop.count", Group::Appearance),
+    ("prop.icon", Group::Appearance),
+    ("prop.max", Group::Appearance),
+    ("prop.on", Group::Appearance),
+    ("prop.outline", Group::Appearance),
+    ("prop.rounded", Group::Appearance),
+    ("prop.rounded_full", Group::Appearance),
+    ("prop.secondary", Group::Appearance),
+    ("prop.selected", Group::Appearance),
+    ("prop.source", Group::Appearance),
+    ("prop.value", Group::Appearance),
+    ("prop.variant", Group::Appearance),
+    // The words it carries and how they are set.
+    ("prop.bound_field", Group::Text),
+    ("prop.href", Group::Text),
+    ("prop.label", Group::Text),
+    ("prop.message", Group::Text),
+    ("prop.text", Group::Text),
+    ("prop.text_color", Group::Text),
+    ("prop.text_size", Group::Text),
+    ("prop.title", Group::Text),
+    ("prop.tooltip", Group::Text),
+    ("prop.weight", Group::Text),
+    // What it does when someone uses it.
+    ("prop.action", Group::Action),
+    ("prop.disabled", Group::Action),
+    // The element's own name, which is what a handler and a tooltip hang on.
+    ("prop.id", Group::Action),
+];
+
+/// The heading this property belongs under.
+///
+/// `Appearance` for a label the table does not know — a middle ground rather
+/// than a section of its own, so a property added without an answer here is
+/// merely misfiled and never invisible. The test is what makes sure that never
+/// ships.
+pub fn group_of(prop: &Prop) -> Group {
+    GROUPS
+        .iter()
+        .find(|(label, _)| *label == prop.label)
+        .map(|(_, group)| *group)
+        .unwrap_or(Group::Appearance)
+}
+
+/// Whether this property is filed on purpose rather than by the fallback.
+pub fn has_group(prop: &Prop) -> bool {
+    GROUPS.iter().any(|(label, _)| *label == prop.label)
+}
+
+/// Every label the table files, for the test that holds the two together.
+pub fn grouped_labels() -> Vec<&'static str> {
+    GROUPS.iter().map(|(label, _)| *label).collect()
+}
+
 /// One entry of the catalogue.
 #[derive(Clone, Copy, Debug)]
 pub struct Spec {

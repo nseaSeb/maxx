@@ -104,6 +104,21 @@ designer.on:
 designer.off:
   en: "Off"
   fr: "Désactivé"
+group.layout:
+  en: "Layout"
+  fr: "Mise en page"
+group.spacing:
+  en: "Spacing"
+  fr: "Espacement"
+group.appearance:
+  en: "Appearance"
+  fr: "Apparence"
+group.text:
+  en: "Text"
+  fr: "Texte"
+group.action:
+  en: "Action"
+  fr: "Action"
 designer.catalogue:
   en: "From the catalogue"
   fr: "Du catalogue"

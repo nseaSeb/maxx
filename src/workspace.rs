@@ -211,6 +211,12 @@ pub struct Workspace {
     watch_task: Option<Task<()>>,
     /// The watcher itself, kept alive here: dropped, it stops watching.
     watcher: Option<notify::RecommendedWatcher>,
+    /// The inspector headings someone has folded away.
+    ///
+    /// Folded, not shown: an empty set is every heading open, which is what a
+    /// first launch should look like. Kept in memory only, like the panel
+    /// widths — a preference file per fold would be a write per click.
+    folded: Vec<crate::registry::Group>,
     /// Inspector fields for a component of the project, keyed by method name.
     ///
     /// Beside `prop_inputs` and not inside it: that one is keyed by the address
@@ -459,6 +465,7 @@ impl Workspace {
             run_inputs: Vec::new(),
             palette_inputs: Vec::new(),
             palette_synced: None,
+            folded: Vec::new(),
             brick_inputs: Vec::new(),
             bricks,
             preview,

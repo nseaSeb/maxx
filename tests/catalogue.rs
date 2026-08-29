@@ -145,3 +145,42 @@ fn the_tooltip_example_keeps_the_id_first() {
     let tooltip = line.find(".tooltip(").unwrap_or(0);
     assert!(id < tooltip, "the id has to come first: {line}");
 }
+
+/// Every property of the catalogue is filed under a heading, deliberately.
+///
+/// The table is keyed on the label, so a property added without an answer there
+/// falls back to `Appearance` — misfiled rather than invisible, which is the
+/// right failure but still a failure. This is what says so before it ships.
+#[test]
+fn every_property_of_the_catalogue_has_a_heading() {
+    let mut unfiled: Vec<&str> = Vec::new();
+    for spec in CATALOGUE {
+        for prop in maxx::registry::props(spec) {
+            if !maxx::registry::has_group(prop) && !unfiled.contains(&prop.label) {
+                unfiled.push(prop.label);
+            }
+        }
+    }
+    assert!(
+        unfiled.is_empty(),
+        "no heading for: {}\nAdd them to registry::GROUPS.",
+        unfiled.join(", ")
+    );
+}
+
+/// And the table names nothing the catalogue does not.
+///
+/// The other half: a label left behind by a rename is a line nobody will ever
+/// read again, and the sign that the property it filed has moved.
+#[test]
+fn the_heading_table_names_no_property_that_is_gone() {
+    let mut known: Vec<&str> = Vec::new();
+    for spec in CATALOGUE {
+        for prop in maxx::registry::props(spec) {
+            known.push(prop.label);
+        }
+    }
+    let orphans: Vec<&str> =
+        maxx::registry::grouped_labels().into_iter().filter(|l| !known.contains(l)).collect();
+    assert!(orphans.is_empty(), "filed but not in the catalogue: {}", orphans.join(", "));
+}
