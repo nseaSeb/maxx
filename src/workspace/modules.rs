@@ -36,7 +36,15 @@ impl Workspace {
             return;
         };
         let root = project.root.clone();
-        let path = root.join(format!("src/{module}.rs"));
+        // A library is a directory, everything else a file. Asked here rather
+        // than assumed: a wrong path makes `had_file` always false — so adding
+        // twice says "added" twice — and leaves the panel selecting something
+        // that is not there, which `Open in editor` then hands to Zed.
+        let path = if crate::scaffold::module_is_directory(module) {
+            root.join(format!("src/{module}"))
+        } else {
+            root.join(format!("src/{module}.rs"))
+        };
         let declaration = format!("mod {module};");
         let had_file = path.exists();
         let had_declaration = std::fs::read_to_string(root.join("src/main.rs"))

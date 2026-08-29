@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use maxx::scaffold::Template;
-use maxx::{parser, scaffold, view::View, workspace};
+use maxx::{parser, projectfile, scaffold, view::View, workspace};
 
 fn scratch(name: &str) -> PathBuf {
     let dir =
@@ -1534,4 +1534,57 @@ fn a_name_already_taken_or_not_a_name_at_all_is_refused() {
     // The same name is not a rename, and is not an error either.
     assert!(scaffold::rename_view(&root, "view_1", "view_1").unwrap().is_empty());
     assert!(root.join("src/ui/view_1.rs").exists());
+}
+
+/// The library is seen by the machinery that keeps copied modules up to date.
+///
+/// The defect this guards against had no symptom: `outdated_modules` looked for
+/// `src/components.rs`, which a library never is, so the read failed and the
+/// module was silently skipped. A brick fixed here would never have reached a
+/// project — which is the exact debt `maxx.toml` exists to pay.
+#[test]
+fn the_library_is_visible_to_the_update_machinery() {
+    let root = scratch("maxx_components_outdated");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::add_components_module(&root).unwrap();
+
+    // Recorded at an older version than maxx now writes: the project is behind.
+    let body = scaffold::module_body("components").expect("the library has a body");
+    projectfile::record(&root, "components", 0, &body).unwrap();
+    assert_eq!(
+        scaffold::outdated_modules(&root),
+        vec!["components".to_string()],
+        "a library behind its version must be offered the update"
+    );
+
+    scaffold::update_module(&root, "components").expect("the update must go through");
+    assert!(scaffold::outdated_modules(&root).is_empty(), "and must settle it");
+}
+
+/// A brick maxx adds later is declared, not left as a file nothing compiles.
+#[test]
+fn a_brick_added_later_is_declared_in_the_module_that_holds_them() {
+    let root = scratch("maxx_components_declare");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::add_components_module(&root).unwrap();
+
+    // What a project written by an older maxx looks like: the newest brick has
+    // no file and no declaration.
+    let mod_path = root.join("src/components/mod.rs");
+    let theirs = std::fs::read_to_string(&mod_path).unwrap();
+    let older: String = theirs
+        .lines()
+        .filter(|line| !line.contains("empty_state"))
+        .map(|line| format!("{line}\n"))
+        .collect();
+    std::fs::write(&mod_path, format!("{older}// leur ligne à eux\n")).unwrap();
+    std::fs::remove_file(root.join("src/components/empty_state.rs")).unwrap();
+
+    scaffold::add_components_module(&root).expect("adding again must repair it");
+
+    let now = std::fs::read_to_string(&mod_path).unwrap();
+    assert!(root.join("src/components/empty_state.rs").exists(), "the file came back");
+    assert!(now.contains("mod empty_state;"), "and is declared:\n{now}");
+    assert!(now.contains("pub use empty_state::EmptyState;"), "and re-exported:\n{now}");
+    assert!(now.contains("// leur ligne à eux"), "their line survived:\n{now}");
 }

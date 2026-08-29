@@ -145,6 +145,14 @@ impl ThemeFile {
         &self.swatches
     }
 
+    /// The roles as `(name, dark, light)`, in file order.
+    ///
+    /// The whole state of the palette, for a caller that has to tell whether
+    /// anything moved — including a value written by someone else.
+    pub fn roles(&self) -> Vec<(String, u32, u32)> {
+        self.swatches.iter().map(|s| (s.name.clone(), s.dark, s.light)).collect()
+    }
+
     /// The names of the roles, in file order.
     ///
     /// What the pickers are built from, so what tells whether they have to be

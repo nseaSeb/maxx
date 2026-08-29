@@ -25,6 +25,7 @@ pub use assets::add_assets_module;
 pub use assets::{IMAGE_DIRECTORY, import_asset};
 pub use components::add_components_module;
 pub use menubar::{add_menu_bar, remove_menu_bar};
+pub use modules::is_directory as module_is_directory;
 pub use modules::{
     MODULES, module_body, module_version, outdated_modules, remove_module, update_module,
 };

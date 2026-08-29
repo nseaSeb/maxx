@@ -82,8 +82,7 @@ pub fn outdated_modules(root: &Path) -> Vec<String> {
         if recorded.version >= *current {
             continue;
         }
-        let path = root.join(format!("src/{module}.rs"));
-        let Ok(body) = std::fs::read_to_string(&path) else {
+        let Some(body) = installed_body(root, module) else {
             continue;
         };
         if recorded.holds(&body) {
@@ -91,6 +90,31 @@ pub fn outdated_modules(root: &Path) -> Vec<String> {
         }
     }
     outdated
+}
+
+/// Whether a module is a directory rather than a single file.
+///
+/// `components` is a library, so it is `src/components/` with one file per
+/// brick. Everything else is one `src/<name>.rs`. Read here rather than tested
+/// at each site: three functions asked the question and all three assumed the
+/// answer, which is how the library ended up invisible to the update it exists
+/// to receive.
+pub fn is_directory(module: &str) -> bool {
+    module == "components"
+}
+
+/// What the project currently holds for this module, in the shape its
+/// fingerprint was taken over.
+///
+/// `None` when it is not there at all. For a directory, the same concatenation
+/// [`super::components::module_body`] builds — a library is updated whole or
+/// not at all, since two versions of the same idea in one project is worse than
+/// an old one.
+pub(super) fn installed_body(root: &Path, module: &str) -> Option<String> {
+    if is_directory(module) {
+        return super::components::installed_body(root);
+    }
+    std::fs::read_to_string(root.join(format!("src/{module}.rs"))).ok()
 }
 
 /// Replaces a module with maxx's current version.
@@ -109,16 +133,24 @@ pub fn update_module(root: &Path, module: &str) -> io::Result<()> {
         ));
     };
 
-    let path = root.join(format!("src/{module}.rs"));
-    let current = std::fs::read_to_string(&path)?;
+    let Some(current) = installed_body(root, module) else {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("{module} is not in this project"),
+        ));
+    };
     if !recorded.holds(&current) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("src/{module}.rs has been modified — maxx does not replace it"),
+            format!("{module} has been modified — maxx does not replace it"),
         ));
     }
 
-    std::fs::write(&path, &body)?;
+    if is_directory(module) {
+        super::components::rewrite(root)?;
+    } else {
+        std::fs::write(root.join(format!("src/{module}.rs")), &body)?;
+    }
     // The build script is the other half of the assets module, and `maxx.toml`
     // does not track it: a new `assets.rs` on top of a stale `build.rs` is a
     // project that stops compiling. Rewritten only while it is still maxx's

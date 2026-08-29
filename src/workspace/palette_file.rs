@@ -74,11 +74,23 @@ impl Workspace {
         let Some(file) = self.palette.as_mut() else {
             return;
         };
-        let before = file.role_names();
+        // The whole list, values included, and not just the names. `set`
+        // re-reads the file, so it silently absorbs whatever was written there
+        // since — a colour changed in Zed between the watcher's last tick and
+        // this click. Comparing names alone leaves that picker showing the
+        // colour from before the edit, for good: the later `reload` finds the
+        // source already up to date and never rebuilds anything.
+        let before = file.roles();
         let outcome = file.set(name, mode, value);
-        // `set` re-reads, so the roles it holds may have changed while the page
-        // was open. The pickers are built from that list, so they follow it.
-        if file.role_names() != before {
+        let after = file.roles();
+        // Everything except the one just written: that one moved on purpose,
+        // and its picker is the one being used.
+        let elsewhere = before.len() != after.len()
+            || before
+                .iter()
+                .zip(&after)
+                .any(|(was, now)| was != now && !(was.0 == name && now.0 == name));
+        if elsewhere {
             self.palette_synced = None;
         }
         // The canvas paints from its own copy, so a colour just written has to

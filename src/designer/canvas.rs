@@ -406,13 +406,15 @@ pub(super) fn node_preview(
                     .size(px(16.))
                     .rounded_sm()
                     .border_1()
-                    .border_color(theme::border())
+                    .border_color(preview.border())
+                    // The chip stands for "a colour", not for a role of the
+                    // project: it is a placeholder and keeps maxx's accent.
                     .bg(theme::accent()),
             )
             .child(
                 div()
                     .text_xs()
-                    .text_color(theme::text_muted())
+                    .text_color(preview.text_muted())
                     .child(SharedString::from(call_text(node, "label", ""))),
             )
             .into_any_element(),
@@ -425,9 +427,9 @@ pub(super) fn node_preview(
             .items_center()
             .rounded_md()
             .border_1()
-            .border_color(theme::border())
-            .bg(theme::bg())
-            .text_color(theme::text_muted())
+            .border_color(preview.border())
+            .bg(preview.bg())
+            .text_color(preview.text_muted())
             .child(SharedString::from(format!("{}", text(0))))
             .into_any_element(),
         _ => div()
