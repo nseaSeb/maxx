@@ -233,7 +233,7 @@ impl Workspace {
         // would hide the file that did open.
         self.message = None;
         self.code = Some(file);
-        self.show_designer();
+        self.show(Center::Code);
         self.code_synced = None;
         self.code_revision = self.revision;
     }
@@ -246,13 +246,17 @@ impl Workspace {
         if self.discard_menu_edits(cx) {
             return;
         }
-        self.show_designer();
+        // Brings it forward — the file was already there, under whatever was
+        // covering it. Written as `show_designer` this closed the reader
+        // instead, which is the opposite of what the tab is for.
+        self.show(Center::Code);
         self.message = None;
         cx.notify();
     }
 
     /// Closes the code reader.
     pub(crate) fn close_code(&mut self, cx: &mut Context<Self>) {
+        self.code = None;
         self.show_designer();
         self.code_input = None;
         self.code_synced = None;
@@ -262,6 +266,7 @@ impl Workspace {
     /// Drops the reader when the file it holds is `gone`.
     pub(super) fn forget_code(&mut self, gone: impl Fn(&std::path::Path) -> bool) {
         if self.code().is_some_and(|file| gone(&file.path)) {
+            self.code = None;
             self.show_designer();
             self.code_input = None;
             self.code_synced = None;

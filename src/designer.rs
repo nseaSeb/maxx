@@ -14,7 +14,7 @@ use crate::theme;
 use gpui::Window;
 use gpui_component::resizable::{h_resizable, resizable_panel, v_resizable};
 
-use crate::workspace::{Workspace, fillable};
+use crate::workspace::{Center, Workspace, fillable};
 
 mod canvas;
 mod inspector;
@@ -46,40 +46,30 @@ impl Workspace {
 
     /// The designer, or an invitation to open a view.
     pub(crate) fn render_designer(&self, cx: &mut Context<Self>) -> AnyElement {
-        if self.preferences() {
-            // The tab strip stays: it is the way back to an open view.
+        // Matched, not a chain of `if`s asking each mode whether it has
+        // something. That chain is how the reader came to be drawn for as long
+        // as a file was open, whatever the mode said — and how the tab strip,
+        // drawn above every one of these precisely to be the way back, stopped
+        // being one. A `match` on the mode cannot be written from a document,
+        // and a mode added later has to be answered here.
+        //
+        // The tab strip stays in every arm: it is the way back to an open view.
+        let middle = match self.center() {
+            Center::Preferences => Some(self.render_preferences(cx)),
+            Center::Palette(_) => Some(self.render_palette_editor(cx).into_any_element()),
+            Center::Menus(_) => Some(self.render_menu_editor(cx)),
+            // The one arm with a condition, and it is about the document rather
+            // than the mode: asked to show a reader holding nothing, the middle
+            // shows the view instead of an empty frame.
+            Center::Code => self.code().is_some().then(|| self.render_code(cx)),
+            Center::Designer => None,
+        };
+        if let Some(middle) = middle {
             return v_flex()
                 .flex_1()
                 .overflow_hidden()
                 .child(self.render_tabs(cx))
-                .child(self.render_preferences(cx))
-                .into_any_element();
-        }
-        if self.palette().is_some() {
-            // The tab strip stays: it is the way back to an open view.
-            return v_flex()
-                .flex_1()
-                .overflow_hidden()
-                .child(self.render_tabs(cx))
-                .child(self.render_palette_editor(cx))
-                .into_any_element();
-        }
-        if self.menu_file().is_some() {
-            // The tab strip stays: it is the way back to an open view.
-            return v_flex()
-                .flex_1()
-                .overflow_hidden()
-                .child(self.render_tabs(cx))
-                .child(self.render_menu_editor(cx))
-                .into_any_element();
-        }
-        if self.code().is_some() {
-            // The tab strip stays: it is the way back to an open view.
-            return v_flex()
-                .flex_1()
-                .overflow_hidden()
-                .child(self.render_tabs(cx))
-                .child(self.render_code(cx))
+                .child(middle)
                 .into_any_element();
         }
         if self.view().is_none() {

@@ -343,6 +343,14 @@ pub enum Center {
     Menus(MenuFile),
     /// The project's palette, `src/theme.rs`.
     Palette(crate::themefile::ThemeFile),
+    /// The reader, showing the file the workspace holds.
+    ///
+    /// Carries nothing: the file is a **document** and lives beside this, so it
+    /// survives a mode that covers it. What this variant says is only *which*
+    /// of them the middle is showing — and saying it is what was missing, since
+    /// a middle that showed the reader whenever a file was open had no way back
+    /// to the view.
+    Code,
     /// maxx's own settings.
     Preferences,
 }
@@ -376,6 +384,18 @@ impl Workspace {
             Center::Menus(menus) => Some(menus),
             _ => None,
         }
+    }
+
+    /// What the middle shows, for the one place that draws it.
+    pub fn center(&self) -> &Center {
+        &self.center
+    }
+
+    /// Whether the reader is what the middle shows.
+    ///
+    /// Both halves: the mode asks for it, and there has to be a file to show.
+    pub fn showing_code(&self) -> bool {
+        matches!(self.center, Center::Code) && self.code.is_some()
     }
 
     /// The file in the reader, when one is open.

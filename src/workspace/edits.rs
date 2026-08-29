@@ -476,6 +476,11 @@ mod tests {
                 workspace.menu_file().is_some(),
                 workspace.palette().is_some(),
                 workspace.preferences(),
+                // Whether the reader is SHOWN, not whether it holds a file. The
+                // two came apart and only the second was ever asserted: a middle
+                // that showed the reader for as long as a file was open had no
+                // way back to the view, and this test said nothing.
+                workspace.showing_code(),
             ]
             .iter()
             .filter(|on| **on)
@@ -492,7 +497,8 @@ mod tests {
 
             workspace.select_file(root.join("src/main.rs"), cx);
             assert!(workspace.code().is_some(), "the reader holds the file");
-            assert_eq!(showing(workspace), 0, "and it is not a mode: nothing covers it");
+            assert!(workspace.showing_code(), "and shows it");
+            assert_eq!(showing(workspace), 1);
 
             // The reader is a document, so a mode covers it and does not
             // destroy it. Made a variant of `Center`, `⌘,` twice left the
@@ -500,18 +506,17 @@ mod tests {
             workspace.toggle_preferences(cx);
             assert!(workspace.preferences(), "the settings cover it");
             assert!(workspace.code().is_some(), "the file is still there underneath");
-            workspace.toggle_preferences(cx);
-            assert!(!workspace.preferences());
-            assert!(workspace.code().is_some(), "and comes back when the cover lifts");
+            assert_eq!(showing(workspace), 1, "covered, not doubled");
 
-            // Clicking the read tab brings it forward rather than closing it.
-            workspace.toggle_preferences(cx);
+            // The gesture that was broken: from the reader, the tab strip has to
+            // be the way back to the view.
             workspace.activate_code(cx);
-            assert!(!workspace.preferences(), "the tab left the settings");
-            assert!(workspace.code().is_some(), "and kept the file");
+            assert!(workspace.showing_code(), "the read tab brings it forward");
+            workspace.activate_view(0, cx);
+            assert!(!workspace.showing_code(), "and the view tab comes back to the view");
+            assert!(workspace.code().is_some(), "without throwing the file away");
+            assert_eq!(showing(workspace), 0);
 
-            // The gesture the reviewer found broken: the tab strip is drawn
-            // above every mode precisely so it is the way back.
             workspace.select_file(root.join("src/theme.rs"), cx);
             assert!(workspace.palette().is_some());
             workspace.activate_view(0, cx);
