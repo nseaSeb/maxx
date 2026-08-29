@@ -24,22 +24,39 @@ parseur servent à garantir.
 | `model.rs` | l'arbre : une base, une liste ordonnée d'appels, des arguments, des nœuds opaques |
 | `parser.rs` | texte Rust vers modèle ; repérage des marqueurs, découpe textuelle |
 | `codegen.rs` | modèle vers texte Rust |
-| `registry.rs` | le catalogue de composants — le seul endroit à étendre pour en ajouter un |
+| `registry.rs` | les types du catalogue, la recherche par identifiant, l'instanciation |
+| `registry/catalogue.rs` | le catalogue lui-même — le seul endroit à étendre pour ajouter un composant |
+| `registry/props.rs` | ce que l'inspecteur montre, lit et a le droit d'écrire |
+| `registry/state.rs` | les champs d'état, les gestionnaires, ce qu'une copie fait renommer |
+| `registry/ids.rs` | les identifiants d'élément que gpui réclame |
+| `registry/scrollbar.rs` | la boîte qui défile et sa barre : une chose au canvas, deux en source |
 | `view.rs` | une vue ouverte : chargement, enregistrement, insertion de champs d'état |
 | `menu_model.rs` | l'équivalent du modèle, pour une barre de menus |
 | `menufile.rs` | l'équivalent de `view.rs`, pour `src/menus.rs` |
-| `scaffold.rs` | les gabarits : projet, vue, barre de menus, et leur câblage |
+| `scaffold.rs` | la création d'un projet et ses trois formes |
+| `scaffold/views.rs` | créer une vue, la renommer, désigner celle qui ouvre la fenêtre |
+| `scaffold/modules.rs` | les modules copiés : versions, empreintes, mise à jour |
+| `scaffold/{system,settings,theme,assets,window}.rs` | un module copié et son gabarit |
+| `scaffold/menubar.rs` | la barre de menus écrite dans le projet |
+| `scaffold/templates.rs` | les coquilles, compilées par `examples/shapes.rs` |
 | `project.rs` | l'arborescence de fichiers montrée dans l'explorateur |
 | `workspace.rs` | la fenêtre : l'état, l'ouverture et la fermeture d'un projet |
 | `workspace/views.rs` | les onglets, la lecture et l'écriture d'une vue |
-| `workspace/inspector.rs` | la sélection, les propriétés, l'état, l'insertion, l'annulation |
+| `workspace/inspector.rs` | la sélection, les propriétés, les champs d'état, la saisie |
+| `workspace/edits.rs` | déposer, dupliquer, coller, supprimer, et les points de reprise |
+| `workspace/handlers.rs` | le gestionnaire d'un composant : ouvert, écrit, atteint dans l'éditeur |
 | `workspace/explorer.rs` | l'arbre de fichiers, sa sélection, ses suppressions |
 | `workspace/code.rs` | le lecteur de code : n'importe quel fichier texte, en lecture seule |
 | `workspace/menus.rs` | l'éditeur de barre de menus |
 | `workspace/chrome.rs` | la coque : titre, écran d'accueil, barre d'état, `Render` |
 | `workspace/process.rs` | `cargo run` et le panneau de sortie |
 | `workspace/modules.rs` | les modules copiés dans le projet |
-| `designer.rs` | le canvas, la structure, l'inspecteur, la palette |
+| `designer.rs` | ce qui tient les panneaux ensemble : onglets, bande latérale, fantôme de glisser |
+| `designer/canvas.rs` | la vue telle qu'elle sera dessinée |
+| `designer/tree.rs` | la structure, et l'endroit où un nœud déposé atterrit |
+| `designer/inspector.rs` | les propriétés, et ce que la saisie réécrit dans l'arbre |
+| `designer/menus.rs` | l'éditeur de barre de menus |
+| `designer/palette.rs` | les composants offerts, et la recherche qui en trouve un |
 | `preferences.rs` | l'écran de réglages |
 | `about.rs` | la fenêtre À propos |
 | `settings.rs` | ce que maxx retient d'un lancement à l'autre |
@@ -305,7 +322,7 @@ une troisième fois.
 
 Symétrie nécessaire : supprimer `src/<module>.rs` depuis l'explorateur retire
 sa ligne `mod` de `main.rs`, et avec elle le câblage que le module s'était
-donné — la table `scaffold::WIRING` dit, par module, les instructions entières
+donné — la table `scaffold::modules::WIRING` dit, par module, les instructions entières
 à retirer et les fragments à ôter de la ligne qui les porte. Sans quoi
 supprimer un fichier casse la compilation, ce qui est l'inverse du but.
 
@@ -469,7 +486,7 @@ l'enregistrement n'y touche pas.
 
 maxx passe à `rustfmt`, avec une seule dérogation : `use_small_heuristics =
 "Max"`, qui laisse une expression courte tenir sur sa ligne. C'est ce qui
-préserve les tables de `registry.rs`, le fichier qu'on invite les autres à
+préserve les tables de `registry/catalogue.rs`, le fichier qu'on invite les autres à
 étendre — y lire une liste de styles à raison d'un mot par ligne serait une
 punition. Le reste est le rustfmt par défaut.
 
@@ -496,7 +513,7 @@ silencieuse.
 
 ## Où brancher quoi
 
-- **Un composant de plus** : `registry.rs`, une entrée. Rien d'autre à toucher.
+- **Un composant de plus** : `registry/catalogue.rs`, une entrée. Rien d'autre à toucher.
   S'il a besoin d'une entité que la vue possède — un champ texte, une liste
   déroulante — l'entrée porte en plus un `StateSpec` : le type du champ, ses
   imports, et l'expression que `new` lui donne. C'est tout ce que `view::save`
