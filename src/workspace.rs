@@ -203,6 +203,13 @@ pub struct Workspace {
     watch_task: Option<Task<()>>,
     /// The watcher itself, kept alive here: dropped, it stops watching.
     watcher: Option<notify::RecommendedWatcher>,
+    /// Inspector fields for a component of the project, keyed by method name.
+    ///
+    /// Beside `prop_inputs` and not inside it: that one is keyed by the address
+    /// of a `&'static Prop`, which a component read at runtime does not have and
+    /// could only be given by leaking one per read — and the watcher re-reads on
+    /// every file event.
+    brick_inputs: Vec<(String, Entity<InputState>)>,
     /// The components the project itself holds, offered in the palette.
     pub bricks: Vec<crate::bricks::Brick>,
     /// The project's colours, for the canvas to paint its content with.
@@ -438,6 +445,7 @@ impl Workspace {
             run_inputs: Vec::new(),
             palette_inputs: Vec::new(),
             palette_synced: None,
+            brick_inputs: Vec::new(),
             bricks,
             preview,
             run_synced: None,

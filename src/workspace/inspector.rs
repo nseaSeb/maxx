@@ -70,6 +70,7 @@ impl Workspace {
 
         self.synced = key;
         self.prop_inputs.clear();
+        self.brick_inputs.clear();
 
         // The selected node is cloned rather than borrowed: `self.view()`
         // borrows the whole workspace, and the loop below needs
@@ -78,6 +79,29 @@ impl Workspace {
             return;
         };
         let Some(spec) = crate::registry::of(&node) else {
+            // Not the catalogue's, but possibly the project's own. One field per
+            // builder method that takes a string; a method taking none is a
+            // switch and needs no field.
+            if let Some(brick) = self.brick_of(&node).cloned() {
+                for prop in brick.props.iter().filter(|prop| prop.text) {
+                    let value = node
+                        .call(&prop.method)
+                        .and_then(|call| call.args.first())
+                        .and_then(|arg| arg.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let method = prop.method.clone();
+                    let state = cx.new(|cx| InputState::new(window, cx).default_value(value));
+                    cx.subscribe(&state, move |this, state, event: &InputEvent, cx| {
+                        if matches!(event, InputEvent::Change) {
+                            let value = state.read(cx).value().to_string();
+                            this.edit_brick_prop(&method, &value, cx);
+                        }
+                    })
+                    .detach();
+                    self.brick_inputs.push((prop.method.clone(), state));
+                }
+            }
             return;
         };
 

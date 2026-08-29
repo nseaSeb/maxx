@@ -98,6 +98,12 @@ designer.add:
 designer.project_components:
   en: "Of this project"
   fr: "De ce projet"
+designer.on:
+  en: "On"
+  fr: "Activé"
+designer.off:
+  en: "Off"
+  fr: "Désactivé"
 designer.catalogue:
   en: "From the catalogue"
   fr: "Du catalogue"

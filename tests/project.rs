@@ -512,14 +512,28 @@ fn a_brick_dropped_from_the_palette_compiles() {
 
     let path = root.join("src/ui/home.rs");
     let mut view = View::load(&path).expect("the fresh view must read back");
+    let mut props = 0;
     for brick in &bricks {
-        let node = maxx::parser::parse_expr(&brick.expression())
+        let mut node = maxx::parser::parse_expr(&brick.expression())
             .unwrap_or_else(|error| panic!("{}: {error}", brick.type_name));
         assert!(!node.is_opaque(), "{}", brick.expression());
+        // Every builder the inspector offers, written the way it writes it: a
+        // property read out of somebody's source and written back onto the node
+        // is a call maxx invents, and `.subtitle("x")` on a type that has no
+        // `subtitle` is a project that stops compiling on a line maxx wrote.
+        for prop in &brick.props {
+            props += 1;
+            if prop.text {
+                node.set_call(&prop.method, maxx::model::Arg::Str("Text".into()));
+            } else {
+                node.set_call_bare(&prop.method);
+            }
+        }
         let at = vec![view.root.children.len()];
         assert!(view.root.insert(&at, node));
         view.extra_imports.push(brick.import());
     }
+    assert!(props > 0, "the library must offer at least one property to check");
     view.save().expect("the view must save");
 
     let status = std::process::Command::new("cargo")

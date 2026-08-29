@@ -7,6 +7,7 @@
 
 use gpui::{AppContext as _, Context, Entity, Hsla, Rgba, SharedString, Window};
 use gpui_component::color_picker::{ColorPickerEvent, ColorPickerState};
+use gpui_component::input::InputState;
 use rust_i18n::t;
 
 use crate::themefile::{Mode, ThemeFile};
@@ -31,6 +32,69 @@ pub fn from_colour(colour: Hsla) -> u32 {
 }
 
 impl Workspace {
+    /// The project component a node was built from, if it is one.
+    ///
+    /// Matched on the constructor path, the way `registry::of` matches the
+    /// catalogue — and asked only after that one has said no, since a name the
+    /// catalogue answers to is never offered as a brick.
+    pub(crate) fn brick_of(&self, node: &crate::model::Node) -> Option<&crate::bricks::Brick> {
+        let path = node.base.path()?;
+        let type_name = path.strip_suffix("::new")?;
+        self.bricks.iter().find(|brick| brick.type_name == type_name)
+    }
+
+    /// The inspector field of one of that component's builder methods.
+    pub(crate) fn brick_input(&self, method: &str) -> Option<&Entity<InputState>> {
+        self.brick_inputs.iter().find(|(candidate, _)| candidate == method).map(|(_, state)| state)
+    }
+
+    /// Writes a builder method onto the selected node.
+    ///
+    /// An empty text takes the call away rather than writing `.subtitle("")`:
+    /// a builder not called is the shape a developer would have written, and it
+    /// is what the component's own default is for.
+    ///
+    /// No `revision` bump, like every other text field of the inspector: the
+    /// counter is what rebuilds these very boxes, and rebuilding one under the
+    /// caret is losing what is being typed into it.
+    pub(crate) fn edit_brick_prop(&mut self, method: &str, value: &str, cx: &mut Context<Self>) {
+        let Some(view) = self.view_mut() else {
+            return;
+        };
+        let selected = view.selected.clone();
+        if let Some(node) = view.root.at_mut(&selected) {
+            if value.trim().is_empty() {
+                node.remove_call(method);
+            } else {
+                node.set_call(method, crate::model::Arg::Str(value.to_string()));
+            }
+        }
+        cx.notify();
+    }
+
+    /// Turns a builder method that takes nothing on or off.
+    ///
+    /// Present or absent, which is the only two states such a method has. This
+    /// one *does* take a checkpoint and bump the revision: it is a click, not a
+    /// keystroke, so there is no caret to lose and every reason to make it
+    /// undoable.
+    pub(crate) fn toggle_brick_flag(&mut self, method: &str, cx: &mut Context<Self>) {
+        self.checkpoint();
+        let Some(view) = self.view_mut() else {
+            return;
+        };
+        let selected = view.selected.clone();
+        if let Some(node) = view.root.at_mut(&selected) {
+            if node.call(method).is_some() {
+                node.remove_call(method);
+            } else {
+                node.set_call_bare(method);
+            }
+        }
+        self.revision += 1;
+        cx.notify();
+    }
+
     /// Opens the palette new projects start from, creating it if it is not
     /// there yet.
     ///

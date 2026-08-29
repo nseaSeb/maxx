@@ -40,6 +40,22 @@ pub struct Brick {
     pub arity: usize,
     /// Whether `mod.rs` re-exports the type, which decides the `use` line.
     reexported: bool,
+    /// The builder methods the inspector can offer, in declaration order.
+    pub props: Vec<BrickProp>,
+}
+
+/// One `pub fn x(mut self, …) -> Self` of a component.
+///
+/// The shape *is* the property, which is the whole reason this works without a
+/// declaration: a builder method taking one string is a text field, one taking
+/// nothing is a switch — the call is there or it is not. Anything else is not
+/// offered, for the same reason a constructor maxx cannot fill is not.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BrickProp {
+    /// The method's name, which is also the call written on the node.
+    pub method: String,
+    /// Whether it takes a string. `false` is the switch.
+    pub text: bool,
 }
 
 impl Brick {
@@ -141,7 +157,7 @@ fn read_one(module: &str, source: &str) -> Option<Brick> {
     // The public struct that *has* the constructor, and not the first one the
     // file declares: a `pub struct CardStyle` written above `pub struct Card`
     // would otherwise be what the palette offered.
-    let (type_name, arity) = file.items.iter().find_map(|item| {
+    let (type_name, arity, props) = file.items.iter().find_map(|item| {
         let syn::Item::Impl(block) = item else {
             return None;
         };
@@ -149,6 +165,16 @@ fn read_one(module: &str, source: &str) -> Option<Brick> {
             return None;
         }
         let name = public.iter().find(|name| impl_of(block, name))?;
+        let props = block
+            .items
+            .iter()
+            .filter_map(|item| {
+                let syn::ImplItem::Fn(function) = item else {
+                    return None;
+                };
+                read_prop(function)
+            })
+            .collect();
         let arity = block.items.iter().find_map(|item| match item {
             syn::ImplItem::Fn(function)
                 if function.sig.ident == "new"
@@ -164,7 +190,7 @@ fn read_one(module: &str, source: &str) -> Option<Brick> {
             }
             _ => None,
         })?;
-        Some((name.clone(), arity))
+        Some((name.clone(), arity, props))
     })?;
 
     Some(Brick {
@@ -173,7 +199,43 @@ fn read_one(module: &str, source: &str) -> Option<Brick> {
         doc: first_doc_line(source),
         arity,
         reexported: false,
+        props,
     })
+}
+
+/// The property a builder method is, when it is one.
+///
+/// `pub fn x(mut self, …) -> Self` and nothing else. The receiver has to be
+/// `mut self` and the return `Self`: `pub fn label(&self) -> &str` is a reader,
+/// and writing `.label()` on the node would be nonsense.
+fn read_prop(function: &syn::ImplItemFn) -> Option<BrickProp> {
+    if !matches!(function.vis, syn::Visibility::Public(_)) || function.sig.ident == "new" {
+        return None;
+    }
+    let mut inputs = function.sig.inputs.iter();
+    // Taken by value, so the builder consumes and returns itself. A `&self`
+    // reads rather than builds, and writing `.label()` on the node for it would
+    // be nonsense.
+    let syn::FnArg::Receiver(receiver) = inputs.next()? else {
+        return None;
+    };
+    if quote::quote!(#receiver).to_string().contains('&') {
+        return None;
+    }
+    let syn::ReturnType::Type(_, returned) = &function.sig.output else {
+        return None;
+    };
+    if quote::quote!(#returned).to_string() != "Self" {
+        return None;
+    }
+
+    match (inputs.next(), inputs.next()) {
+        (None, _) => Some(BrickProp { method: function.sig.ident.to_string(), text: false }),
+        (Some(argument), None) if is_text(argument) => {
+            Some(BrickProp { method: function.sig.ident.to_string(), text: true })
+        }
+        _ => None,
+    }
 }
 
 /// Whether this parameter is one maxx knows how to write: a string.
@@ -271,6 +333,56 @@ mod tests {
         }
     }
 
+    /// The builder methods of maxx's own bricks are read as properties.
+    ///
+    /// The other half of the contract between the library and the reader: a
+    /// brick whose builder drifted out of the shape read here loses its
+    /// properties from the inspector, silently, and this is what says so.
+    #[test]
+    fn the_builders_of_maxx_s_bricks_are_read_as_properties() {
+        let read = |name: &str| {
+            let (module, body) = crate::scaffold::templates::COMPONENTS
+                .iter()
+                .find(|(module, _)| *module == name)
+                .expect(name);
+            read_one(module, body).expect(name)
+        };
+        let card = read("card");
+        assert_eq!(
+            card.props,
+            vec![BrickProp { method: "subtitle".into(), text: true }],
+            "a builder taking one string is a text field"
+        );
+        let toolbar = read("toolbar");
+        assert_eq!(
+            toolbar.props,
+            vec![BrickProp { method: "separated".into(), text: false }],
+            "a builder taking nothing is a switch"
+        );
+    }
+
+    /// What is not a builder is not a property.
+    #[test]
+    fn a_reader_is_not_a_property() {
+        let source = "\
+pub struct Card;
+impl Card {
+    pub fn new() -> Self { Card }
+    pub fn label(&self) -> &str { \"\" }
+    fn hidden(mut self, v: String) -> Self { self }
+    pub fn size(mut self, v: usize) -> Self { self }
+    pub fn both(mut self, a: String, b: String) -> Self { self }
+    pub fn title(mut self, v: impl Into<SharedString>) -> Self { self }
+}
+";
+        let brick = read_one("card", source).expect("Card");
+        assert_eq!(
+            brick.props,
+            vec![BrickProp { method: "title".into(), text: true }],
+            "only `pub fn x(mut self, one string) -> Self` is a property"
+        );
+    }
+
     /// A constructor maxx cannot fill is not offered.
     ///
     /// The commonest constructor in all of GPUI takes a window and a context.
@@ -322,6 +434,7 @@ mod tests {
             doc: String::new(),
             arity: 0,
             reexported: true,
+            props: Vec::new(),
         };
         assert_eq!(reexported.import(), "use crate::components::Card;");
         // Theirs, declared but not re-exported: naming it directly would not

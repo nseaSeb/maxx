@@ -178,6 +178,16 @@ impl Node {
         }
     }
 
+    /// Adds a call with no arguments, if it is not already there.
+    ///
+    /// What a builder method taking nothing is: `.separated()` is present or it
+    /// is not, and there is no third state to write.
+    pub fn set_call_bare(&mut self, name: &str) {
+        if self.calls.iter().all(|call| call.name != name) {
+            self.calls.push(Call::bare(name));
+        }
+    }
+
     /// Removes the first call with this name, if any.
     pub fn remove_call(&mut self, name: &str) {
         if let Some(index) = self.calls.iter().position(|call| call.name == name) {

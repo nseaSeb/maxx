@@ -4,7 +4,7 @@
 use rust_i18n::t;
 
 use gpui::prelude::*;
-use gpui::{Context, SharedString, div, px};
+use gpui::{AnyElement, Context, SharedString, div, px};
 use gpui_component::input::Input;
 use gpui_component::{Sizable as _, h_flex, v_flex};
 
@@ -18,6 +18,45 @@ use super::canvas::thumbnail;
 use super::section_title;
 
 impl Workspace {
+    /// One builder method of a project component, as a row of the inspector.
+    fn render_brick_prop(
+        &self,
+        node: &Node,
+        prop: &crate::bricks::BrickProp,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let label = SharedString::from(prop.method.clone());
+        let method = prop.method.clone();
+        let on = node.call(&prop.method).is_some();
+        let field: AnyElement = if prop.text {
+            match self.brick_input(&prop.method) {
+                Some(state) => Input::new(state).small().into_any_element(),
+                None => div().into_any_element(),
+            }
+        } else {
+            div()
+                .id(SharedString::from(format!("brick-flag-{}", prop.method)))
+                .px_2()
+                .py_1()
+                .rounded_sm()
+                .cursor_pointer()
+                .text_xs()
+                .bg(if on { theme::accent() } else { theme::hover_bg() })
+                .text_color(if on { theme::on_accent() } else { theme::text_muted() })
+                .child(crate::tr(if on { "designer.on" } else { "designer.off" }))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.toggle_brick_flag(&method, cx);
+                }))
+                .into_any_element()
+        };
+        v_flex()
+            .px_3()
+            .py_1()
+            .gap_1()
+            .child(div().text_xs().text_color(theme::text_muted()).child(label))
+            .child(field)
+    }
+
     /// Property editor for the selected node, driven by the catalogue.
     pub(super) fn render_inspector(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let view = self.view().expect("checked by the caller");
@@ -27,6 +66,16 @@ impl Workspace {
         // Built eagerly: `cx` cannot be reborrowed inside the `FnMut` a
         // `.children(map(..))` would need.
         let mut rows = Vec::new();
+        // A component of the project, read out of its own source. Its builder
+        // methods are its properties: one taking a string is a field, one
+        // taking nothing is a switch.
+        if spec.is_none()
+            && let Some(brick) = self.brick_of(node)
+        {
+            for prop in &brick.props {
+                rows.push(self.render_brick_prop(node, prop, cx).into_any_element());
+            }
+        }
         if let Some(spec) = spec {
             for prop in registry::props(spec) {
                 rows.push(self.render_prop(node, spec, prop, cx).into_any_element());
