@@ -104,14 +104,15 @@ fn the_scroll_example_keeps_the_id_first() {
 
 /// Every icon the inspector offers is one the canvas can draw.
 ///
-/// `IconName` has no `FromStr`, so `designer::icon_named` is a table — and a
+/// `IconName` has no `FromStr`, so `designer::canvas::icon_named` is a table — and a
 /// table drifts. An icon offered but not drawn shows as the fallback asterisk,
 /// which looks like a bug in the icon rather than a hole in a list.
 #[test]
 fn every_icon_offered_is_an_icon_the_canvas_draws() {
-    let designer =
-        std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/designer.rs"))
-            .expect("src/designer.rs");
+    let designer = std::fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/designer/canvas.rs"),
+    )
+    .expect("src/designer/canvas.rs");
 
     let icons = CATALOGUE
         .iter()

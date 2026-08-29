@@ -258,7 +258,7 @@ fn no_french_text_is_left_in_the_interface() {
 fn a_helper_that_takes_a_key_translates_it() {
     let helpers = [
         ("src/designer.rs", "fn section_title("),
-        ("src/designer.rs", "fn menu_button("),
+        ("src/designer/menus.rs", "fn menu_button("),
         ("src/workspace/explorer.rs", "fn panel_icon("),
         ("src/preferences.rs", "fn action_button("),
     ];
