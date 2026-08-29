@@ -10,6 +10,7 @@ mod inspector;
 mod menus;
 mod modules;
 mod palette;
+mod palette_file;
 mod process;
 mod views;
 
@@ -208,6 +209,12 @@ pub struct Workspace {
     watch_task: Option<Task<()>>,
     /// The watcher itself, kept alive here: dropped, it stops watching.
     watcher: Option<notify::RecommendedWatcher>,
+    /// Text boxes of the palette page: the role's name, the mode, and the box.
+    palette_inputs: Vec<(String, crate::themefile::Mode, Entity<InputState>)>,
+    /// The project those boxes were built for, so they are built once.
+    palette_synced: Option<PathBuf>,
+    /// `src/theme.rs` as it stands, or `None` when the project has no palette.
+    palette: Option<crate::themefile::ThemeFile>,
     /// Text boxes of the run page, one per editable field of `[run]`.
     run_inputs: Vec<(crate::projectfile::RunField, Entity<InputState>)>,
     /// The project those boxes were built for, so they are built once.
@@ -320,6 +327,9 @@ impl Workspace {
             run_pid: None,
             run_task: None,
             run_inputs: Vec::new(),
+            palette_inputs: Vec::new(),
+            palette_synced: None,
+            palette: None,
             run_synced: None,
             run_config: crate::projectfile::Run::default(),
             run_loaded: crate::projectfile::Run::default(),

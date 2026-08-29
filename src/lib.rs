@@ -20,6 +20,7 @@ pub mod scaffold;
 pub mod settings;
 pub mod tabs;
 pub mod theme;
+pub mod themefile;
 pub mod tools;
 pub mod view;
 pub mod watch;

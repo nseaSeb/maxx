@@ -182,6 +182,9 @@ error.already_managed:
 error.bad_field_name:
   en: "“%{name}” is not a valid field name"
   fr: "« %{name} » n'est pas un nom de champ valide"
+error.bad_colour:
+  en: "A colour is six hexadecimal digits, e.g. #1e2127"
+  fr: "Une couleur s'écrit en six chiffres hexadécimaux, par exemple #1e2127"
 error.changed_on_disk:
   en: "changed outside maxx — File > Reload, or Overwrite"
   fr: "fichier modifié en dehors de maxx — Fichier > Recharger, ou Écraser"
@@ -614,6 +617,9 @@ message.run_stopped:
 message.saved:
   en: "%{name} saved"
   fr: "%{name} enregistré"
+message.palette_saved:
+  en: "Palette saved"
+  fr: "Palette enregistrée"
 message.select_entry_first:
   en: "select an item in the explorer first"
   fr: "sélectionnez d'abord un élément dans l'explorateur"
@@ -794,6 +800,24 @@ prefs.run_features:
 prefs.run_features_desc:
   en: "Switched on with --features, separated by commas. Empty means none."
   fr: "Allumées avec --features, séparées par des virgules. Vide, aucune."
+prefs.palette:
+  en: "Palette"
+  fr: "Palette"
+prefs.palette_none:
+  en: "This project has no palette"
+  fr: "Ce projet n'a pas de palette"
+prefs.palette_none_desc:
+  en: "The palette is a module added on demand, under File ▸ Add to project ▸ The palette. Once it is there, its roles are edited here."
+  fr: "La palette est un module ajouté à la demande, sous Fichier ▸ Ajouter au projet ▸ La palette. Une fois posée, ses rôles s'éditent ici."
+prefs.palette_desc:
+  en: "The colours the project paints with, in src/theme.rs. Only the value being changed is rewritten, so anything else in the file stays as it was written."
+  fr: "Les couleurs avec lesquelles le projet dessine, dans src/theme.rs. Seule la valeur modifiée est réécrite : tout le reste du fichier reste tel qu'il a été écrit."
+prefs.palette_dark:
+  en: "Dark"
+  fr: "Sombre"
+prefs.palette_light:
+  en: "Light"
+  fr: "Clair"
 prefs.run_none:
   en: "No project is open"
   fr: "Aucun projet n'est ouvert"

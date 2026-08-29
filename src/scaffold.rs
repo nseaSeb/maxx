@@ -204,7 +204,7 @@ pub fn to_type_name(module: &str) -> String {
 }
 
 /// `name` when it can be a Rust binding, nothing otherwise.
-pub(super) fn identifier(name: &str) -> Option<String> {
+fn identifier(name: &str) -> Option<String> {
     let valid = !name.is_empty()
         && name.chars().all(|character| character.is_alphanumeric() || character == '_')
         && !name.starts_with(|character: char| character.is_ascii_digit());

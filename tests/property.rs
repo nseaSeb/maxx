@@ -17,7 +17,7 @@
 //! combine freely — a comment above a call that carries a verbatim argument
 //! inside a child of an opaque node, and so on.
 
-use maxx::codegen::render;
+use maxx::codegen::{render, render_for_splice};
 use maxx::model::{Arg, Base, CHILD_SLOT, Call, Node};
 use maxx::parser;
 use proptest::prelude::*;
@@ -170,7 +170,14 @@ fn leaf() -> impl Strategy<Value = Node> {
                 comments: Vec::new(),
                 trailing,
             });
-    let opaque = prop::sample::select(OPAQUE).prop_map(|source| Node::opaque(source.to_string()));
+    // With its own trailing comments: an opaque node ending on a `//` line is
+    // precisely the shape the comma fix is about, and a generator that never
+    // draws it would have let that fix rot untested.
+    let opaque = (prop::sample::select(OPAQUE), comments()).prop_map(|(source, trailing)| {
+        let mut node = Node::opaque(source.to_string());
+        node.trailing = trailing;
+        node
+    });
     prop_oneof![4 => known, 1 => opaque]
 }
 
@@ -238,6 +245,21 @@ proptest! {
     #[test]
     fn a_rendered_tree_parses_back_to_itself(node in tree()) {
         let source = render(&node, 0);
+        let file = file_with(&source);
+        let (parsed, _) = parser::parse(&file)
+            .map_err(|error| TestCaseError::fail(format!("{error}\n--- rendered ---\n{source}")))?;
+        prop_assert_eq!(&parsed, &node, "\n--- rendered ---\n{}", source);
+    }
+
+    /// The same, through the function a save actually calls.
+    ///
+    /// `render` is what the tests reach for; `view::save` writes through
+    /// `render_for_splice`, which differs by the column budget it is given. The
+    /// two are near enough that one standing in for the other is tempting, and
+    /// exactly near enough that a divergence would go unnoticed.
+    #[test]
+    fn the_shape_a_save_writes_parses_back_to_itself(node in tree(), offset in 0usize..24) {
+        let source = render_for_splice(&node, offset);
         let file = file_with(&source);
         let (parsed, _) = parser::parse(&file)
             .map_err(|error| TestCaseError::fail(format!("{error}\n--- rendered ---\n{source}")))?;

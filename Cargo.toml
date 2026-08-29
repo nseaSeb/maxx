@@ -55,7 +55,10 @@ futures = "0.3"
 
 [dev-dependencies]
 # The invariant behind `tests/round_trip.rs`, checked on trees nobody wrote.
-proptest = "1.11.0"
+# Without its default features: `fork` and `timeout` run each case in a child
+# process, which these properties have no use for, and which cost three crates
+# of their own — `rusty-fork`, `wait-timeout`, `quick-error`.
+proptest = { version = "1.11.0", default-features = false, features = ["std", "bit-set"] }
 # Already in the tree through gpui: used to rasterise the icon drafts.
 resvg = "0.45"
 # The same gpui, plus what it takes to run an application without a screen:
