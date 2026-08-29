@@ -2,11 +2,11 @@
 
 use crate::model::{Arg, Base, Node};
 
-pub mod catalogue;
-pub mod ids;
-pub mod props;
-pub mod scrollbar;
-pub mod state;
+mod catalogue;
+mod ids;
+mod props;
+mod scrollbar;
+mod state;
 
 pub use ids::{unique_element_id, unique_element_ids};
 pub use props::{covers, editable, props, read, tooltip_text, validate, write};

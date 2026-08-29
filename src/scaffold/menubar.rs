@@ -3,6 +3,7 @@
 use std::io;
 use std::path::Path;
 
+use super::identifier;
 use super::modules::{header_end, joined};
 /// Gives an existing project a menu bar: writes `src/menus.rs` and wires it
 /// into `src/main.rs`.
@@ -125,14 +126,6 @@ fn application_binding(line: &str) -> Option<String> {
     let rest = &line[start + 1..];
     let end = rest.find('|')?;
     identifier(rest[..end].split(':').next()?.trim())
-}
-
-/// `name` when it can be a Rust binding, nothing otherwise.
-pub(super) fn identifier(name: &str) -> Option<String> {
-    let valid = !name.is_empty()
-        && name.chars().all(|character| character.is_alphanumeric() || character == '_')
-        && !name.starts_with(|character: char| character.is_ascii_digit());
-    valid.then(|| name.to_string())
 }
 
 /// Unwires the menu bar from `src/main.rs`.

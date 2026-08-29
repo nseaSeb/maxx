@@ -10,15 +10,15 @@ use std::path::Path;
 use menubar::menus_rs;
 use views::{declare_ui_module, view_rs};
 
-pub mod assets;
-pub mod menubar;
-pub mod modules;
-pub mod settings;
-pub mod system;
+mod assets;
+mod menubar;
+mod modules;
+mod settings;
+mod system;
 pub mod templates;
-pub mod theme;
-pub mod views;
-pub mod window;
+mod theme;
+mod views;
+mod window;
 
 pub use assets::add_assets_module;
 pub use assets::{IMAGE_DIRECTORY, import_asset};
@@ -201,6 +201,14 @@ pub fn to_type_name(module: &str) -> String {
             }
         })
         .collect()
+}
+
+/// `name` when it can be a Rust binding, nothing otherwise.
+pub(super) fn identifier(name: &str) -> Option<String> {
+    let valid = !name.is_empty()
+        && name.chars().all(|character| character.is_alphanumeric() || character == '_')
+        && !name.starts_with(|character: char| character.is_ascii_digit());
+    valid.then(|| name.to_string())
 }
 
 /// The entry point of the generated project.

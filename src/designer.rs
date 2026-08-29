@@ -19,11 +19,11 @@ use gpui_component::resizable::{h_resizable, resizable_panel};
 
 use crate::workspace::Workspace;
 
-pub mod canvas;
-pub mod inspector;
-pub mod menus;
-pub mod palette;
-pub mod tree;
+mod canvas;
+mod inspector;
+mod menus;
+mod palette;
+mod tree;
 
 pub(crate) use canvas::missing_image;
 pub use palette::label_matches;

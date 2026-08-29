@@ -3,7 +3,7 @@
 use std::io;
 use std::path::Path;
 
-use super::menubar::identifier;
+use super::identifier;
 use super::modules::{header_end, joined, legacy_copy, module_version};
 use super::settings::{add_dependencies, dependencies_section};
 use super::system::add_system_module;
