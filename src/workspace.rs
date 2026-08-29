@@ -152,18 +152,12 @@ pub struct Workspace {
     /// of every frame, and reading a file from there would read it a hundred
     /// times a second. Refreshed with the rows themselves.
     entry_view: Option<PathBuf>,
-    /// The project's menu bar, when `src/menus.rs` is the file being edited.
-    pub menu_file: Option<MenuFile>,
-    /// The file the code reader is showing, when it is showing one.
-    pub code: Option<CodeFile>,
     /// The reader's field, built once per file.
     code_input: Option<Entity<InputState>>,
     /// The file that field was built for.
     code_synced: Option<PathBuf>,
     /// The revision the view's code was rendered at.
     code_revision: u64,
-    /// Whether the preferences screen has taken over the main area.
-    pub preferences: bool,
     /// Where the split between the project panel and the rest sits.
     pub(crate) panel_split: Entity<ResizableState>,
     /// Where the split between the canvas and the inspector sits.
@@ -215,11 +209,6 @@ pub struct Workspace {
     /// whether or not that editor is open, and a preview in maxx's greys is a
     /// preview of maxx.
     pub preview: crate::preview::Preview,
-    /// The palette being edited, when `src/theme.rs` is what the middle shows.
-    ///
-    /// One of the panel's modes, like [`Workspace::menu_file`]: opening it turns
-    /// the others off, and closing it comes back to the view underneath.
-    pub palette: Option<crate::themefile::ThemeFile>,
     /// Pickers of that editor: the role's name, the mode, and the picker.
     palette_inputs: Vec<(
         String,
@@ -255,6 +244,19 @@ pub struct Workspace {
     /// Built once, at opening: walking the menu bar reads the settings and asks
     /// the system which editors are installed, which is not a thing to do on
     /// every keystroke.
+    /// What the middle of the window shows.
+    ///
+    /// One value, and that is the whole point of it. These were four fields
+    /// standing side by side — a flag and three options — with nothing but care
+    /// saying they exclude each other. Care did not hold: opening a mode had to
+    /// turn the other three off at eleven sites, and a mode added later was
+    /// turned off at two of them. Clicking a tab left the palette on screen,
+    /// deleting `src/menus.rs` closed an unrelated palette, and no compiler had
+    /// anything to say about it.
+    ///
+    /// Now the type says it: setting one clears the others by construction, and
+    /// [`Workspace::show`] is the only way in.
+    center: Center,
     commands: Vec<crate::palette::Command>,
     /// The files `⌘P` is offering, relative to the project root.
     ///
@@ -299,7 +301,93 @@ pub struct Workspace {
     pub(crate) output_scroll: UniformListScrollHandle,
 }
 
+/// What the middle of the window shows, and it shows exactly one of these.
+///
+/// The designer is the absence of the others: when nothing else is asked for,
+/// the middle is the view being drawn.
+#[derive(Default)]
+pub enum Center {
+    /// The view: canvas, tree, inspector, palette.
+    #[default]
+    Designer,
+    /// The menu bar of the project, `src/menus.rs`.
+    Menus(MenuFile),
+    /// Any text file of the project, read and not edited.
+    Code(CodeFile),
+    /// The project's palette, `src/theme.rs`.
+    Palette(crate::themefile::ThemeFile),
+    /// maxx's own settings.
+    Preferences,
+}
+
 impl Workspace {
+    /// Shows one thing in the middle, and therefore stops showing the others.
+    ///
+    /// The single way in. What used to be four assignments at each of eleven
+    /// sites — with two of them forgotten every time a mode was added — is one
+    /// call the compiler checks the shape of.
+    pub fn show(&mut self, center: Center) {
+        self.center = center;
+    }
+
+    /// Back to the view being designed, which is the absence of a mode.
+    pub fn show_designer(&mut self) {
+        self.center = Center::Designer;
+    }
+
+    /// The menu bar, when it is what the middle shows.
+    pub fn menu_file(&self) -> Option<&MenuFile> {
+        match &self.center {
+            Center::Menus(menus) => Some(menus),
+            _ => None,
+        }
+    }
+
+    /// The same, to write into.
+    pub fn menu_file_mut(&mut self) -> Option<&mut MenuFile> {
+        match &mut self.center {
+            Center::Menus(menus) => Some(menus),
+            _ => None,
+        }
+    }
+
+    /// The file in the reader, when it is what the middle shows.
+    pub fn code(&self) -> Option<&CodeFile> {
+        match &self.center {
+            Center::Code(file) => Some(file),
+            _ => None,
+        }
+    }
+
+    /// The same, to write into.
+    pub fn code_mut(&mut self) -> Option<&mut CodeFile> {
+        match &mut self.center {
+            Center::Code(file) => Some(file),
+            _ => None,
+        }
+    }
+
+    /// The palette being edited, when it is what the middle shows.
+    pub fn palette(&self) -> Option<&crate::themefile::ThemeFile> {
+        match &self.center {
+            Center::Palette(palette) => Some(palette),
+            _ => None,
+        }
+    }
+
+    /// The same, to write into.
+    pub fn palette_mut(&mut self) -> Option<&mut crate::themefile::ThemeFile> {
+        match &mut self.center {
+            Center::Palette(palette) => Some(palette),
+            _ => None,
+        }
+    }
+
+    /// Whether the middle shows maxx's settings.
+    pub fn preferences(&self) -> bool {
+        matches!(self.center, Center::Preferences)
+    }
+
     pub(crate) fn new(project: Option<Project>, cx: &mut Context<Self>) -> Self {
         let preview = project
             .as_ref()
@@ -318,12 +406,10 @@ impl Workspace {
             expanded: HashSet::new(),
             selected: None,
             entry_view: None,
-            menu_file: None,
-            code: None,
+            center: Center::Designer,
             code_input: None,
             code_synced: None,
             code_revision: 0,
-            preferences: false,
             panel_split: cx.new(|_| ResizableState::default()),
             inspector_split: cx.new(|_| ResizableState::default()),
             menu_inputs: Vec::new(),
@@ -347,7 +433,6 @@ impl Workspace {
             palette_inputs: Vec::new(),
             palette_synced: None,
             preview,
-            palette: None,
             run_synced: None,
             run_config: crate::projectfile::Run::default(),
             run_loaded: crate::projectfile::Run::default(),
@@ -388,10 +473,8 @@ impl Workspace {
     pub fn set_project(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         remember_project(&path, cx);
         self.announce_outdated_modules(&path);
-        self.menu_file = None;
-        self.preferences = false;
         self.menu_synced = None;
-        self.palette = None;
+        self.show_designer();
         self.preview = crate::preview::Preview::read(&path);
         // A window with no project can still hold a file in the reader; showing
         // it under the new project's name would be the previous project's file.
@@ -422,10 +505,8 @@ impl Workspace {
         // screen included: left behind, it would name a file of a project that
         // is no longer open.
         self.forget_code(|_| true);
-        self.menu_file = None;
-        self.preferences = false;
         self.menu_synced = None;
-        self.palette = None;
+        self.show_designer();
         self.entries.clear();
         self.expanded.clear();
         self.selected = None;

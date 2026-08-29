@@ -27,14 +27,18 @@ impl Workspace {
     /// A toggle rather than an open: `⌘,` pressed twice is how you check a
     /// setting and go straight back to what you were drawing.
     pub fn toggle_preferences(&mut self, cx: &mut Context<Self>) {
-        self.preferences = !self.preferences;
+        if self.preferences() {
+            self.show_designer();
+        } else {
+            self.show(Center::Preferences);
+        }
         cx.notify();
     }
 
     /// Leaves the preferences screen.
     pub fn close_preferences(&mut self, cx: &mut Context<Self>) {
-        if self.preferences {
-            self.preferences = false;
+        if self.preferences() {
+            self.show_designer();
             cx.notify();
         }
     }
@@ -75,7 +79,7 @@ impl Workspace {
     fn render_main(&self, cx: &mut Context<Self>) -> AnyElement {
         // Before the welcome screen: the preferences must be reachable when no
         // project is open, which is exactly when someone is setting maxx up.
-        if self.preferences {
+        if self.preferences() {
             return self.render_designer(cx);
         }
         if self.project.is_none() {
@@ -172,7 +176,7 @@ impl Workspace {
 
     fn render_status_bar(&self) -> impl IntoElement {
         let conflict = self.view().is_some_and(|view| self.conflicts.contains(&view.path));
-        if let Some(file) = self.code.as_ref() {
+        if let Some(file) = self.code() {
             let label = match &self.message {
                 Some(message) => message.clone(),
                 // A view seen as code says so: what is on screen is what `⌘S`
@@ -208,7 +212,7 @@ impl Workspace {
                     div().text_color(theme::warning()).child(crate::tr("status.unsaved"))
                 }));
         }
-        if let Some(menus) = self.menu_file.as_ref() {
+        if let Some(menus) = self.menu_file() {
             let label = match &self.message {
                 Some(message) => message.clone(),
                 None => SharedString::from(

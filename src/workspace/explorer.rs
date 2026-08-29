@@ -116,17 +116,17 @@ impl Workspace {
             };
             self.revision += 1;
         }
-        if self.menu_file.as_ref().is_some_and(|menus| gone(&menus.path)) {
-            self.menu_file = None;
+        if self.menu_file().is_some_and(|menus| gone(&menus.path)) {
             self.menu_synced = None;
+            self.show_designer();
         }
         // Its own guard, and not a line inside the one above: the two modes are
         // two files, and closing the palette because `src/menus.rs` went away
         // is as wrong as leaving it open over a `src/theme.rs` that no longer
         // exists — where every picker would answer "No such file or directory".
-        if self.palette.as_ref().is_some_and(|palette| gone(&palette.path)) {
-            self.palette = None;
+        if self.palette().is_some_and(|palette| gone(&palette.path)) {
             self.palette_synced = None;
+            self.show_designer();
         }
         self.forget_code(gone);
 

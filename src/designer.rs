@@ -46,7 +46,7 @@ impl Workspace {
 
     /// The designer, or an invitation to open a view.
     pub(crate) fn render_designer(&self, cx: &mut Context<Self>) -> AnyElement {
-        if self.preferences {
+        if self.preferences() {
             // The tab strip stays: it is the way back to an open view.
             return v_flex()
                 .flex_1()
@@ -55,7 +55,7 @@ impl Workspace {
                 .child(self.render_preferences(cx))
                 .into_any_element();
         }
-        if self.palette.is_some() {
+        if self.palette().is_some() {
             // The tab strip stays: it is the way back to an open view.
             return v_flex()
                 .flex_1()
@@ -64,7 +64,7 @@ impl Workspace {
                 .child(self.render_palette_editor(cx))
                 .into_any_element();
         }
-        if self.menu_file.is_some() {
+        if self.menu_file().is_some() {
             // The tab strip stays: it is the way back to an open view.
             return v_flex()
                 .flex_1()
@@ -73,7 +73,7 @@ impl Workspace {
                 .child(self.render_menu_editor(cx))
                 .into_any_element();
         }
-        if self.code.is_some() {
+        if self.code().is_some() {
             // The tab strip stays: it is the way back to an open view.
             return v_flex()
                 .flex_1()
@@ -125,7 +125,7 @@ impl Workspace {
     fn render_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         // A file opened on its own takes the light; a view seen as code keeps
         // its own tab lit, because it is the same document either way.
-        let reading = self.code.as_ref().is_some_and(|file| !file.of_view);
+        let reading = self.code().is_some_and(|file| !file.of_view);
         let tabs: Vec<(usize, SharedString, bool, bool)> = self
             .open_views()
             .iter()
@@ -140,7 +140,7 @@ impl Workspace {
             })
             .collect();
         // Never dirty: the reader does not write.
-        let read_tab = self.code.as_ref().filter(|file| !file.of_view).map(|file| file.name());
+        let read_tab = self.code().filter(|file| !file.of_view).map(|file| file.name());
 
         div()
             .flex()

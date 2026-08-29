@@ -404,6 +404,62 @@ mod tests {
         out
     }
 
+    /// Showing one thing in the middle stops showing every other.
+    ///
+    /// The property the `Center` enum exists to make true, checked from the
+    /// gestures rather than from the type: three reviews found the same defect
+    /// in three shapes — a tab click, an editor opened, a file deleted — each
+    /// one a site that turned off some modes and not the one added last. What
+    /// this asserts is not that the code clears the others, but that after each
+    /// gesture exactly one thing is showing.
+    #[gpui::test]
+    fn the_middle_shows_one_thing_at_a_time(cx: &mut TestAppContext) {
+        let scratch = Scratch::new("center");
+        let root = scratch.0.join("trial");
+        scaffold::create_project(&root, "trial", Template::Empty)
+            .expect("the project must be created");
+        scaffold::add_theme_module(&root).expect("the palette must be added");
+
+        let workspace =
+            cx.update(|cx| cx.new(|cx| Workspace::new(Some(Project::open(root.clone())), cx)));
+
+        // How many of the modes claim the middle. Never more than one, and the
+        // designer is the absence of them all.
+        let showing = |workspace: &Workspace| {
+            [
+                workspace.menu_file().is_some(),
+                workspace.code().is_some(),
+                workspace.palette().is_some(),
+                workspace.preferences(),
+            ]
+            .iter()
+            .filter(|on| **on)
+            .count()
+        };
+
+        workspace.update(cx, |workspace, cx| {
+            workspace.select_file(root.join("src/ui/home.rs"), cx);
+            assert_eq!(showing(workspace), 0, "a view is the designer, not a mode");
+
+            workspace.select_file(root.join("src/theme.rs"), cx);
+            assert!(workspace.palette().is_some(), "the palette opens");
+            assert_eq!(showing(workspace), 1);
+
+            workspace.select_file(root.join("src/main.rs"), cx);
+            assert!(workspace.code().is_some(), "the reader takes over");
+            assert_eq!(showing(workspace), 1, "and the palette is gone");
+
+            workspace.toggle_preferences(cx);
+            assert!(workspace.preferences(), "the settings take over");
+            assert_eq!(showing(workspace), 1, "and the reader is gone");
+
+            // The gesture the reviewer found broken: the tab strip is drawn
+            // above every mode precisely so it is the way back.
+            workspace.activate_view(0, cx);
+            assert_eq!(showing(workspace), 0, "a tab click comes back to the view");
+        });
+    }
+
     /// A component dropped at an index lands at that index, not at the end.
     ///
     /// The tree is the second way into the canvas, and the whole point of the

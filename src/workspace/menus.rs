@@ -7,7 +7,7 @@ impl Workspace {
     ///
     /// Returns `true` when the caller must stop.
     pub(super) fn discard_menu_edits(&mut self, cx: &mut Context<Self>) -> bool {
-        if self.menu_file.as_ref().is_some_and(|menus| menus.dirty()) {
+        if self.menu_file().is_some_and(|menus| menus.dirty()) {
             self.message = Some(crate::tr("message.menus_unsaved"));
             cx.notify();
             return true;
@@ -22,14 +22,14 @@ impl Workspace {
 
     /// Rebuilds the menu panel's boxes when its selection changes.
     pub(super) fn sync_menu_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let key = self.menu_file.as_ref().map(|menus| menus.selected);
+        let key = self.menu_file().map(|menus| menus.selected);
         if key == self.menu_synced {
             return;
         }
         self.menu_synced = key;
         self.menu_inputs.clear();
 
-        let Some(menus) = self.menu_file.as_ref() else {
+        let Some(menus) = self.menu_file() else {
             return;
         };
         let mut fields = Vec::new();
@@ -77,7 +77,7 @@ impl Workspace {
 
     /// Writes one field of the menu panel.
     fn edit_menu_field(&mut self, field: MenuField, value: &str, cx: &mut Context<Self>) {
-        let Some(menus) = self.menu_file.as_mut() else {
+        let Some(menus) = self.menu_file_mut() else {
             return;
         };
         let Some(selection) = menus.selected else {
@@ -127,7 +127,7 @@ impl Workspace {
 
     /// Opens the handler of the selected entry in Zed, on its own line.
     pub fn open_menu_handler(&mut self, cx: &mut Context<Self>) {
-        let Some(menus) = self.menu_file.as_ref() else {
+        let Some(menus) = self.menu_file() else {
             return;
         };
         let Some(ItemDef::Action { action, os_action, .. }) = menus.selected_item() else {
@@ -159,7 +159,7 @@ impl Workspace {
 
     /// Selects a menu or one of its entries.
     pub fn select_menu(&mut self, selection: Selection, cx: &mut Context<Self>) {
-        if let Some(menus) = self.menu_file.as_mut() {
+        if let Some(menus) = self.menu_file_mut() {
             menus.selected = Some(selection);
             cx.notify();
         }
@@ -170,8 +170,8 @@ impl Workspace {
         if self.discard_menu_edits(cx) {
             return;
         }
-        self.menu_file = None;
         self.menu_synced = None;
+        self.show_designer();
         cx.notify();
     }
 
@@ -181,15 +181,14 @@ impl Workspace {
     /// opens it — but nothing in the window said so, and the editor was
     /// unfindable for anyone who had not been told.
     pub fn open_menu_bar(&mut self, cx: &mut Context<Self>) {
-        self.preferences = false;
-        self.palette = None;
         let Some(project) = self.project.as_ref() else {
             self.message = Some(crate::tr("message.no_project"));
             cx.notify();
             return;
         };
-        if self.menu_file.is_some() {
-            // Already open — but the preferences may have been covering it.
+        if self.menu_file().is_some() {
+            // Already open, and nothing else can be covering it now that the
+            // middle holds one thing at a time.
             cx.notify();
             return;
         }
@@ -237,7 +236,7 @@ impl Workspace {
     /// Adds a menu to the bar.
     pub fn add_menu(&mut self, cx: &mut Context<Self>) {
         self.open_menu_bar(cx);
-        if let Some(menus) = self.menu_file.as_mut() {
+        if let Some(menus) = self.menu_file_mut() {
             menus.add_menu();
             cx.notify();
         }
@@ -246,7 +245,7 @@ impl Workspace {
     /// Adds an entry to the selected menu.
     pub fn add_menu_item(&mut self, separator: bool, cx: &mut Context<Self>) {
         self.open_menu_bar(cx);
-        let Some(menus) = self.menu_file.as_mut() else {
+        let Some(menus) = self.menu_file_mut() else {
             return;
         };
         if menus.selected.is_none() {
@@ -270,7 +269,7 @@ impl Workspace {
 
     /// Moves the selected menu or entry one place up, or down.
     pub fn move_menu_selection(&mut self, up: bool, cx: &mut Context<Self>) {
-        let Some(menus) = self.menu_file.as_mut() else {
+        let Some(menus) = self.menu_file_mut() else {
             return;
         };
         if menus.selected.is_none() {
@@ -306,7 +305,7 @@ impl Workspace {
         to: crate::menufile::Drop,
         cx: &mut Context<Self>,
     ) {
-        let Some(menus) = self.menu_file.as_mut() else {
+        let Some(menus) = self.menu_file_mut() else {
             return;
         };
         if !menus.move_to(from, to) {
@@ -325,7 +324,7 @@ impl Workspace {
 
     pub fn add_submenu(&mut self, cx: &mut Context<Self>) {
         self.open_menu_bar(cx);
-        let Some(menus) = self.menu_file.as_mut() else {
+        let Some(menus) = self.menu_file_mut() else {
             return;
         };
         // A selected submenu would take the entry inside itself, which is what
@@ -345,7 +344,7 @@ impl Workspace {
 
     /// Removes the selected menu or entry.
     pub fn remove_menu_selection(&mut self, cx: &mut Context<Self>) {
-        if let Some(menus) = self.menu_file.as_mut() {
+        if let Some(menus) = self.menu_file_mut() {
             menus.remove_selected();
             cx.notify();
         }

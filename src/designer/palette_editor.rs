@@ -24,7 +24,7 @@ const CELL: f32 = 56.;
 impl Workspace {
     /// The palette of the open project, one row per role.
     pub(super) fn render_palette_editor(&self, _cx: &mut Context<Self>) -> AnyElement {
-        let Some(palette) = self.palette.as_ref() else {
+        let Some(palette) = self.palette() else {
             return div().into_any_element();
         };
 

@@ -250,11 +250,11 @@ pub fn register_handlers(cx: &mut App) {
         with_active_workspace(cx, |workspace, window, cx| {
             // ⌘W closes the front tab first, the window only once there are no
             // views left — the habit every editor gives you.
-            if workspace.preferences {
+            if workspace.preferences() {
                 workspace.close_preferences(cx);
                 return;
             }
-            if workspace.menu_file.is_some() {
+            if workspace.menu_file().is_some() {
                 workspace.close_menu_file(cx);
                 return;
             }

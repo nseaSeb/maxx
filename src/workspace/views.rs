@@ -37,10 +37,7 @@ impl Workspace {
         // The menu editor, the palette and the preferences are modes: clicking
         // a tab has to leave them, or the tab strip stays without effect. The
         // strip is drawn *above* each of them for exactly that reason.
-        self.menu_file = None;
-        self.palette = None;
-        self.preferences = false;
-        self.code = None;
+        self.show_designer();
         if index < self.views.len() {
             self.focus_view(index);
             self.selected = Some(self.views[index].path.clone());
@@ -131,12 +128,10 @@ impl Workspace {
 
     pub(super) fn select_file(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         self.message = None;
-        // Opening anything leaves the preferences, for the same reason.
-        self.preferences = false;
         if crate::themefile::ThemeFile::is_palette_file(&path) {
             // Already open: leave it be rather than reload, which would drop
             // the pickers and shut a popup someone is picking from.
-            if self.palette.as_ref().is_some_and(|palette| palette.path == path) {
+            if self.palette().is_some_and(|palette| palette.path == path) {
                 self.selected = Some(path);
                 cx.notify();
                 return;
@@ -144,27 +139,21 @@ impl Workspace {
             if self.discard_menu_edits(cx) {
                 return;
             }
-            self.menu_file = None;
-            self.code = None;
             match crate::themefile::ThemeFile::open(&path) {
-                Some(palette) => self.palette = Some(palette),
+                Some(palette) => self.show(Center::Palette(palette)),
                 // A `src/theme.rs` this reader cannot make sense of is not a
                 // broken palette: it is a file the developer rewrote, and the
                 // code reader shows it rather than an empty screen pretending
                 // there are no colours in it.
-                None => {
-                    self.palette = None;
-                    self.open_code(path.clone(), cx);
-                }
+                None => self.open_code(path.clone(), cx),
             }
             self.selected = Some(path);
             cx.notify();
             return;
         }
-        self.palette = None;
         if MenuFile::is_menu_file(&path) {
             // Already open and edited: reloading would drop those edits.
-            if self.menu_file.as_ref().is_some_and(|menus| menus.path == path) {
+            if self.menu_file().is_some_and(|menus| menus.path == path) {
                 self.selected = Some(path);
                 cx.notify();
                 return;
@@ -172,11 +161,10 @@ impl Workspace {
             if self.discard_menu_edits(cx) {
                 return;
             }
-            self.menu_file = None;
             match MenuFile::load(&path) {
                 Ok(menus) => {
-                    self.menu_file = Some(menus);
                     self.menu_synced = None;
+                    self.show(Center::Menus(menus));
                 }
                 Err(error) => self.message = Some(SharedString::from(error)),
             }
@@ -187,17 +175,16 @@ impl Workspace {
         if self.discard_menu_edits(cx) {
             return;
         }
-        self.menu_file = None;
         if path.extension().is_some_and(|extension| extension == "rs") {
             // Already open: just bring its tab forward.
             if let Some(index) = self.views.iter().position(|view| view.path == path) {
-                self.code = None;
+                self.show_designer();
                 self.focus_view(index);
                 self.revision += 1;
             } else {
                 match View::load(&path) {
                     Ok(view) => {
-                        self.code = None;
+                        self.show_designer();
                         self.views.push(view);
                         self.focus_view(self.views.len() - 1);
                         self.revision += 1;
@@ -290,7 +277,7 @@ impl Workspace {
     }
 
     fn write_view(&mut self, force: bool, cx: &mut Context<Self>) {
-        if let Some(menus) = self.menu_file.as_mut() {
+        if let Some(menus) = self.menu_file_mut() {
             let path = menus.path.clone();
             let saved = match menus.save(force) {
                 Ok(()) => {
@@ -407,7 +394,7 @@ impl Workspace {
         match crate::run::format_rust(path) {
             Ok(false) => {}
             Ok(true) => {
-                let reloaded = match self.menu_file.as_mut() {
+                let reloaded = match self.menu_file_mut() {
                     Some(menus) if menus.path == path => menus.reload().err(),
                     _ => self.view_mut().and_then(|view| view.reload().err()),
                 };
@@ -425,7 +412,7 @@ impl Workspace {
     /// Drops what the designer holds and re-reads the file.
     pub fn reload_view(&mut self, cx: &mut Context<Self>) {
         self.edit_snapshot = None;
-        if let Some(menus) = self.menu_file.as_mut() {
+        if let Some(menus) = self.menu_file_mut() {
             self.message = match menus.reload() {
                 Ok(()) => Some(crate::tr("message.menus_reloaded")),
                 Err(error) => Some(SharedString::from(error)),
@@ -568,16 +555,18 @@ impl Workspace {
         // The palette has nothing to lose on maxx's side — a picker holds no
         // unsaved state, every turn of one is already on disk — so it is taken
         // back from the file without asking, the way an untouched view is.
-        if let Some(palette) = self.palette.as_mut()
-            && palette.reload()
-        {
+        let reloaded = match self.palette_mut() {
+            Some(palette) => palette.reload().then(|| crate::preview::Preview::from_file(palette)),
+            None => None,
+        };
+        if let Some(preview) = reloaded {
             self.palette_synced = None;
-            self.preview = crate::preview::Preview::from_file(palette);
+            self.preview = preview;
         }
         // And the canvas follows the file even when nobody has the palette
         // open, which is the ordinary case: it is the preview, not the editor,
         // that has to tell the truth about the project's colours.
-        if self.palette.is_none()
+        if self.palette().is_none()
             && let Some(root) = self.project.as_ref().map(|project| project.root.clone())
         {
             self.preview = crate::preview::Preview::read(&root);

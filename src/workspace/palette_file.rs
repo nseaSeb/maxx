@@ -37,14 +37,14 @@ impl Workspace {
     /// entity created there would be a new one each frame — a picker that shuts
     /// its own popup as soon as it is opened.
     pub(super) fn sync_palette_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let key = self.palette.as_ref().map(|palette| palette.path.clone());
+        let key = self.palette().map(|palette| palette.path.clone());
         if self.palette_synced == key {
             return;
         }
         self.palette_synced = key;
         self.palette_inputs.clear();
 
-        let Some(file) = self.palette.clone() else {
+        let Some(file) = self.palette().cloned() else {
             return;
         };
         for swatch in file.swatches() {
@@ -71,7 +71,7 @@ impl Workspace {
 
     /// Writes one colour into `src/theme.rs`.
     fn set_palette_colour(&mut self, name: &str, mode: Mode, value: u32, cx: &mut Context<Self>) {
-        let Some(file) = self.palette.as_mut() else {
+        let Some(file) = self.palette_mut() else {
             return;
         };
         // The whole list, values included, and not just the names. `set`
@@ -90,12 +90,13 @@ impl Workspace {
                 .iter()
                 .zip(&after)
                 .any(|(was, now)| was != now && !(was.0 == name && now.0 == name));
+        // The canvas paints from its own copy, so a colour just written has to
+        // reach it or the preview shows the value the user just replaced.
+        let preview = crate::preview::Preview::from_file(file);
         if elsewhere {
             self.palette_synced = None;
         }
-        // The canvas paints from its own copy, so a colour just written has to
-        // reach it or the preview shows the value the user just replaced.
-        self.preview = crate::preview::Preview::from_file(file);
+        self.preview = preview;
         match outcome {
             Ok(true) => self.message = Some(crate::tr("message.palette_saved")),
             // Nothing to write: the role is gone from the file, or the value it

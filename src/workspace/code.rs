@@ -201,8 +201,8 @@ impl Workspace {
             return;
         }
         self.message = None;
-        if self.code.as_ref().is_some_and(|file| file.of_view) {
-            self.code = None;
+        if self.code().is_some_and(|file| file.of_view) {
+            self.show_designer();
             cx.notify();
             return;
         }
@@ -232,32 +232,27 @@ impl Workspace {
         // and the reader's status line yields to `message`, so one left behind
         // would hide the file that did open.
         self.message = None;
-        self.preferences = false;
-        self.menu_file = None;
-        self.palette = None;
-        self.code = Some(file);
+        self.show(Center::Code(file));
         self.code_synced = None;
         self.code_revision = self.revision;
     }
 
     /// Brings the code reader back to the front, from a tab click.
     pub(crate) fn activate_code(&mut self, cx: &mut Context<Self>) {
-        if self.code.is_none() {
+        if self.code().is_none() {
             return;
         }
         if self.discard_menu_edits(cx) {
             return;
         }
-        self.preferences = false;
-        self.menu_file = None;
-        self.palette = None;
+        self.show_designer();
         self.message = None;
         cx.notify();
     }
 
     /// Closes the code reader.
     pub(crate) fn close_code(&mut self, cx: &mut Context<Self>) {
-        self.code = None;
+        self.show_designer();
         self.code_input = None;
         self.code_synced = None;
         cx.notify();
@@ -265,8 +260,8 @@ impl Workspace {
 
     /// Drops the reader when the file it holds is `gone`.
     pub(super) fn forget_code(&mut self, gone: impl Fn(&std::path::Path) -> bool) {
-        if self.code.as_ref().is_some_and(|file| gone(&file.path)) {
-            self.code = None;
+        if self.code().is_some_and(|file| gone(&file.path)) {
+            self.show_designer();
             self.code_input = None;
             self.code_synced = None;
         }
@@ -280,7 +275,7 @@ impl Workspace {
     /// revision because `render_source` runs `syn` and the code generator,
     /// which is not a thing to do on every frame.
     fn refresh_view_code(&mut self) {
-        if !self.code.as_ref().is_some_and(|file| file.of_view) {
+        if !self.code().is_some_and(|file| file.of_view) {
             return;
         }
         if self.code_revision == self.revision {
@@ -291,7 +286,7 @@ impl Workspace {
             return;
         };
         if let Ok(file) = CodeFile::of_view(view) {
-            self.code = Some(file);
+            self.show(Center::Code(file));
             self.code_synced = None;
         }
     }
@@ -303,13 +298,13 @@ impl Workspace {
     /// menu boxes use.
     pub(super) fn sync_code_input(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.refresh_view_code();
-        let key = self.code.as_ref().map(|file| file.path.clone());
+        let key = self.code().map(|file| file.path.clone());
         if key == self.code_synced {
             return;
         }
         self.code_synced = key;
 
-        let Some(file) = self.code.as_ref() else {
+        let Some(file) = self.code() else {
             self.code_input = None;
             return;
         };
@@ -332,7 +327,7 @@ impl Workspace {
 
     /// The file being read, filling the main area.
     pub(crate) fn render_code(&self, _cx: &mut Context<Self>) -> AnyElement {
-        if let Some(file) = self.code.as_ref().filter(|file| file.image) {
+        if let Some(file) = self.code().filter(|file| file.image) {
             return div()
                 .flex()
                 .flex_1()

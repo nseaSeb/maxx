@@ -17,7 +17,7 @@ use super::{DragGhost, section_title};
 impl Workspace {
     /// The menu bar of the project, as a tree with a small inspector.
     pub(super) fn render_menu_editor(&self, cx: &mut Context<Self>) -> AnyElement {
-        let menus = self.menu_file.as_ref().expect("checked by the caller");
+        let menus = self.menu_file().expect("checked by the caller");
         let selection = menus.selected;
 
         let mut rows: Vec<AnyElement> = Vec::new();
@@ -149,7 +149,7 @@ impl Workspace {
 
     /// The fields of the selected menu or entry.
     pub(super) fn render_menu_inspector(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let menus = self.menu_file.as_ref().expect("checked by the caller");
+        let menus = self.menu_file().expect("checked by the caller");
         // The labels are translation keys, like the catalogue's.
         let fields: &[(MenuField, &str)] = match menus.selected {
             Some(Selection::Menu(_)) => &[(MenuField::Name, "menu.title")],

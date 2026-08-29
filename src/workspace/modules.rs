@@ -62,10 +62,8 @@ impl Workspace {
             return;
         }
 
-        self.menu_file = None;
         self.menu_synced = None;
-        self.palette = None;
-        self.preferences = false;
+        self.show_designer();
         self.refresh_entries();
         // The palette page reads `src/theme.rs`, which may have just appeared or
         // moved: the boxes are rebuilt from it on the next frame.
@@ -171,7 +169,7 @@ impl Workspace {
         // Re-reading it is the point: clearing the key alone would rebuild the
         // pickers from the copy held here, which is the palette as it stood
         // *before* the update — the old colours, shown as if nothing happened.
-        if let Some(palette) = self.palette.as_mut() {
+        if let Some(palette) = self.palette_mut() {
             palette.reload();
         }
         self.palette_synced = None;

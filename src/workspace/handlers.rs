@@ -15,7 +15,7 @@ impl Workspace {
         let path = self
             .selected
             .clone()
-            .or_else(|| self.menu_file.as_ref().map(|menus| menus.path.clone()))
+            .or_else(|| self.menu_file().map(|menus| menus.path.clone()))
             .or_else(|| self.view().map(|view| view.path.clone()))
             .or_else(|| self.project().map(|project| project.root.clone()));
 
