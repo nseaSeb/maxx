@@ -61,10 +61,14 @@ pub struct View {
     ///
     /// The catalogue's own imports are worked out from the tree at every save,
     /// because a `Spec` carries them. A component of the project carries none —
-    /// maxx read it out of the developer's own source — so the one line naming
-    /// it is remembered here, from the drop to the save. Nothing is lost on a
-    /// reload: by then the line is in the file, and `ensure_imports` will find
-    /// it already there.
+    /// maxx read it out of the developer's own source — so the line naming it is
+    /// put here when it is dropped.
+    ///
+    /// Kept, but **filtered against the tree at every save**: remembering alone
+    /// meant that dropping a brick and pressing `⌘Z` still wrote its `use` line
+    /// into a file with nothing to use it. `checkpoint` snapshots the tree and
+    /// only the tree, and `ensure_imports` only ever adds — so nothing would
+    /// have taken that line back out.
     pub extra_imports: Vec<String>,
 }
 
@@ -239,7 +243,13 @@ impl View {
 
         let mut source = parser::splice(&self.source, &block).map_err(|error| error.to_string())?;
         let mut needed = registry::imports(&self.root);
-        needed.extend(self.extra_imports.iter().map(String::as_str));
+        let owed: Vec<&str> = self
+            .extra_imports
+            .iter()
+            .filter(|line| tree_names(&self.root, line))
+            .map(String::as_str)
+            .collect();
+        needed.extend(owed);
         source = ensure_imports(source, &needed);
         for (field, state) in state_fields_needed(&self.root) {
             source = ensure_state_field(source, &field, &state);
@@ -261,6 +271,24 @@ impl View {
 }
 
 /// Inserts the `use` lines that are missing, after the last existing one.
+/// Whether the tree still holds something the `use` line names.
+///
+/// The type is the last segment of the path — `use crate::components::Card;`
+/// names `Card` — and a tree holds it when some node is built by its `new`.
+fn tree_names(root: &Node, line: &str) -> bool {
+    let Some(type_name) = line.trim_end_matches(';').rsplit("::").next() else {
+        return false;
+    };
+    let constructor = format!("{type_name}::new");
+    let mut found = false;
+    root.walk(&mut |_, node| {
+        if node.base.path() == Some(constructor.as_str()) {
+            found = true;
+        }
+    });
+    found
+}
+
 fn ensure_imports(source: String, lines: &[&str]) -> String {
     let missing: Vec<&str> =
         lines.iter().copied().filter(|line| !already_imported(&source, line)).collect();

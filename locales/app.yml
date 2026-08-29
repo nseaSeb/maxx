@@ -98,6 +98,9 @@ designer.add:
 designer.project_components:
   en: "Of this project"
   fr: "De ce projet"
+designer.catalogue:
+  en: "From the catalogue"
+  fr: "Du catalogue"
 designer.components:
   en: "Components"
   fr: "Composants"

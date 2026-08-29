@@ -37,11 +37,18 @@ impl Workspace {
         let mine: Vec<_> = self
             .bricks
             .iter()
-            .filter(|brick| label_matches(&brick.type_name, &brick.doc, &query))
+            .filter(|brick| label_matches(&brick.type_name, &fold(&brick.doc), &query))
             .cloned()
             .collect();
 
         v_flex()
+            // The search box first, because everything under it answers to what
+            // is typed in it: a list above the box changes while you type and
+            // reads as a list that is not being filtered.
+            .child(section_title("designer.components"))
+            .when_some(self.palette_filter().cloned(), |this, filter| {
+                this.child(div().px_3().pb_1().child(Input::new(&filter).small()))
+            })
             .children(mine.first().map(|_| section_title("designer.project_components")))
             .children(mine.into_iter().map(|brick| {
                 let name = brick.type_name.clone();
@@ -56,10 +63,7 @@ impl Workspace {
                         this.insert_brick(&name, cx);
                     }))
             }))
-            .child(section_title("designer.components"))
-            .when_some(self.palette_filter().cloned(), |this, filter| {
-                this.child(div().px_3().pb_1().child(Input::new(&filter).small()))
-            })
+            .child(section_title("designer.catalogue"))
             .when(matching.is_empty(), |this| {
                 this.child(
                     div()

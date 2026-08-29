@@ -146,13 +146,6 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Drops a sub-tree template in, as one gesture.
-    ///
-    /// The clipboard path, with the source coming from a table instead of the
-    /// system: `parse_expr` is what reads both, which is the whole reason this
-    /// needed no new machinery. A template maxx cannot read is a defect in the
-    /// table and says so, where a clipboard that cannot be read is only a
-    /// clipboard holding something else.
     /// Drops one of the project's own components into the view.
     ///
     /// The same road a template takes — an expression parsed and inserted —
@@ -198,6 +191,13 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Drops a sub-tree template in, as one gesture.
+    ///
+    /// The clipboard path, with the source coming from a table instead of the
+    /// system: `parse_expr` is what reads both, which is the whole reason this
+    /// needed no new machinery. A template maxx cannot read is a defect in the
+    /// table and says so, where a clipboard that cannot be read is only a
+    /// clipboard holding something else.
     pub fn insert_subtree(&mut self, id: &str, cx: &mut Context<Self>) {
         let Some((_, _, source)) =
             crate::scaffold::templates::SUBTREES.iter().find(|(this, _, _)| *this == id)

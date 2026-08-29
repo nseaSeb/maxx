@@ -36,8 +36,10 @@ pub struct Brick {
     pub module: String,
     /// The first line of the file's own `//!`, for the palette to show.
     pub doc: String,
-    /// How many arguments `new` takes.
+    /// How many arguments `new` takes, all of them text.
     pub arity: usize,
+    /// Whether `mod.rs` re-exports the type, which decides the `use` line.
+    reexported: bool,
 }
 
 impl Brick {
@@ -53,11 +55,17 @@ impl Brick {
 
     /// The `use` line a view needs to name it.
     ///
-    /// Through the re-export and not the module: `use crate::components::Card;`
-    /// is what `src/components/mod.rs` offers and what a developer would have
-    /// written.
+    /// Read from `mod.rs` rather than assumed. maxx's own bricks are
+    /// re-exported, so `use crate::components::Card;` is right for them — but a
+    /// developer who wrote `mod badge;` and no re-export would have received a
+    /// line that does not resolve, spliced into their view by maxx, and their
+    /// project would stop compiling on it.
     pub fn import(&self) -> String {
-        format!("use crate::components::{};", self.type_name)
+        if self.reexported {
+            format!("use crate::components::{};", self.type_name)
+        } else {
+            format!("use crate::components::{}::{};", self.module, self.type_name)
+        }
     }
 }
 
@@ -70,6 +78,9 @@ pub fn read(root: &Path) -> Vec<Brick> {
     let Ok(entries) = std::fs::read_dir(&directory) else {
         return Vec::new();
     };
+    // What `mod.rs` says, because it decides how a view names each type — and
+    // whether it is reachable at all.
+    let declarations = std::fs::read_to_string(directory.join("mod.rs")).unwrap_or_default();
 
     let mut out = Vec::new();
     for entry in entries.flatten() {
@@ -87,9 +98,24 @@ pub fn read(root: &Path) -> Vec<Brick> {
         let Ok(source) = std::fs::read_to_string(&path) else {
             continue;
         };
-        if let Some(brick) = read_one(&module, &source) {
-            out.push(brick);
+        let Some(mut brick) = read_one(&module, &source) else {
+            continue;
+        };
+        // A file nothing declares is not part of the project: it is not
+        // compiled, and a view naming it would not build.
+        if !declares(&declarations, &module) {
+            continue;
         }
+        brick.reexported = reexports(&declarations, &module, &brick.type_name);
+        // A name the catalogue already answers to is worse than no name.
+        // `Badge::new(..)` would match maxx's own `Badge`, so the save would
+        // write both `use gpui_component::badge::Badge;` and the project's own
+        // — E0252, on two lines maxx wrote — while the canvas drew the wrong
+        // component and the inspector offered properties the type has not.
+        if crate::registry::by_path(&format!("{}::new", brick.type_name)).is_some() {
+            continue;
+        }
+        out.push(brick);
     }
     // Read from a directory, so in whatever order the filesystem answers:
     // sorted, or the palette would reshuffle itself between two launches.
@@ -101,37 +127,82 @@ pub fn read(root: &Path) -> Vec<Brick> {
 fn read_one(module: &str, source: &str) -> Option<Brick> {
     let file = syn::parse_file(source).ok()?;
 
-    // The public struct of the file. Not "the struct named after the file": a
-    // developer is free to have renamed one without renaming the other, and the
-    // type is what a view will write.
-    let type_name = file.items.iter().find_map(|item| match item {
-        syn::Item::Struct(item) if matches!(item.vis, syn::Visibility::Public(_)) => {
-            Some(item.ident.to_string())
-        }
-        _ => None,
-    })?;
+    let public: Vec<String> = file
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            syn::Item::Struct(item) if matches!(item.vis, syn::Visibility::Public(_)) => {
+                Some(item.ident.to_string())
+            }
+            _ => None,
+        })
+        .collect();
 
-    // And its `new`. Without one there is nothing to write on the canvas, so
-    // there is nothing to offer either.
-    let arity = file.items.iter().find_map(|item| {
+    // The public struct that *has* the constructor, and not the first one the
+    // file declares: a `pub struct CardStyle` written above `pub struct Card`
+    // would otherwise be what the palette offered.
+    let (type_name, arity) = file.items.iter().find_map(|item| {
         let syn::Item::Impl(block) = item else {
             return None;
         };
-        if block.trait_.is_some() || !impl_of(block, &type_name) {
+        if block.trait_.is_some() {
             return None;
         }
-        block.items.iter().find_map(|item| match item {
+        let name = public.iter().find(|name| impl_of(block, name))?;
+        let arity = block.items.iter().find_map(|item| match item {
             syn::ImplItem::Fn(function)
                 if function.sig.ident == "new"
                     && matches!(function.vis, syn::Visibility::Public(_)) =>
             {
-                Some(function.sig.inputs.len())
+                // Every argument has to be one maxx can write, and all it knows
+                // how to write is a string. `pub fn new(window: &mut Window, cx:
+                // &mut Context<Self>)` — the commonest constructor in all of
+                // GPUI — would otherwise be offered and dropped as
+                // `Foo::new("Text", "Text")`: a node that parses, so nothing
+                // complains, and a type error the developer finds in Zed.
+                function.sig.inputs.iter().all(is_text).then_some(function.sig.inputs.len())
             }
             _ => None,
-        })
+        })?;
+        Some((name.clone(), arity))
     })?;
 
-    Some(Brick { type_name, module: module.to_string(), doc: first_doc_line(source), arity })
+    Some(Brick {
+        type_name,
+        module: module.to_string(),
+        doc: first_doc_line(source),
+        arity,
+        reexported: false,
+    })
+}
+
+/// Whether this parameter is one maxx knows how to write: a string.
+///
+/// Spelled the four ways a constructor takes one. Anything else — a number, a
+/// list, a `&mut Window` — is a value maxx has nothing to put in, so the
+/// component holding it is not offered rather than offered wrongly.
+fn is_text(argument: &syn::FnArg) -> bool {
+    let syn::FnArg::Typed(typed) = argument else {
+        return false;
+    };
+    let rendered = quote::quote!(#typed).to_string().replace(' ', "");
+    rendered.ends_with("implInto<SharedString>")
+        || rendered.ends_with(":SharedString")
+        || rendered.ends_with(":String")
+        || rendered.ends_with(":&str")
+        || rendered.ends_with("implInto<String>")
+}
+
+/// Whether `mod.rs` declares this module.
+fn declares(declarations: &str, module: &str) -> bool {
+    let needle = format!("mod {module};");
+    declarations.lines().any(|line| line.trim().trim_start_matches("pub ") == needle)
+}
+
+/// Whether `mod.rs` re-exports the type, so a view can name it directly.
+fn reexports(declarations: &str, module: &str, type_name: &str) -> bool {
+    let needle = format!("pub use {module}::{type_name};");
+    declarations.lines().any(|line| line.trim() == needle)
 }
 
 /// Whether this `impl` block is the inherent one of `type_name`.
@@ -183,7 +254,6 @@ mod tests {
         };
         assert_eq!(read("card").expression(), "Card::new(\"Text\")");
         assert_eq!(read("toolbar").expression(), "Toolbar::new()");
-        assert_eq!(read("card").import(), "use crate::components::Card;");
     }
 
     /// What the expression writes is something the parser reads back.
@@ -199,6 +269,65 @@ mod tests {
             assert!(!node.is_opaque(), "{module}: {}", brick.expression());
             assert_eq!(node.base.path(), Some(format!("{}::new", brick.type_name).as_str()));
         }
+    }
+
+    /// A constructor maxx cannot fill is not offered.
+    ///
+    /// The commonest constructor in all of GPUI takes a window and a context.
+    /// Offered, it would have been dropped as `Foo::new("Text", "Text")` — a
+    /// node that parses, so nothing complains, and a type error the developer
+    /// finds in Zed on a line maxx wrote.
+    #[test]
+    fn a_constructor_maxx_cannot_fill_is_not_offered() {
+        assert!(
+            read_one(
+                "screen",
+                "pub struct Screen;\nimpl Screen { pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self { Screen } }\n"
+            )
+            .is_none(),
+            "a window and a context are not text"
+        );
+        assert!(
+            read_one("counter", "pub struct Counter;\nimpl Counter { pub fn new(count: usize) -> Self { Counter } }\n")
+                .is_none(),
+            "a number is not text"
+        );
+        // And the four spellings of a string that are.
+        for argument in [
+            "title: impl Into<SharedString>",
+            "title: SharedString",
+            "title: String",
+            "title: &str",
+        ] {
+            let source = format!(
+                "pub struct Card;\nimpl Card {{ pub fn new({argument}) -> Self {{ Card }} }}\n"
+            );
+            assert_eq!(read_one("card", &source).map(|b| b.arity), Some(1), "{argument}");
+        }
+    }
+
+    /// The struct that holds the constructor, not the first one in the file.
+    #[test]
+    fn the_offered_type_is_the_one_with_the_constructor() {
+        let source = "pub struct CardStyle;\npub struct Card;\nimpl Card { pub fn new() -> Self { Card } }\n";
+        assert_eq!(read_one("card", source).map(|b| b.type_name), Some("Card".to_string()));
+    }
+
+    /// The `use` line follows what `mod.rs` actually offers.
+    #[test]
+    fn the_import_follows_the_declaration() {
+        let reexported = Brick {
+            type_name: "Card".into(),
+            module: "card".into(),
+            doc: String::new(),
+            arity: 0,
+            reexported: true,
+        };
+        assert_eq!(reexported.import(), "use crate::components::Card;");
+        // Theirs, declared but not re-exported: naming it directly would not
+        // resolve, and maxx would have written that line into their view.
+        let theirs = Brick { reexported: false, ..reexported };
+        assert_eq!(theirs.import(), "use crate::components::card::Card;");
     }
 
     /// A file with no public struct, or no `new`, is not offered.

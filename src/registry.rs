@@ -256,6 +256,15 @@ pub fn by_id(id: &str) -> Option<&'static Spec> {
     CATALOGUE.iter().find(|spec| spec.id == id)
 }
 
+/// The catalogue entry whose constructor is this path.
+///
+/// What a name has to be checked against before it is offered as something
+/// else: two components answering to `Badge::new` is two `use` lines for one
+/// name, and a canvas drawing the wrong one.
+pub fn by_path(path: &str) -> Option<&'static Spec> {
+    CATALOGUE.iter().find(|spec| spec.base == path)
+}
+
 /// The catalogue entry a node was built from, matched on its constructor path.
 pub fn of(node: &Node) -> Option<&'static Spec> {
     let path = node.base.path()?;

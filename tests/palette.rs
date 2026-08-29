@@ -208,3 +208,37 @@ fn a_scaffolded_palette_does_not_depend_on_the_machine() {
     let background = written.swatches().iter().find(|s| s.name == "BACKGROUND").unwrap();
     assert_eq!(background.dark, 0x1e2127, "a role not given keeps the template's");
 }
+
+/// Undoing a drop takes its `use` line with it.
+///
+/// The defect this guards against left a warning on a file maxx wrote: the
+/// import was remembered from the drop, `checkpoint` snapshots the tree and
+/// only the tree, and `ensure_imports` only ever adds — so `⌘Z` took the node
+/// away and left the line naming it behind.
+#[test]
+fn undoing_a_dropped_brick_does_not_leave_its_import() {
+    let scratch = Scratch::new("brick-undo");
+    let root = scratch.0.join("trial");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::add_components_module(&root).expect("the components must be added");
+
+    let bricks = maxx::bricks::read(&root);
+    let brick = bricks.iter().find(|brick| brick.type_name == "Card").expect("Card");
+
+    let path = root.join("src/ui/home.rs");
+    let mut view = maxx::view::View::load(&path).expect("the view must read back");
+    let node = maxx::parser::parse_expr(&brick.expression()).unwrap();
+    let at = vec![view.root.children.len()];
+    assert!(view.root.insert(&at, node));
+    view.extra_imports.push(brick.import());
+
+    // The undo: the tree goes back, the remembered line does not.
+    view.root.remove(&at);
+    view.save().expect("the view must save");
+
+    let written = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        !written.contains(&brick.import()),
+        "no line may name what the view no longer holds:\n{written}"
+    );
+}

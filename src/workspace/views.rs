@@ -566,10 +566,16 @@ impl Workspace {
         // And the canvas follows the file even when nobody has the palette
         // open, which is the ordinary case: it is the preview, not the editor,
         // that has to tell the truth about the project's colours.
-        if self.palette().is_none()
-            && let Some(root) = self.project.as_ref().map(|project| project.root.clone())
-        {
-            self.preview = crate::preview::Preview::read(&root);
+        if let Some(root) = self.project.as_ref().map(|project| project.root.clone()) {
+            if self.palette().is_none() {
+                self.preview = crate::preview::Preview::read(&root);
+            }
+            // And the components. The case this is written for is a developer
+            // writing one in Zed while maxx is open — without this it reaches
+            // the palette only at the next opening of the project. Worse, a
+            // `new` whose arguments changed there would go on being dropped in
+            // its old shape, which no longer compiles.
+            self.bricks = crate::bricks::read(&root);
         }
         cx.notify();
     }
