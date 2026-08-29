@@ -74,7 +74,14 @@ impl Workspace {
         let Some(file) = self.palette.as_mut() else {
             return;
         };
-        match file.set(name, mode, value) {
+        let before = file.role_names();
+        let outcome = file.set(name, mode, value);
+        // `set` re-reads, so the roles it holds may have changed while the page
+        // was open. The pickers are built from that list, so they follow it.
+        if file.role_names() != before {
+            self.palette_synced = None;
+        }
+        match outcome {
             Ok(true) => self.message = Some(crate::tr("message.palette_saved")),
             // Nothing to write: the role is gone from the file, or the value it
             // holds is already the one asked for. Either way the file has just

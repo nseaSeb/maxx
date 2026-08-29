@@ -34,9 +34,11 @@ impl Workspace {
         if self.discard_menu_edits(cx) {
             return;
         }
-        // The menu editor and the preferences are modes: clicking a tab has
-        // to leave them, or the tab strip stays without effect.
+        // The menu editor, the palette and the preferences are modes: clicking
+        // a tab has to leave them, or the tab strip stays without effect. The
+        // strip is drawn *above* each of them for exactly that reason.
         self.menu_file = None;
+        self.palette = None;
         self.preferences = false;
         self.code = None;
         if index < self.views.len() {
@@ -562,6 +564,14 @@ impl Workspace {
             if self.conflicts.insert(path) {
                 self.message = Some(crate::tr("message.conflict_both"));
             }
+        }
+        // The palette has nothing to lose on maxx's side — a picker holds no
+        // unsaved state, every turn of one is already on disk — so it is taken
+        // back from the file without asking, the way an untouched view is.
+        if let Some(palette) = self.palette.as_mut()
+            && palette.reload()
+        {
+            self.palette_synced = None;
         }
         cx.notify();
     }

@@ -146,8 +146,13 @@ impl Workspace {
         }
 
         self.refresh_entries();
-        // `theme` may be among them, and its file has just been rewritten:
-        // the palette boxes are rebuilt from it on the next frame.
+        // `theme` may be among them, and its file has just been rewritten.
+        // Re-reading it is the point: clearing the key alone would rebuild the
+        // pickers from the copy held here, which is the palette as it stood
+        // *before* the update — the old colours, shown as if nothing happened.
+        if let Some(palette) = self.palette.as_mut() {
+            palette.reload();
+        }
         self.palette_synced = None;
         self.message = Some(SharedString::from(if failed.is_empty() {
             t!("message.modules_updated", modules = updated.join(", ")).into_owned()

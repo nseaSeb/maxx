@@ -145,6 +145,34 @@ impl ThemeFile {
         &self.swatches
     }
 
+    /// The names of the roles, in file order.
+    ///
+    /// What the pickers are built from, so what tells whether they have to be
+    /// built again: a role added or removed elsewhere means one row of the
+    /// editor has no picker behind it, or one picker has no row.
+    pub fn role_names(&self) -> Vec<String> {
+        self.swatches.iter().map(|swatch| swatch.name.clone()).collect()
+    }
+
+    /// Re-reads the file, answering whether anything in it moved.
+    ///
+    /// The copy held here is what the screen draws from, and it goes stale as
+    /// soon as anything else writes: the developer in Zed, or `File ▸ Update
+    /// copied modules`. Writing is safe without this — [`ThemeFile::set`]
+    /// re-reads on its own — but the screen would go on showing colours the
+    /// project no longer has, which is a lie a screen must not tell.
+    pub fn reload(&mut self) -> bool {
+        let Ok(source) = std::fs::read_to_string(&self.path) else {
+            return false;
+        };
+        if source == self.source {
+            return false;
+        }
+        self.swatches = read_swatches(&source);
+        self.source = source;
+        true
+    }
+
     /// Sets one value, and writes the file.
     ///
     /// Reading and writing are one step on purpose. The copy held in memory is
@@ -271,11 +299,18 @@ fn hex_range(source: &str, body: Range<usize>, mode: Mode) -> Option<Range<usize
         }
         search = after;
     };
-    let value = inside[key..].find("0x")? + key;
-    let end = inside[value + 2..]
+    // Bounded to this field. Unbounded, the search walks past the comma into
+    // the *next* field and answers with its literal — so a role written
+    // `Role { dark: shade(2), light: 0x222222 }` would hand back the same range
+    // for both modes, and setting the dark one would overwrite the light one
+    // the developer never touched. The reader must not read what the writer
+    // would then wreck.
+    let field_end = inside[key..].find(',').map(|at| key + at).unwrap_or(inside.len());
+    let value = inside[key..field_end].find("0x")? + key;
+    let end = inside[value + 2..field_end]
         .find(|c: char| !c.is_ascii_hexdigit() && c != '_')
         .map(|offset| value + 2 + offset)
-        .unwrap_or(inside.len());
+        .unwrap_or(field_end);
     Some(body.start + value..body.start + end)
 }
 
@@ -451,6 +486,43 @@ pub const FINE: Role = Role { dark: 0x111111, light: 0x222222 };
         let swatches = read_swatches(source);
         let names: Vec<_> = swatches.iter().map(|swatch| swatch.name.as_str()).collect();
         assert_eq!(names, ["FINE"], "only the shape the writer can put back");
+    }
+
+    /// A role whose other mode is not a literal does not lend it its own.
+    ///
+    /// The failure this guards against destroys a value nobody touched: with
+    /// the search for `0x` unbounded, `dark:` finds nothing before the comma
+    /// and walks into `light:`, so both modes point at the same literal and
+    /// setting one overwrites the other. The reader must not read what the
+    /// writer would then wreck.
+    #[test]
+    fn a_computed_mode_does_not_borrow_the_other_s_literal() {
+        let source = "pub const ODD: Role = Role { dark: shade(2), light: 0x222222 };\n";
+        assert!(read_swatches(source).is_empty(), "half a role is not a role");
+
+        // And the mirror, so the bound is checked on both sides.
+        let source = "pub const ODD: Role = Role { dark: 0x111111, light: shade(9) };\n";
+        assert!(read_swatches(source).is_empty(), "half a role is not a role");
+    }
+
+    /// What the file gains while the page is open is picked up.
+    #[test]
+    fn reload_takes_what_the_file_says_now() {
+        let scratch = Scratch::with(&sample(), "reload");
+        let mut file = scratch.load();
+        assert!(!file.reload(), "nothing moved yet");
+
+        std::fs::write(
+            ThemeFile::path_in(&scratch.0),
+            format!(
+                "{}\npub const WARNING: Role = Role {{ dark: 0xd19a66, light: 0x9a6700 }};\n",
+                sample()
+            ),
+        )
+        .unwrap();
+
+        assert!(file.reload(), "the file moved");
+        assert!(file.role_names().contains(&"WARNING".to_string()), "{:?}", file.role_names());
     }
 
     /// The field name is matched whole.

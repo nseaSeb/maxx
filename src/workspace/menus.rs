@@ -182,6 +182,7 @@ impl Workspace {
     /// unfindable for anyone who had not been told.
     pub fn open_menu_bar(&mut self, cx: &mut Context<Self>) {
         self.preferences = false;
+        self.palette = None;
         let Some(project) = self.project.as_ref() else {
             self.message = Some(crate::tr("message.no_project"));
             cx.notify();
