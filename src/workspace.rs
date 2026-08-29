@@ -239,11 +239,6 @@ pub struct Workspace {
     palette_filter: Option<Entity<InputState>>,
     /// The command palette's box, while it is open.
     command_input: Option<Entity<InputState>>,
-    /// The commands the palette was opened on.
-    ///
-    /// Built once, at opening: walking the menu bar reads the settings and asks
-    /// the system which editors are installed, which is not a thing to do on
-    /// every keystroke.
     /// What the middle of the window shows.
     ///
     /// One value, and that is the whole point of it. These were four fields
@@ -257,6 +252,13 @@ pub struct Workspace {
     /// Now the type says it: setting one clears the others by construction, and
     /// [`Workspace::show`] is the only way in.
     center: Center,
+    /// The file the reader holds, under whatever the middle shows.
+    code: Option<CodeFile>,
+    /// The commands the palette was opened on.
+    ///
+    /// Built once, at opening: walking the menu bar reads the settings and asks
+    /// the system which editors are installed, which is not a thing to do on
+    /// every keystroke.
     commands: Vec<crate::palette::Command>,
     /// The files `⌘P` is offering, relative to the project root.
     ///
@@ -312,8 +314,6 @@ pub enum Center {
     Designer,
     /// The menu bar of the project, `src/menus.rs`.
     Menus(MenuFile),
-    /// Any text file of the project, read and not edited.
-    Code(CodeFile),
     /// The project's palette, `src/theme.rs`.
     Palette(crate::themefile::ThemeFile),
     /// maxx's own settings.
@@ -351,20 +351,21 @@ impl Workspace {
         }
     }
 
-    /// The file in the reader, when it is what the middle shows.
+    /// The file in the reader, when one is open.
+    ///
+    /// Deliberately *not* a variant of [`Center`], and the distinction cost a
+    /// regression to learn: the reader holds a **document**, and a document
+    /// survives what covers it. Made a mode, it was dropped the moment anything
+    /// else took the middle — `⌘,` twice left the designer with the file gone
+    /// and its tab with it, where the tab strip exists precisely to bring it
+    /// back. What is exclusive is the four modes; the document sits under them.
     pub fn code(&self) -> Option<&CodeFile> {
-        match &self.center {
-            Center::Code(file) => Some(file),
-            _ => None,
-        }
+        self.code.as_ref()
     }
 
     /// The same, to write into.
     pub fn code_mut(&mut self) -> Option<&mut CodeFile> {
-        match &mut self.center {
-            Center::Code(file) => Some(file),
-            _ => None,
-        }
+        self.code.as_mut()
     }
 
     /// The palette being edited, when it is what the middle shows.
@@ -407,6 +408,7 @@ impl Workspace {
             selected: None,
             entry_view: None,
             center: Center::Designer,
+            code: None,
             code_input: None,
             code_synced: None,
             code_revision: 0,
@@ -474,11 +476,14 @@ impl Workspace {
         remember_project(&path, cx);
         self.announce_outdated_modules(&path);
         self.menu_synced = None;
-        self.show_designer();
         self.preview = crate::preview::Preview::read(&path);
         // A window with no project can still hold a file in the reader; showing
         // it under the new project's name would be the previous project's file.
+        // Before leaving the modes, not after: `forget_code` also drops the
+        // reader's box and its sync key, and it only does so while the file is
+        // still there to be recognised.
         self.forget_code(|_| true);
+        self.show_designer();
         let project = Project::open(path);
         window.set_window_title(&project.name);
         self.project = Some(project);

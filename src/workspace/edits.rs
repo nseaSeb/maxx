@@ -423,12 +423,12 @@ mod tests {
         let workspace =
             cx.update(|cx| cx.new(|cx| Workspace::new(Some(Project::open(root.clone())), cx)));
 
-        // How many of the modes claim the middle. Never more than one, and the
-        // designer is the absence of them all.
+        // How many modes claim the middle. Never more than one, and the
+        // designer is the absence of them all. The reader is not counted: it
+        // holds a document, which lives under whatever covers it.
         let showing = |workspace: &Workspace| {
             [
                 workspace.menu_file().is_some(),
-                workspace.code().is_some(),
                 workspace.palette().is_some(),
                 workspace.preferences(),
             ]
@@ -446,15 +446,29 @@ mod tests {
             assert_eq!(showing(workspace), 1);
 
             workspace.select_file(root.join("src/main.rs"), cx);
-            assert!(workspace.code().is_some(), "the reader takes over");
-            assert_eq!(showing(workspace), 1, "and the palette is gone");
+            assert!(workspace.code().is_some(), "the reader holds the file");
+            assert_eq!(showing(workspace), 0, "and it is not a mode: nothing covers it");
 
+            // The reader is a document, so a mode covers it and does not
+            // destroy it. Made a variant of `Center`, `⌘,` twice left the
+            // designer with the file gone and its tab with it.
             workspace.toggle_preferences(cx);
-            assert!(workspace.preferences(), "the settings take over");
-            assert_eq!(showing(workspace), 1, "and the reader is gone");
+            assert!(workspace.preferences(), "the settings cover it");
+            assert!(workspace.code().is_some(), "the file is still there underneath");
+            workspace.toggle_preferences(cx);
+            assert!(!workspace.preferences());
+            assert!(workspace.code().is_some(), "and comes back when the cover lifts");
+
+            // Clicking the read tab brings it forward rather than closing it.
+            workspace.toggle_preferences(cx);
+            workspace.activate_code(cx);
+            assert!(!workspace.preferences(), "the tab left the settings");
+            assert!(workspace.code().is_some(), "and kept the file");
 
             // The gesture the reviewer found broken: the tab strip is drawn
             // above every mode precisely so it is the way back.
+            workspace.select_file(root.join("src/theme.rs"), cx);
+            assert!(workspace.palette().is_some());
             workspace.activate_view(0, cx);
             assert_eq!(showing(workspace), 0, "a tab click comes back to the view");
         });

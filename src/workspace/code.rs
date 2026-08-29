@@ -232,7 +232,8 @@ impl Workspace {
         // and the reader's status line yields to `message`, so one left behind
         // would hide the file that did open.
         self.message = None;
-        self.show(Center::Code(file));
+        self.code = Some(file);
+        self.show_designer();
         self.code_synced = None;
         self.code_revision = self.revision;
     }
@@ -286,7 +287,7 @@ impl Workspace {
             return;
         };
         if let Ok(file) = CodeFile::of_view(view) {
-            self.show(Center::Code(file));
+            self.code = Some(file);
             self.code_synced = None;
         }
     }
