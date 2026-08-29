@@ -12,9 +12,9 @@ use gpui_component::{h_flex, v_flex};
 use crate::model::Path;
 use crate::theme;
 use gpui::Window;
-use gpui_component::resizable::{h_resizable, resizable_panel};
+use gpui_component::resizable::{h_resizable, resizable_panel, v_resizable};
 
-use crate::workspace::Workspace;
+use crate::workspace::{Workspace, fillable};
 
 mod canvas;
 mod inspector;
@@ -213,35 +213,77 @@ impl Workspace {
     /// has a few nodes, so the column scrolls and carries a visible bar.
     fn render_side_panels(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
-            .relative()
             // No width here: the resizable panel is what gives it, and a fixed
             // width inside would fight with the handle.
             .size_full()
+            .flex()
             .border_l_1()
             .border_color(theme::border())
             .bg(theme::panel_bg())
             .child(
-                div()
-                    .id("side-panels")
-                    .size_full()
-                    .overflow_y_scroll()
-                    .track_scroll(&self.side_scroll)
+                // Two panes with a handle between them, and each with its own
+                // scroll. One column meant that selecting a node deep in the
+                // tree pushed the tree out of sight — at the moment you most
+                // want to see where you are — and that one scrollbar served
+                // five unrelated things.
+                v_resizable("cote")
+                    .with_state(&self.side_split)
                     .child(
-                        v_flex()
-                            .child(self.render_tree(cx))
-                            .child(self.render_inspector(cx))
-                            .child(self.render_view_name(cx))
-                            .child(self.render_state(cx))
-                            .child(self.render_palette(cx)),
+                        resizable_panel()
+                            .size(px(220.))
+                            // Below this the tree shows two rows; beyond it, it
+                            // leaves the inspector nothing.
+                            .size_range(px(80.)..px(560.))
+                            .child(fillable(
+                                div()
+                                    .relative()
+                                    .size_full()
+                                    .child(
+                                        div()
+                                            .id("side-structure")
+                                            .size_full()
+                                            .overflow_y_scroll()
+                                            .track_scroll(&self.tree_scroll)
+                                            .child(self.render_tree(cx)),
+                                    )
+                                    .child(
+                                        div()
+                                            .absolute()
+                                            .top_0()
+                                            .right_0()
+                                            .bottom_0()
+                                            .child(Scrollbar::vertical(&self.tree_scroll)),
+                                    ),
+                            )),
+                    )
+                    .child(
+                        resizable_panel().child(fillable(
+                            div()
+                                .relative()
+                                .size_full()
+                                .child(
+                                    div()
+                                        .id("side-panels")
+                                        .size_full()
+                                        .overflow_y_scroll()
+                                        .track_scroll(&self.side_scroll)
+                                        .child(
+                                            v_flex()
+                                                .child(self.render_inspector(cx))
+                                                .child(self.render_view_name(cx))
+                                                .child(self.render_state(cx)),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .absolute()
+                                        .top_0()
+                                        .right_0()
+                                        .bottom_0()
+                                        .child(Scrollbar::vertical(&self.side_scroll)),
+                                ),
+                        )),
                     ),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .right_0()
-                    .bottom_0()
-                    .child(Scrollbar::vertical(&self.side_scroll)),
             )
     }
 }

@@ -15,7 +15,7 @@ use super::{DragGhost, Dragged, section_title};
 
 impl Workspace {
     /// The component palette. Clicking inserts into the selected container.
-    pub(super) fn render_palette(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(crate) fn render_palette(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let query = self
             .palette_filter()
             .map(|filter| filter.read(cx).value().to_string())

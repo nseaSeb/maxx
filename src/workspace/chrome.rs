@@ -1,6 +1,7 @@
 //! The window's own furniture: titlebar, welcome screen, status bar, [`Render`].
 
 use gpui_component::input::Input;
+use gpui_component::resizable::{resizable_panel, v_resizable};
 use gpui_component::{h_flex, v_flex};
 
 use super::*;
@@ -356,7 +357,7 @@ impl Render for Workspace {
                                         // unreadable; beyond it, it eats
                                         // the canvas.
                                         .size_range(px(160.)..px(520.))
-                                        .child(fillable(self.render_project_panel(cx))),
+                                        .child(fillable(self.render_left_column(cx))),
                                 )
                                 .child(resizable_panel().child(fillable(self.render_main(cx)))),
                         )
@@ -365,6 +366,49 @@ impl Render for Workspace {
             .when(visible.show_output, |this| this.child(self.render_output(cx)))
             .when(visible.show_status_bar, |this| this.child(self.render_status_bar()))
             .children(self.render_command_palette(cx))
+    }
+}
+
+impl Workspace {
+    /// The left column: the project's files above, the components below.
+    ///
+    /// The palette used to sit at the bottom of the right panel, under the
+    /// inspector — which meant the tool you reach for most while building was
+    /// below the fold, past twenty properties. It is a **source**, not a
+    /// property of the selection, and its place is beside the other source the
+    /// window offers.
+    pub(super) fn render_left_column(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        v_resizable("colonne-gauche")
+            .with_state(&self.left_split)
+            .child(
+                resizable_panel()
+                    .size(px(360.))
+                    .size_range(px(120.)..px(900.))
+                    .child(fillable(self.render_project_panel(cx))),
+            )
+            .child(
+                resizable_panel().size_range(px(120.)..px(900.)).child(fillable(
+                    div()
+                        .relative()
+                        .size_full()
+                        .child(
+                            div()
+                                .id("left-palette")
+                                .size_full()
+                                .overflow_y_scroll()
+                                .track_scroll(&self.palette_scroll)
+                                .child(self.render_palette(cx)),
+                        )
+                        .child(
+                            div()
+                                .absolute()
+                                .top_0()
+                                .right_0()
+                                .bottom_0()
+                                .child(Scrollbar::vertical(&self.palette_scroll)),
+                        ),
+                )),
+            )
     }
 }
 

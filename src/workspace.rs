@@ -30,7 +30,7 @@ use gpui_component::Root;
 use gpui_component::Sizable as _;
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::menu::ContextMenuExt as _;
-use gpui_component::resizable::{ResizableState, h_resizable, resizable_panel};
+use gpui_component::resizable::{ResizableState, h_resizable};
 use gpui_component::scroll::Scrollbar;
 use gpui_component::spinner::Spinner;
 use std::collections::HashMap;
@@ -160,6 +160,14 @@ pub struct Workspace {
     code_revision: u64,
     /// Where the split between the project panel and the rest sits.
     pub(crate) panel_split: Entity<ResizableState>,
+    /// Where the left column parts: files above, components below.
+    pub(crate) left_split: Entity<ResizableState>,
+    /// Where the right panel parts: the structure above, the inspector below.
+    ///
+    /// The two panes are the point of it: with one scrolling column, selecting a
+    /// node deep in the tree pushed the tree out of sight — at the moment you
+    /// most want to see where you are.
+    pub(crate) side_split: Entity<ResizableState>,
     /// Where the split between the canvas and the inspector sits.
     pub(crate) inspector_split: Entity<ResizableState>,
     /// Text boxes of the menu panel.
@@ -300,6 +308,10 @@ pub struct Workspace {
     was_active: bool,
     /// Scroll position of the right-hand panels.
     pub(crate) side_scroll: ScrollHandle,
+    /// The structure pane's own scroll, now that it is a pane of its own.
+    pub(crate) tree_scroll: ScrollHandle,
+    /// The component palette's own scroll, now that it lives on the left.
+    pub(crate) palette_scroll: ScrollHandle,
     /// The natural size of the selected image, when there is one.
     ///
     /// Read once per selection rather than once per frame: `image_dimensions`
@@ -424,6 +436,8 @@ impl Workspace {
             code_synced: None,
             code_revision: 0,
             panel_split: cx.new(|_| ResizableState::default()),
+            left_split: cx.new(|_| ResizableState::default()),
+            side_split: cx.new(|_| ResizableState::default()),
             inspector_split: cx.new(|_| ResizableState::default()),
             menu_inputs: Vec::new(),
             menu_synced: None,
@@ -467,6 +481,8 @@ impl Workspace {
             assets_refused: HashSet::new(),
             was_active: false,
             side_scroll: ScrollHandle::new(),
+            tree_scroll: ScrollHandle::new(),
+            palette_scroll: ScrollHandle::new(),
             canvas_scroll: ScrollHandle::new(),
             image_size: None,
             output_scroll: UniformListScrollHandle::new(),
