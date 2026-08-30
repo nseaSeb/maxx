@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc 78f7c8297f7063f92e306f534ae20a1a9b55a86e855ad480dc2d92a908f66601 # shrinks to node = Node { base: Known { path: "div", args: [Str("x")] }, calls: [], children: [Node { base: Known { path: "div", args: [] }, calls: [], children: [], comments: [], trailing: [] }], comments: [], trailing: [] }
 cc df7a25dc407bf69b875aaf35b28d76688cd3255eafb86e7e4ac2ed9037de51b2 # shrinks to node = Node { base: Known { path: "div", args: [Str("x")] }, calls: [], children: [Node { base: Known { path: "div", args: [Str("x")] }, calls: [], children: [], comments: [], trailing: ["// what this line is for"] }], comments: [], trailing: [] }
+cc d8ca879ad335b3ae48f827b2ae21eaf5748a8850aa72582406b0213bf2996628 # shrinks to source = "// maxx: C is imported twice — one of these two lines has to go.\n// maxx: C is imported twice — one of these two lines has to go.\nuse a::b::C;"

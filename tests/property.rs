@@ -280,3 +280,75 @@ proptest! {
         prop_assert_eq!(render(&parsed, 0), once);
     }
 }
+
+/// The import pass is a fixed point, and it only ever adds.
+///
+/// The invariant this pass promises — "written once and only once" — and the
+/// one that kept breaking without a test failing. Sixteen defects were found in
+/// it by hand and by review, of which four were a mark that stacked: an
+/// indented one, one under an attribute, one with a blank line beneath it, one
+/// whose sentence had drifted. Every one of them passed the example tests,
+/// which asserted that the mark *appeared* and never that a second pass changed
+/// nothing.
+///
+/// So it is stated as a property instead, over the shapes that broke it and the
+/// ones nobody has tried yet:
+///
+/// - running it twice is running it once;
+/// - a file it has nothing to say about comes back byte for byte;
+/// - it never removes one of the file's own lines.
+fn a_file() -> impl Strategy<Value = String> {
+    let line = prop::sample::select(vec![
+        "use a::b::C;".to_string(),
+        "use a::b::{C, D};".to_string(),
+        "use a::b::D;".to_string(),
+        "  use a::b::C;".to_string(),
+        "#[allow(unused_imports)]".to_string(),
+        "/// what this is for".to_string(),
+        "// maxx: C is imported twice — one of these two lines has to go.".to_string(),
+        "  // maxx: C is imported twice — one of these two lines has to go.".to_string(),
+        "".to_string(),
+        "mod tests {".to_string(),
+        "}".to_string(),
+        "fn main() {}".to_string(),
+        "const T: &str = \"use a::b::C;\";".to_string(),
+    ]);
+    (prop::collection::vec(line, 0..9), any::<bool>(), any::<bool>()).prop_map(
+        |(lines, crlf, final_newline)| {
+            let ending = if crlf { "\r\n" } else { "\n" };
+            let mut out = lines.join(ending);
+            if final_newline && !out.is_empty() {
+                out.push_str(ending);
+            }
+            out
+        },
+    )
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 2000, ..ProptestConfig::default() })]
+
+    /// Saying it twice is saying it once.
+    #[test]
+    fn the_import_pass_is_a_fixed_point(source in a_file()) {
+        let once = maxx::view::flag_duplicate_imports_for_test(source);
+        let twice = maxx::view::flag_duplicate_imports_for_test(once.clone());
+        prop_assert_eq!(&twice, &once, "\n--- once ---\n{:?}", once);
+    }
+
+    /// And it never takes away a line the file already had.
+    ///
+    /// Its own marks aside — those it may take back, and only those.
+    #[test]
+    fn the_import_pass_only_ever_adds(source in a_file()) {
+        let out = maxx::view::flag_duplicate_imports_for_test(source.clone());
+        for line in source.lines().filter(|line| !line.trim().starts_with("// maxx: ")) {
+            prop_assert!(
+                out.lines().any(|kept| kept == line),
+                "line gone: {:?}\n--- out ---\n{:?}",
+                line,
+                out
+            );
+        }
+    }
+}

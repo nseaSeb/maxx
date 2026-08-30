@@ -313,12 +313,11 @@ fn ensure_imports(source: String, lines: &[&str]) -> String {
         return source;
     }
 
-    // After the last `use` line of the header, so the block stays together.
-    let anchor = source
-        .match_indices("\nuse ")
-        .last()
-        .and_then(|(offset, _)| source[offset + 1..].find('\n').map(|end| offset + 1 + end + 1))
-        .unwrap_or(0);
+    // After the last `use` ITEM of the header, asked of `syn`. Taking the last
+    // `\nuse ` of the text put the new lines inside a raw string that happened
+    // to hold one — the same failure the mark pass was moved off text to avoid,
+    // on the pass that runs just before it.
+    let anchor = last_import_end(&source);
 
     let mut out = String::with_capacity(source.len() + missing.len() * 48);
     out.push_str(&source[..anchor]);
@@ -417,13 +416,23 @@ fn flag_duplicate_imports(source: String) -> String {
     }
 
     let heads: Vec<usize> = imports.iter().map(|(head, _)| *head).collect();
+    // Where every top-level item begins and ends. A line inside one of them is
+    // inside somebody's code — the body of a `const`, a string literal — and a
+    // sentence that reads like maxx's there is not maxx's to take away. The
+    // insertion side moved onto `syn` two passes ago; this is the other half.
+    let bodies: Vec<(usize, usize)> = parsed
+        .items
+        .iter()
+        .filter(|item| !matches!(item, syn::Item::Use(_)))
+        .map(|item| (item.span().start().line, item.span().end().line))
+        .collect();
     let mut out = String::with_capacity(source.len() + 96);
     for (index, line) in lines.iter().enumerate() {
         let number = index + 1;
         // A mark is maxx's when maxx's sentence stands immediately above an
         // import, attributes included. The sentence alone was not enough: it
         // was taken out of a raw string as readily as out of the import block.
-        if is_our_note(line) && heads.contains(&(number + 1)) {
+        if is_our_note(line) && ours(number, &heads, &bodies, &lines) {
             continue;
         }
         if let Some((_, name)) = marks.iter().find(|(at, _)| *at == number) {
@@ -444,6 +453,57 @@ fn flag_duplicate_imports(source: String) -> String {
     out
 }
 
+/// The byte after the last top-level `use` item, or the start of the file.
+///
+/// From `syn`, so a `use` written inside a string is not one. A file that does
+/// not parse falls back to the text, which is what maxx had before it could ask
+/// — imperfect, and better than refusing to write an import the view needs.
+fn last_import_end(source: &str) -> usize {
+    let line_end =
+        |number: usize| source.split_inclusive('\n').take(number).map(str::len).sum::<usize>();
+    if let Ok(parsed) = syn::parse_file(source) {
+        return parsed
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                syn::Item::Use(item) => Some(item.span().end().line),
+                _ => None,
+            })
+            .max()
+            .map(line_end)
+            .unwrap_or(0);
+    }
+    source
+        .match_indices("\nuse ")
+        .last()
+        .and_then(|(offset, _)| source[offset + 1..].find('\n').map(|end| offset + 1 + end + 1))
+        .unwrap_or(0)
+}
+
+/// Whether the mark on line `number` is one maxx wrote.
+///
+/// Two conditions, and both were learned the hard way. It must not sit inside
+/// another item — a sentence that reads like maxx's inside a string constant
+/// belongs to whoever wrote the string. And the next line that says anything
+/// must be the first line of an import: a blank slipped under a mark by a
+/// formatter used to make it unrecognisable, so it stayed and a second was
+/// written above the import at every save.
+fn ours(number: usize, heads: &[usize], bodies: &[(usize, usize)], lines: &[&str]) -> bool {
+    if bodies.iter().any(|(from, to)| (*from..=*to).contains(&number)) {
+        return false;
+    }
+    // Blank lines and maxx's other marks are stepped over alike. Stopping at
+    // the first mark meant a run of two resolved one per pass instead of all at
+    // once — so running the pass twice did not give what running it once gave,
+    // which is the one thing it promises. Found by the property, not by reading.
+    lines
+        .iter()
+        .enumerate()
+        .skip(number)
+        .find(|(_, line)| !line.trim().is_empty() && !is_our_note(line))
+        .is_some_and(|(index, _)| heads.contains(&(index + 1)))
+}
+
 /// The end of the sentence maxx writes, held once.
 ///
 /// Written twice — once to build the line, once to recognise it — the two drift
@@ -458,7 +518,10 @@ fn note(name: &str) -> String {
 
 /// Whether this line carries that sentence.
 fn is_our_note(line: &str) -> bool {
-    let trimmed = line.trim_end_matches(['\n', '\r']);
+    // Trimmed at both ends. Written with the indentation of the import it points
+    // at and recognised only flush left, a mark on an indented import was never
+    // taken back — and a second was added above it at every save.
+    let trimmed = line.trim();
     trimmed.starts_with(NOTE) && trimmed.ends_with(NOTE_TAIL)
 }
 
