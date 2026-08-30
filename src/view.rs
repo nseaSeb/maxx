@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 
 use rust_i18n::t;
 
+use syn::spanned::Spanned as _;
+
 use crate::model::{Base, Node};
 use crate::parser::matching_brace;
 use crate::{codegen, parser, registry};
@@ -335,8 +337,8 @@ fn ensure_imports(source: String, lines: &[&str]) -> String {
 /// The mark maxx leaves above a line it has something to say about.
 ///
 /// Distinct from [`parser::BEGIN`] and [`parser::END`], which are matched
-/// whole: this one is a prefix, and nothing looks for it but the code that
-/// writes it.
+/// whole: this one opens a sentence, and a line counts as maxx's only when it
+/// carries the whole of it — see [`NOTE_TAIL`] and `is_our_note`.
 const NOTE: &str = "// maxx: ";
 
 /// Points at an import written twice, and takes the mark back when it is not.
@@ -361,20 +363,25 @@ fn flag_duplicate_imports(source: String) -> String {
     //
     // A file that does not parse is left exactly as it is, marks included. It
     // is broken for a reason of its own, and taking away a standing warning
-    // that cannot be written back is churn in the file and in the diff, at the
-    // moment the file needs it most.
+    // that cannot be written back is churn at the moment the file needs it
+    // most.
     let Ok(parsed) = syn::parse_file(&source) else {
         return source;
     };
-    // The `use` keyword's own line, not the item's: a span covers the
-    // attributes above it, so `#[allow(unused_imports)]` or a doc comment moved
-    // the line one up — the import went unread, and a real duplicate under it
-    // went unflagged with it.
-    let tops: Vec<usize> = parsed
+
+    // Two lines per import, and they are not always the same one. The item
+    // begins at its first attribute — that is where a mark goes and where one
+    // is recognised, since a mark left above an `#[allow(…)]` could otherwise
+    // never be taken back and a second would stack under it at every save. The
+    // keyword's own line is where the names are read, a span covering the
+    // attributes reading none.
+    let imports: Vec<(usize, usize)> = parsed
         .items
         .iter()
         .filter_map(|item| match item {
-            syn::Item::Use(item) => Some(item.use_token.span.start().line),
+            syn::Item::Use(item) => {
+                Some((item.span().start().line, item.use_token.span.start().line))
+            }
             _ => None,
         })
         .collect();
@@ -384,28 +391,52 @@ fn flag_duplicate_imports(source: String) -> String {
     // line of a file whose endings were mixed — a whole-file diff for a change
     // that did not happen.
     let lines: Vec<&str> = source.split_inclusive('\n').collect();
+    // The file's own ending, for a mark written above a line that carries none:
+    // the last line of a file with no final newline has no terminator to read
+    // one off, and taking `\n` there put a bare newline in a CRLF file.
+    let file_ending = if source.contains("\r\n") { "\r\n" } else { "\n" };
 
+    // Worked out first, written second: the mark belongs on the item's first
+    // line, which the walk has already passed by the time the duplicate is
+    // known.
     let mut seen: Vec<(String, String)> = Vec::new();
-    let mut out = String::with_capacity(source.len() + 96);
-    for (index, line) in lines.iter().enumerate() {
-        let number = index + 1;
-        // A mark is maxx's when maxx's sentence stands immediately above a
-        // top-level import, which is the only place maxx writes one. The
-        // sentence alone was not enough: it was taken out of a raw string as
-        // readily as out of the import block.
-        if is_our_note(line) && tops.contains(&(number + 1)) {
+    let mut marks: Vec<(usize, String)> = Vec::new();
+    for (head, keyword) in &imports {
+        let Some(line) = lines.get(keyword - 1) else {
             continue;
+        };
+        let names = imported_names(line);
+        if let Some((_, name)) = names.iter().find(|pair| seen.contains(pair)) {
+            marks.push((*head, name.clone()));
         }
-        let names = if tops.contains(&number) { imported_names(line) } else { Vec::new() };
-        let duplicate = names.iter().find(|pair| seen.contains(pair)).cloned();
         for pair in names {
             if !seen.contains(&pair) {
                 seen.push(pair);
             }
         }
-        if let Some((_, name)) = duplicate {
-            let ending = if line.ends_with("\r\n") { "\r\n" } else { "\n" };
-            out.push_str(&note(&name));
+    }
+
+    let heads: Vec<usize> = imports.iter().map(|(head, _)| *head).collect();
+    let mut out = String::with_capacity(source.len() + 96);
+    for (index, line) in lines.iter().enumerate() {
+        let number = index + 1;
+        // A mark is maxx's when maxx's sentence stands immediately above an
+        // import, attributes included. The sentence alone was not enough: it
+        // was taken out of a raw string as readily as out of the import block.
+        if is_our_note(line) && heads.contains(&(number + 1)) {
+            continue;
+        }
+        if let Some((_, name)) = marks.iter().find(|(at, _)| *at == number) {
+            let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+            let ending = if line.ends_with("\r\n") {
+                "\r\n"
+            } else if line.ends_with('\n') {
+                "\n"
+            } else {
+                file_ending
+            };
+            out.push_str(&indent);
+            out.push_str(&note(name));
             out.push_str(ending);
         }
         out.push_str(line);

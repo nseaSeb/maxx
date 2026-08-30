@@ -1679,3 +1679,57 @@ fn an_attributed_import_is_read_like_any_other() {
         );
     }
 }
+
+/// The mark keeps the file's endings even where the line has none.
+///
+/// A regression, introduced by the fix for mixed endings itself: the ending was
+/// read off the flagged line, and the last line of a file with no final newline
+/// carries none — so a CRLF file got a bare `\n`. The two shapes were each
+/// covered and never together.
+#[test]
+fn a_crlf_file_with_no_final_newline_still_gets_a_crlf_mark() {
+    let source = "use a::b::C;\r\nuse a::b::{C, D};";
+    let flagged = maxx::view::flag_duplicate_imports_for_test(source.to_string());
+    assert!(flagged.contains("// maxx: C is imported twice"), "{flagged:?}");
+    assert!(!flagged.replace("\r\n", "").contains('\n'), "no bare newline: {flagged:?}");
+}
+
+/// A mark goes above an import's attributes, and is taken back from there.
+///
+/// Anchored on the keyword instead, a mark that ended up above an
+/// `#[allow(…)]` was unreachable: it stayed for good and a second stacked under
+/// it at every save — against the one thing this pass promises.
+#[test]
+fn a_mark_sits_above_the_whole_item_and_comes_back_off() {
+    let source = "\
+use a::b::C;
+#[allow(unused_imports)]
+use a::b::{C, D};
+";
+    let once = maxx::view::flag_duplicate_imports_for_test(source.to_string());
+    let lines: Vec<&str> = once.lines().collect();
+    assert_eq!(lines[1], "// maxx: C is imported twice — one of these two lines has to go.");
+    assert_eq!(lines[2], "#[allow(unused_imports)]", "above the attribute, not under it");
+
+    assert_eq!(
+        maxx::view::flag_duplicate_imports_for_test(once.clone()),
+        once,
+        "a second save must not stack a second mark"
+    );
+    let fixed = once.replace("use a::b::C;\n", "");
+    assert!(
+        !maxx::view::flag_duplicate_imports_for_test(fixed).contains("// maxx:"),
+        "and it comes off when the reason goes"
+    );
+}
+
+/// An indented import gets an indented mark.
+#[test]
+fn a_mark_follows_the_indentation_of_what_it_points_at() {
+    let source = "  use a::b::C;\n  use a::b::{C, D};\n";
+    let flagged = maxx::view::flag_duplicate_imports_for_test(source.to_string());
+    assert!(
+        flagged.lines().any(|line| line.starts_with("  // maxx: C is imported twice")),
+        "{flagged:?}"
+    );
+}
