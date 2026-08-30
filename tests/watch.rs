@@ -6,6 +6,8 @@ use std::time::{Duration, Instant};
 use futures::channel::mpsc::Receiver;
 use maxx::scaffold::Template;
 use maxx::{scaffold, watch};
+use notify::Event;
+use notify::event::{AccessKind, DataChange, EventKind, ModifyKind};
 
 fn scratch(name: &str) -> PathBuf {
     let dir =
@@ -86,21 +88,32 @@ fn an_edit_made_elsewhere_wakes_the_watcher() {
     );
 }
 
+/// What the watcher decides, asked directly.
+///
+/// This used to be an end-to-end test: write twenty files into `target/`, then
+/// assert that nothing reached the channel within two seconds. Asserting an
+/// absence against a clock proves nothing and fails at random — it went red on
+/// macOS in one run and green in the next, on the same commit, and a guard that
+/// reddens by chance is a guard people learn to ignore.
+///
+/// The decision is a function of the event and the root, so it is asked as one.
 #[test]
-fn a_build_does_not_wake_the_watcher() {
-    let root = scratch("maxx_watch_target");
-    scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
+fn what_wakes_the_window_and_what_does_not() {
+    let root = Path::new("/projects/trial");
+    let event = |kind: EventKind, path: &str| Event::new(kind).add_path(root.join(path));
+    let write = EventKind::Modify(ModifyKind::Data(DataChange::Content));
 
-    let (mut receiver, _watcher) = watch::start(&root).expect("the watcher must start");
-    std::thread::sleep(Duration::from_millis(300));
+    assert!(watch::wakes(root, &event(write, "src/ui/home.rs")), "an edit wakes it");
 
-    // What `cargo run` does to the open project, in miniature: `target/` is not
-    // watched at all, so this must not reach the channel.
-    let build = root.join("target/debug/build");
-    std::fs::create_dir_all(&build).unwrap();
-    for index in 0..20 {
-        std::fs::write(build.join(format!("out{index}.rs")), "fn main() {}").unwrap();
-    }
+    // What `cargo run` does to the open project: never a reason to wake.
+    assert!(!watch::wakes(root, &event(write, "target/debug/build/out.rs")));
+    // A read is not a change. FSEvents does not report them; inotify does, and
+    // rust-analyzer walking `src/` would ping on every file it opens.
+    assert!(!watch::wakes(root, &event(EventKind::Access(AccessKind::Read), "src/ui/home.rs")));
 
-    assert!(!woken(&mut receiver, Duration::from_secs(2)), "a build must not wake the canvas");
+    // One event carries several paths, and one worth waking for is enough.
+    let mixed = Event::new(write)
+        .add_path(root.join("target/debug/build/out.rs"))
+        .add_path(root.join("src/ui/home.rs"));
+    assert!(watch::wakes(root, &mixed), "the noise beside a real edit is still an edit");
 }

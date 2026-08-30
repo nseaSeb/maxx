@@ -8,7 +8,7 @@
 use std::path::Path;
 
 use futures::channel::mpsc::{Receiver, channel};
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 
 /// Starts watching `root` and returns the channel its changes arrive on.
 ///
@@ -48,12 +48,7 @@ pub fn start(root: &Path) -> Option<(Receiver<()>, RecommendedWatcher)> {
         let Ok(event) = event else {
             return;
         };
-        // A read is not a change. FSEvents does not report them; inotify does,
-        // and rust-analyzer walking `src/` would ping on every file it opens.
-        if event.kind.is_access() {
-            return;
-        }
-        if !event.paths.iter().any(|path| interesting(&filter, path)) {
+        if !wakes(&filter, &event) {
             return;
         }
         // The channel carries no path: `check_disk` sweeps every open view and
@@ -94,6 +89,24 @@ pub fn start(root: &Path) -> Option<(Receiver<()>, RecommendedWatcher)> {
 /// Judged relative to `root`, and not on the whole path: a project living under
 /// a hidden directory — `~/.local/share/…` — would otherwise have every one of
 /// its files rejected.
+/// Whether this event is one the window should be woken for.
+///
+/// The whole decision the watcher's callback makes, as a function of what it is
+/// given and nothing else. Pulled out of the callback so it can be asked
+/// directly: the rule used to be checked end to end, by writing files and
+/// asserting that nothing arrived within two seconds — which proves nothing and
+/// fails at random on a loaded machine. It went red on macOS in one run and
+/// green in the next, on the same commit.
+pub fn wakes(root: &Path, event: &Event) -> bool {
+    // A read is not a change. FSEvents does not report them; inotify does, and
+    // rust-analyzer walking `src/` would ping on every file it opens.
+    if event.kind.is_access() {
+        return false;
+    }
+    event.paths.iter().any(|path| interesting(root, path))
+}
+
+/// Whether a path is one a developer would want the window to notice.
 pub fn interesting(root: &Path, path: &Path) -> bool {
     // Outside the project: not ours to react to. `notify` reports the paths it
     // was given, so this only fires on a root that moved under the watch.

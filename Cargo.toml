@@ -65,6 +65,7 @@ resvg = "0.45"
 # `#[gpui::test]` and `TestAppContext`. Under `cargo test` only — a release
 # build never sees the feature, and the window that ships is the real one.
 gpui = { version = "0.2.2", features = ["runtime_shaders", "test-support"] }
+notify = "7"
 
 [profile.dev]
 opt-level = 0
