@@ -1590,3 +1590,92 @@ fn helper() {}
 ";
     assert_eq!(maxx::view::flag_duplicate_imports_for_test(source.to_string()), source);
 }
+
+/// The save-time import pass leaves alone everything it has nothing to say
+/// about.
+///
+/// Three shapes it damaged, found by probing rather than by thinking, an hour
+/// before this was to be published:
+///
+/// - a file whose line endings are mixed came back all CRLF;
+/// - a `use …;` at column zero **inside a raw string** was read as an import,
+///   and maxx wrote its comment into the string literal — changing what the
+///   developer's code means, silently;
+/// - a `// maxx: …` note the developer wrote above an import was deleted.
+#[test]
+fn the_import_pass_touches_nothing_it_has_no_business_with() {
+    let untouched = [
+        // Mixed endings: a rejoin on one ending rewrites every other line.
+        "use a::b::C;\r\nuse d::e::F;\nfn main() {}\n",
+        // No trailing newline: adding one is a diff of its own.
+        "use a::b::C;\nfn main() {}",
+        // A raw string is not an import block. `syn` sees items; a string is
+        // not one.
+        "use a::b::C;\n\nconst T: &str = r#\"\nuse a::b::C;\n\"#;\n",
+        // Their note, not maxx's sentence.
+        "// maxx: keep this in sync with home.rs\nuse a::b::C;\n",
+        // And a `use` inside a module shadows rather than clashes.
+        "use a::b::C;\n\nmod tests {\n    use a::b::C;\n}\n",
+    ];
+    for source in untouched {
+        assert_eq!(
+            maxx::view::flag_duplicate_imports_for_test(source.to_string()),
+            source,
+            "left alone:\n{source:?}"
+        );
+    }
+}
+
+/// And a CRLF file that does get a mark keeps its endings.
+#[test]
+fn a_mark_written_into_a_crlf_file_is_written_in_crlf() {
+    let source = "use a::b::C;\r\nuse a::b::{C, D};\r\n";
+    let flagged = maxx::view::flag_duplicate_imports_for_test(source.to_string());
+    assert!(flagged.contains("// maxx: C is imported twice"), "{flagged:?}");
+    assert!(!flagged.replace("\r\n", "").contains('\n'), "no bare newline: {flagged:?}");
+}
+
+/// The four ways the pass could still touch what is not its business.
+///
+/// Found by probing the second half of it, an hour after the first half was
+/// fixed the same way: moving *insertion* onto `syn` left *removal* scanning
+/// raw text, so maxx went on deleting its own sentence from inside a string
+/// constant.
+#[test]
+fn the_import_pass_leaves_alone_what_is_not_an_import_block() {
+    let untouched = [
+        // Maxx's sentence, inside a raw string. Not above an import, so not
+        // maxx's to take away.
+        "use a::b::C;\n\nconst T: &str = r#\"\n// maxx: C is imported twice — one of these two lines has to go.\nhello\n\"#;\n",
+        // A file that does not parse keeps its marks: taking away a warning
+        // that cannot be written back is churn at the worst moment.
+        "// maxx: C is imported twice — one of these two lines has to go.\nuse a::b::{C, D};\nuse a::b::C;\nfn main( {}\n",
+    ];
+    for source in untouched {
+        assert_eq!(
+            maxx::view::flag_duplicate_imports_for_test(source.to_string()),
+            source,
+            "left alone:\n{source:?}"
+        );
+    }
+}
+
+/// An import carrying an attribute or a doc comment is still an import.
+///
+/// A span covers the attributes above the item, so reading the item's first
+/// line read the attribute's: the import went unseen, and the plain duplicate
+/// under it went unflagged with it.
+#[test]
+fn an_attributed_import_is_read_like_any_other() {
+    for above in ["#[allow(unused_imports)]", "/// what this is for"] {
+        let source = format!("{above}\nuse a::b::C;\nuse a::b::{{C, D}};\n");
+        let flagged = maxx::view::flag_duplicate_imports_for_test(source.clone());
+        assert!(flagged.contains("// maxx: C is imported twice"), "{above}:\n{flagged}");
+        // And saying it twice is saying it once.
+        assert_eq!(
+            maxx::view::flag_duplicate_imports_for_test(flagged.clone()),
+            flagged,
+            "{above}"
+        );
+    }
+}

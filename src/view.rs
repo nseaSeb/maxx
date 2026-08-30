@@ -353,36 +353,50 @@ const NOTE: &str = "// maxx: ";
 /// hundred saves leave one line, and it is taken back — by maxx, from maxx —
 /// as soon as the duplicate is gone.
 fn flag_duplicate_imports(source: String) -> String {
-    // Every previous mark comes off first, so what follows works on the file as
-    // if maxx had never written one. That is what makes it idempotent, and what
-    // takes the mark back when the duplicate is gone — the second pass simply
-    // finds nothing left to flag.
-    // Only inside the import block, and only a line that is nothing but the
-    // mark: `// maxx: …` inside a string literal, or written by the developer
-    // further down, is not maxx's to take away.
-    // A mark is maxx's when a `use` follows it immediately, which is exactly
-    // how maxx writes one — never "somewhere in the import block", a rule a
-    // blank line between two groups of imports already breaks. A
-    // `// maxx: keep this in sync with home.rs` above a function is the
-    // developer's, and taking it away would be maxx removing what it did not
-    // write.
-    let all: Vec<&str> = source.lines().collect();
-    let lines: Vec<&str> = all
+    // Asked of `syn`, never of the text. A `use a::b::C;` at column zero inside
+    // a raw string is not an import, and scanning for one put maxx's comment
+    // *inside the string literal* — changing what the developer's code means,
+    // silently. `syn` sees items; a string is not one. It settles the inner
+    // modules for free: a `use` in a `mod tests` is not a top-level item.
+    //
+    // A file that does not parse is left exactly as it is, marks included. It
+    // is broken for a reason of its own, and taking away a standing warning
+    // that cannot be written back is churn in the file and in the diff, at the
+    // moment the file needs it most.
+    let Ok(parsed) = syn::parse_file(&source) else {
+        return source;
+    };
+    // The `use` keyword's own line, not the item's: a span covers the
+    // attributes above it, so `#[allow(unused_imports)]` or a doc comment moved
+    // the line one up — the import went unread, and a real duplicate under it
+    // went unflagged with it.
+    let tops: Vec<usize> = parsed
+        .items
         .iter()
-        .enumerate()
-        .filter(|(index, line)| {
-            !(is_note(line) && all.get(index + 1).is_some_and(|next| next.starts_with("use ")))
+        .filter_map(|item| match item {
+            syn::Item::Use(item) => Some(item.use_token.span.start().line),
+            _ => None,
         })
-        .map(|(_, line)| *line)
         .collect();
 
+    // Lines with their own terminators, so an untouched line comes back out
+    // byte for byte. Splitting on `\n` and joining on one ending rewrote every
+    // line of a file whose endings were mixed — a whole-file diff for a change
+    // that did not happen.
+    let lines: Vec<&str> = source.split_inclusive('\n').collect();
+
     let mut seen: Vec<(String, String)> = Vec::new();
-    let mut out: Vec<String> = Vec::with_capacity(lines.len() + 1);
-    for line in lines {
-        // At column zero, so only the file's own import block. A `use` inside a
-        // `mod tests` or a function shadows rather than clashes, and saying it
-        // is a duplicate would put a mark on perfectly good Rust, at every save.
-        let names = if line.starts_with("use ") { imported_names(line) } else { Vec::new() };
+    let mut out = String::with_capacity(source.len() + 96);
+    for (index, line) in lines.iter().enumerate() {
+        let number = index + 1;
+        // A mark is maxx's when maxx's sentence stands immediately above a
+        // top-level import, which is the only place maxx writes one. The
+        // sentence alone was not enough: it was taken out of a raw string as
+        // readily as out of the import block.
+        if is_our_note(line) && tops.contains(&(number + 1)) {
+            continue;
+        }
+        let names = if tops.contains(&number) { imported_names(line) } else { Vec::new() };
         let duplicate = names.iter().find(|pair| seen.contains(pair)).cloned();
         for pair in names {
             if !seen.contains(&pair) {
@@ -390,33 +404,31 @@ fn flag_duplicate_imports(source: String) -> String {
             }
         }
         if let Some((_, name)) = duplicate {
-            // At column zero, like the line it points at and like every note
-            // this pass recognises on the way back in.
-            out.push(format!("{NOTE}{name} is imported twice — one of these two lines has to go."));
+            let ending = if line.ends_with("\r\n") { "\r\n" } else { "\n" };
+            out.push_str(&note(&name));
+            out.push_str(ending);
         }
-        out.push(line.to_string());
+        out.push_str(line);
     }
-
-    // The file's own line ending. `lines()` drops the `\r` of a CRLF file and
-    // joining on `\n` would put back only half of it — a whole-file diff for a
-    // change that did not happen, which `scaffold::modules::joined` already
-    // guards against and this had to as well.
-    let ending = if source.contains("\r\n") { "\r\n" } else { "\n" };
-    let mut joined = out.join(ending);
-    if source.ends_with('\n') {
-        joined.push_str(ending);
-    }
-    joined
+    out
 }
 
-/// Whether this line is one maxx left to point at something.
+/// The end of the sentence maxx writes, held once.
 ///
-/// At column zero, with no indentation: that is where maxx writes one, since the
-/// only lines it has anything to say about are imports, which live there. An
-/// indented `// maxx: …` is a comment the developer wrote — in a function, in a
-/// string — and taking it away would be maxx removing what it did not write.
-fn is_note(line: &str) -> bool {
-    line.starts_with(NOTE)
+/// Written twice — once to build the line, once to recognise it — the two drift
+/// apart at the first rewording, and the mark stops being recognised: a new one
+/// then stacks above the same import at every save, without a test failing.
+const NOTE_TAIL: &str = " is imported twice — one of these two lines has to go.";
+
+/// The sentence maxx writes above an import it has something to say about.
+fn note(name: &str) -> String {
+    format!("{NOTE}{name}{NOTE_TAIL}")
+}
+
+/// Whether this line carries that sentence.
+fn is_our_note(line: &str) -> bool {
+    let trimmed = line.trim_end_matches(['\n', '\r']);
+    trimmed.starts_with(NOTE) && trimmed.ends_with(NOTE_TAIL)
 }
 
 /// The `(path, name)` pairs one `use` line imports.
