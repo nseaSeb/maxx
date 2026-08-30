@@ -83,6 +83,19 @@ name and the page you are on; *Empty* keeps the system's, having nothing to put
 in one of its own. The shell is ordinary Rust, written once: adding a page is
 five lines the compiler asks for one by one.
 
+The window is four columns and every join between them moves. On the left the
+project's files, and under them the components you can drop, with their own
+search. In the middle the canvas — painted with **your project's** palette, so a
+colour chosen in `src/theme.rs` shows where the choice was made and not only
+after `cargo run`. On the right the structure above and the inspector below,
+parted by a handle, so selecting a node deep in the tree no longer pushes the
+tree out of sight.
+
+The inspector files a node's properties under five headings — *Layout*,
+*Spacing*, *Appearance*, *Text*, *Action* — each foldable and carrying the count
+of what it hides, with a search of its own at the top for when you already know
+the name of what you are after.
+
 On the canvas: click to select, drag to move, double-click a button to give it
 an action. Columns resize by their handle, and their width is remembered. `⌘S`
 writes the file, `⌘Z` / `⌘⇧Z` undo and redo, `⌘D` duplicates the selected node,
@@ -240,7 +253,18 @@ a dependency on maxx: what is copied is yours.
   brings the system module with it.
 - **The system module** — `src/system.rs`.
 - **The settings** — `src/settings.rs`, which brings the system module with it.
-- **The palette** — `src/theme.rs`, light and dark from the start.
+- **The palette** — `src/theme.rs`, light and dark from the start, and editable
+  in maxx: select it in the project panel and every role opens as two colour
+  pickers. Only the value you change is rewritten, so the comments, the roles
+  you added and everything else in the file stay exactly as you wrote them.
+- **The components** — `src/components/`, a `Card`, a `Toolbar` and an
+  `EmptyState` written as ordinary GPUI components, one file each. They bring
+  the palette with them, since they paint with the project's own roles.
+
+  The difference from the templates the palette drops is the one that shows on
+  the third day of a project: a template is *pasted*, so ten cards are ten
+  copies and changing how a card looks is ten edits; a component is a *type*, so
+  ten cards are ten calls and changing how they look is one file — yours.
 
 What was copied is recorded in `maxx.toml`, to be committed with the project:
 which module, in which version, and the fingerprints it had on the way out. When
@@ -346,6 +370,40 @@ not `target/`, which a build would otherwise fill the queue with. So a picture
 dropped into `assets/` from outside is noticed when the window regains focus,
 not before, and the focus check stays for exactly that kind of case.
 
+## Your own components
+
+maxx's catalogue is a table compiled into maxx, so it cannot know about the
+`Card` you wrote on your third day — and that is the day a designer usually
+stops being useful, because your own components are what a project is made of
+once it has any.
+
+So maxx reads them. Not from a file describing them, which would be a catalogue
+to keep in step by hand: out of the Rust itself, the way it reads a view. What
+it looks for is the shape `src/components/` already has —
+
+```rust
+pub struct Card { … }
+
+impl Card {
+    pub fn new(title: impl Into<SharedString>) -> Self { … }
+    pub fn subtitle(mut self, subtitle: impl Into<SharedString>) -> Self { … }
+    pub fn compact(mut self) -> Self { … }
+}
+```
+
+— and the shape *is* the description. `pub fn new` says what it takes to build
+one; a builder method taking one string is a text field in the inspector, one
+taking nothing is a switch. They appear at the top of the palette under **Of
+this project**, because once a project has components of its own, those are what
+it is built from. Dropping one writes `Card::new("Text")` and the `use` line
+that names it, and the hover affordance on each row opens its source in the
+reader.
+
+What maxx cannot write, it does not offer. A constructor taking a `&mut Window`,
+an argument that is not a string, a name the catalogue already answers to: the
+component keeps its place in your project and simply does not appear in the
+palette — the same bargain an expression maxx cannot read gets on the canvas.
+
 ## What you write inside the region
 
 The markers delimit what maxx owns, and it rewrites that from its own tree on
@@ -392,6 +450,8 @@ demand.
 | `src/parser.rs` | Rust text → model, markers and textual splicing |
 | `src/registry/catalogue.rs` | the component catalogue — the only place to extend |
 | `src/registry/` | what the inspector may read and write, state fields, element ids |
+| `src/bricks.rs` | the project's own components, read out of its source |
+| `src/themefile.rs` | a project's palette: its roles, and the patch that changes one |
 | `src/view.rs` | one open view: loading, saving, insertions |
 | `src/scaffold/` | project and view templates, one module per template |
 | `src/designer/` | canvas, structure, inspector, palette — one module each |
@@ -404,6 +464,19 @@ going, in which order, in [`ROADMAP.md`](ROADMAP.md).
 
 Those three, and the interface strings, are still in French; the code, its
 comments and its tests are in English.
+
+## Your palette, in every project you start
+
+`Preferences ▸ Appearance ▸ Your palette` opens a `theme.rs` of maxx's own, in
+the same editor a project's palette opens in — one reader, one editor, one
+writer for both, rather than a second screen doing the same thing to the same
+shape of file. A project created after it copies those values, and owns its copy
+from the moment it has one.
+
+Updating the palette module afterwards keeps the colours the project is painted
+with: the *values* of that file are the project's, the code around them is
+maxx's, and bringing an accessor up to date is not a reason to repaint somebody's
+application.
 
 ## Settings
 
