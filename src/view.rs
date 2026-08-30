@@ -360,7 +360,21 @@ fn flag_duplicate_imports(source: String) -> String {
     // Only inside the import block, and only a line that is nothing but the
     // mark: `// maxx: …` inside a string literal, or written by the developer
     // further down, is not maxx's to take away.
-    let lines: Vec<&str> = source.lines().filter(|line| !is_note(line)).collect();
+    // A mark is maxx's when a `use` follows it immediately, which is exactly
+    // how maxx writes one — never "somewhere in the import block", a rule a
+    // blank line between two groups of imports already breaks. A
+    // `// maxx: keep this in sync with home.rs` above a function is the
+    // developer's, and taking it away would be maxx removing what it did not
+    // write.
+    let all: Vec<&str> = source.lines().collect();
+    let lines: Vec<&str> = all
+        .iter()
+        .enumerate()
+        .filter(|(index, line)| {
+            !(is_note(line) && all.get(index + 1).is_some_and(|next| next.starts_with("use ")))
+        })
+        .map(|(_, line)| *line)
+        .collect();
 
     let mut seen: Vec<(String, String)> = Vec::new();
     let mut out: Vec<String> = Vec::with_capacity(lines.len() + 1);

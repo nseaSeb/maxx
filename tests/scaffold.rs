@@ -1613,3 +1613,53 @@ fn a_public_declaration_is_recognised_as_one() {
         "one declaration of card, whichever spelling:\n{now}"
     );
 }
+
+/// Deleting the component library takes its declaration out of `main.rs`.
+///
+/// A module can be a directory, and this was the one site that still assumed
+/// otherwise — the one where the cost is a `mod components;` naming something
+/// that is gone, and a project that stops compiling.
+#[test]
+fn removing_the_library_removes_its_declaration() {
+    let root = scratch("maxx_components_remove");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::add_components_module(&root).unwrap();
+    assert!(std::fs::read_to_string(root.join("src/main.rs")).unwrap().contains("mod components;"));
+
+    assert_eq!(
+        workspace::top_level_module(&root, &root.join("src/components")),
+        Some("components".to_string()),
+        "a directory is a module too"
+    );
+    scaffold::remove_module(&root, "components").expect("the declaration must come out");
+
+    let main = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    assert!(!main.contains("mod components;"), "nothing may name what is gone:\n{main}");
+}
+
+/// Adding the library twice records what the project holds, not maxx's text.
+///
+/// The failure this guards against made a stale library invisible for good: the
+/// second add wrote nothing to disk but stamped `maxx.toml` with the new version
+/// and its fingerprint, so `outdated_modules` skipped it from then on.
+#[test]
+fn adding_the_library_again_records_what_is_there() {
+    let root = scratch("maxx_components_record");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    scaffold::add_components_module(&root).unwrap();
+
+    // Their edit: what is on disk is no longer what maxx would write.
+    let card = root.join("src/components/card.rs");
+    std::fs::write(&card, format!("{}\n// leur ligne\n", std::fs::read_to_string(&card).unwrap()))
+        .unwrap();
+
+    scaffold::add_components_module(&root).expect("adding again must be harmless");
+
+    let recorded = projectfile::load(&root);
+    let module = recorded.modules.get("components").expect("recorded");
+    let installed = scaffold::module_body("components").expect("a body");
+    assert!(
+        !module.holds(&installed),
+        "the record must describe their file, not maxx's canonical text"
+    );
+}

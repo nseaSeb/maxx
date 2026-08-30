@@ -329,7 +329,10 @@ impl Render for Workspace {
         self.sync_palette_inputs(window, cx);
         self.sync_code_input(window, cx);
         let visible = crate::settings::prefs(cx).clone();
-        let show_panel = visible.show_project_panel && self.project.is_some();
+        // The column shows as soon as there is a project: the files are what
+        // `⌘B` turns off, and the palette stays either way.
+        let show_files = visible.show_project_panel;
+        let show_panel = self.project.is_some();
         let panel_width = crate::settings::state(cx).panel_width.unwrap_or(240.);
 
         // The handle moves the split inside gpui-component's entity; this is
@@ -370,7 +373,7 @@ impl Render for Workspace {
                                         // unreadable; beyond it, it eats
                                         // the canvas.
                                         .size_range(px(160.)..px(520.))
-                                        .child(fillable(self.render_left_column(cx))),
+                                        .child(fillable(self.render_left_column(show_files, cx))),
                                 )
                                 .child(resizable_panel().child(fillable(self.render_main(cx)))),
                         )
@@ -390,15 +393,25 @@ impl Workspace {
     /// below the fold, past twenty properties. It is a **source**, not a
     /// property of the selection, and its place is beside the other source the
     /// window offers.
-    pub(super) fn render_left_column(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn render_left_column(
+        &self,
+        files: bool,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         v_resizable("colonne-gauche")
             .with_state(&self.left_split)
-            .child(
-                resizable_panel()
-                    .size(px(360.))
-                    .size_range(px(120.)..px(900.))
-                    .child(fillable(self.render_project_panel(cx))),
-            )
+            // `⌘B` hides the project's *files*. It hid only those while the
+            // palette was on the other side; moving the palette here made one
+            // switch turn off two things, and the second is the only way to
+            // insert anything at all.
+            .when(files, |this| {
+                this.child(
+                    resizable_panel()
+                        .size(px(360.))
+                        .size_range(px(120.)..px(900.))
+                        .child(fillable(self.render_project_panel(cx))),
+                )
+            })
             .child(
                 resizable_panel().size_range(px(120.)..px(900.)).child(fillable(
                     div()

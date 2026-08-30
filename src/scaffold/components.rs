@@ -38,7 +38,11 @@ pub fn add_components_module_with(
     let main_path = root.join("src/main.rs");
     let source = std::fs::read_to_string(&main_path)?;
     let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
-    if !lines.iter().any(|line| line.trim() == "mod components;") {
+    // `pub mod components;` is the same declaration, and both `remove_module`
+    // and `declare` below already say so: matching one spelling put a second
+    // `mod components;` in a `main.rs` that had the other — E0428, in a file
+    // maxx had just written.
+    if !lines.iter().any(|line| line.trim().trim_start_matches("pub ") == "mod components;") {
         lines.insert(header_end(&lines), "mod components;".into());
     }
 
@@ -53,15 +57,20 @@ pub fn add_components_module_with(
 
     declare(&directory)?;
 
-    // One fingerprint for the whole library, over the text of every file in the
-    // order the table gives them. A library is updated or it is not; offering
-    // to update one brick out of three would leave a project holding two
-    // versions of the same idea.
+    // One fingerprint for the whole library, over what the project ACTUALLY
+    // holds and not over maxx's canonical text. Recording the latter stamped a
+    // project that already had an older library with the new version and the
+    // new fingerprint while nothing on disk had moved: `outdated_modules` then
+    // skipped it for good, and the stale library became invisible to the very
+    // machinery that exists to replace it.
+    let Some(installed) = installed_body(root) else {
+        return std::fs::write(&main_path, joined(&lines, &source));
+    };
     crate::projectfile::record(
         root,
         "components",
         module_version("components").unwrap_or(1),
-        &module_body(),
+        &installed,
     )?;
 
     std::fs::write(&main_path, joined(&lines, &source))
@@ -103,9 +112,10 @@ fn declare(directory: &Path) -> io::Result<()> {
     if !added {
         return Ok(());
     }
-    let mut out = lines.join("\n");
-    out.push('\n');
-    std::fs::write(&path, out)
+    // `lines()` drops the `\r`, so joining on `\n` rewrites every line of a CRLF
+    // file for a one-line change. `joined` exists for that and is used a few
+    // lines above.
+    std::fs::write(&path, joined(&lines, &existing))
 }
 
 /// Puts every brick back to maxx's current version.
@@ -129,23 +139,41 @@ pub(super) fn rewrite(root: &Path) -> io::Result<()> {
 /// offers to replace.
 pub(super) fn installed_body(root: &Path) -> Option<String> {
     let directory = root.join("src/components");
-    let mut out = String::new();
+    let mut parts = Vec::new();
     for (name, _) in COMPONENTS {
-        out.push_str(&std::fs::read_to_string(directory.join(format!("{name}.rs"))).ok()?);
+        parts.push((
+            (*name).to_string(),
+            std::fs::read_to_string(directory.join(format!("{name}.rs"))).ok()?,
+        ));
     }
-    out.push_str(&std::fs::read_to_string(directory.join("mod.rs")).ok()?);
-    Some(out)
+    parts.push(("r#mod".to_string(), std::fs::read_to_string(directory.join("mod.rs")).ok()?));
+    Some(as_one_file(&parts))
+}
+
+/// Several files as one text a compiler would accept.
+///
+/// Each brick opens on a `//!` header, so pasting them end to end gives
+/// something that is not Rust — and `projectfile::record` then stores no
+/// *shape* for the library, which is the fingerprint taken through `rustfmt`.
+/// Without it the library alone loses the tolerance every other module has: one
+/// `cargo fmt` in the project and maxx refuses to update it, for good.
+///
+/// Wrapped in a `mod` each, which an inner doc comment is allowed to open.
+fn as_one_file(parts: &[(String, String)]) -> String {
+    let mut out = String::new();
+    for (name, body) in parts {
+        out.push_str(&format!("mod {name} {{\n{body}}}\n"));
+    }
+    out
 }
 
 /// The text the fingerprint is taken over: every component, then the module
 /// that declares them.
 pub(super) fn module_body() -> String {
-    let mut out = String::new();
-    for (_, body) in COMPONENTS {
-        out.push_str(body);
-    }
-    out.push_str(&components_mod_rs());
-    out
+    let mut parts: Vec<(String, String)> =
+        COMPONENTS.iter().map(|(name, body)| ((*name).to_string(), (*body).to_string())).collect();
+    parts.push(("r#mod".to_string(), components_mod_rs()));
+    as_one_file(&parts)
 }
 
 /// `src/components/mod.rs`: one declaration and one re-export per component.

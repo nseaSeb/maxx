@@ -1574,3 +1574,19 @@ fn main() {
 ";
     assert_eq!(maxx::view::flag_duplicate_imports_for_test(source.to_string()), source);
 }
+
+/// A note the developer wrote past the imports is not maxx's to remove.
+///
+/// The mark is recognised while the import block lasts, and no further: a
+/// `// maxx: …` at column zero above a function is theirs, and maxx adds — it
+/// does not take away what it did not write.
+#[test]
+fn a_note_below_the_imports_survives() {
+    let source = "\
+use a::b::C;
+
+// maxx: keep this in sync with home.rs
+fn helper() {}
+";
+    assert_eq!(maxx::view::flag_duplicate_imports_for_test(source.to_string()), source);
+}

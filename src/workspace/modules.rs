@@ -68,6 +68,10 @@ impl Workspace {
         // And the palette of components: a library that just arrived has bricks
         // to offer, and nothing else would go looking for them.
         self.bricks = crate::bricks::read(&root);
+        // And the canvas: a palette that has just arrived should paint the board
+        // now, not whenever the watcher next happens to fire — or never, if
+        // watching the project failed to start.
+        self.preview = crate::preview::Preview::read(&root);
         // The palette page reads `src/theme.rs`, which may have just appeared or
         // moved: the boxes are rebuilt from it on the next frame.
         self.palette_synced = None;

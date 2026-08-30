@@ -555,19 +555,33 @@ impl Workspace {
         // The palette has nothing to lose on maxx's side — a picker holds no
         // unsaved state, every turn of one is already on disk — so it is taken
         // back from the file without asking, the way an untouched view is.
+        let root = self.project.as_ref().map(|project| project.root.clone());
         let reloaded = match self.palette_mut() {
-            Some(palette) => palette.reload().then(|| crate::preview::Preview::from_file(palette)),
+            Some(palette) => palette.reload().then(|| {
+                // The project's palette, or nothing: the same editor also serves
+                // the user's default one, and painting an open project with a
+                // file belonging to no project is describing one by another.
+                let of_project = root.as_ref().is_some_and(|root| palette.path.starts_with(root));
+                of_project.then(|| crate::preview::Preview::from_file(palette))
+            }),
             None => None,
         };
         if let Some(preview) = reloaded {
             self.palette_synced = None;
-            self.preview = preview;
+            if let Some(preview) = preview {
+                self.preview = preview;
+            }
         }
         // And the canvas follows the file even when nobody has the palette
         // open, which is the ordinary case: it is the preview, not the editor,
         // that has to tell the truth about the project's colours.
-        if let Some(root) = self.project.as_ref().map(|project| project.root.clone()) {
-            if self.palette().is_none() {
+        if let Some(root) = root {
+            // Read from disk unless the project's OWN palette is open, which is
+            // the only case where a fresher copy is already in hand. With the
+            // *default* palette open, `palette().is_some()` was true and a real
+            // change to the project's `src/theme.rs` went unseen.
+            let holding_it = self.palette().is_some_and(|palette| palette.path.starts_with(&root));
+            if !holding_it {
                 self.preview = crate::preview::Preview::read(&root);
             }
             // And the components. The case this is written for is a developer

@@ -350,8 +350,17 @@ pub fn top_level_module(root: &std::path::Path, path: &std::path::Path) -> Optio
     if parts.next().is_some() {
         return None;
     }
-    let module = file.strip_suffix(".rs")?;
-    (module != "main").then(|| module.to_string())
+    // `src/<module>.rs`, or `src/<module>/` for a module that is a directory.
+    // Only the second shape was missing here, and it is the shape the component
+    // library has: deleting `src/components/` left `mod components;` in
+    // `main.rs`, naming a directory that is gone — which is the opposite of what
+    // deleting a file is for.
+    let module = match file.strip_suffix(".rs") {
+        Some(module) => module.to_string(),
+        None if crate::scaffold::module_is_directory(&file) => file,
+        None => return None,
+    };
+    (module != "main").then_some(module)
 }
 
 /// The module name of `path` when it is one of the project's views.

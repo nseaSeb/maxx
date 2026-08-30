@@ -27,7 +27,7 @@ const FINGERPRINTS: &[(&str, u32, &str)] = &[
     ("theme", 1, "d4768642faff2027"),
     ("assets", 1, "90cb5efc780a59f8"),
     ("window", 1, "73935d644407d44a"),
-    ("components", 1, "b99669c80da010b9"),
+    ("components", 1, "532a402271611f20"),
 ];
 
 #[test]

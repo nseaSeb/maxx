@@ -173,6 +173,10 @@ impl Workspace {
                 .filter(|call| {
                     call.name != crate::model::CHILD_SLOT && !registry::covers(spec, &call.name)
                 })
+                // Filtered like everything else above it: searching `gap` and
+                // getting the one matching row followed by every hand-written
+                // call is the noise the box was added to remove.
+                .filter(|call| crate::designer::label_matches(&call.name, &call.name, &query))
                 .cloned()
                 .collect();
             if !extra.is_empty() {

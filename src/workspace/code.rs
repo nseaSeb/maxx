@@ -201,7 +201,12 @@ impl Workspace {
             return;
         }
         self.message = None;
-        if self.code().is_some_and(|file| file.of_view) {
+        // Shown, not merely held. Asked the other way, `⌘E` was a one-shot: the
+        // second press left the middle on the canvas with the document still
+        // there, so the third took the same branch and did nothing — and the
+        // read tab is only drawn for a file that is *not* a view's, so there
+        // was nothing to click either.
+        if self.showing_code() && self.code().is_some_and(|file| file.of_view) {
             self.show_designer();
             cx.notify();
             return;
