@@ -137,3 +137,48 @@ jobs:
       - name: Build the demo
         working-directory: demo
         run: cargo check
+
+  generated:
+    name: what maxx writes compiles
+    # Not on every push: unlike the rest of this file, this job compiles a
+    # project maxx wrote, which means the ~750 crates of gpui and
+    # gpui-component from scratch the first time. On the Monday cron and on
+    # demand, therefore — and by hand after touching a template, which is what
+    # the `#[ignore]` attributes are for in the first place.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: rust
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # The generated projects do not compile into `target/`: `create_project`
+      # writes `build.target-dir` into their `.cargo/config.toml`, pointing at
+      # `run::shared_target_dir()` — one cache for all of them, which is what
+      # makes the second project cheap. `rust-cache` knows nothing about that
+      # path, so it is cached here.
+      #
+      # The key carries the compiler as well as the `Cargo.toml` the scaffold
+      # writes, and it has to: `stable` moves every six weeks, and a key naming
+      # only `scaffold.rs` would still hit exactly on the morning rustc changes.
+      # `actions/cache` skips the save on an exact hit, so the tree restored
+      # would be one cargo rejects, rebuilt in full and never written back —
+      # every Monday, silently, with the stale artefacts kept for ever.
+      - name: Cache what the generated projects compile into
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/maxx/target
+          key: generated-${{ runner.os }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('src/scaffold.rs') }}
+          restore-keys: generated-${{ runner.os }}-${{ steps.rust.outputs.cachekey }}-
+
+      # The five tests `cargo test` never runs. They are the only proof that
+      # what maxx writes still compiles as a whole — `examples/shapes.rs` shows
+      # each brick compiles on its own, these show the wiring: `main.rs`, the
+      # `mod.rs`, the settings module, the palette, the component library.
+      #
+      # Nothing in compiling maxx checks the method names its catalogue writes
+      # into a project, and three defects of that class have already lived
+      # there.
+      - name: The tests that build whole projects
+        run: cargo test --profile ci -- --ignored
