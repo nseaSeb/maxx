@@ -122,9 +122,15 @@ jobs:
       #
       # Through the `gh` client rather than a third-party action: every
       # third-party action is one more surface on a public repository.
+      # The notes are the CHANGELOG's own section for this version. `gh` offers
+      # `--generate-notes`, which writes a compare link and nothing else: the
+      # releases page is the second door into the repository after the README,
+      # and it was saying nothing about what the version brings while the text
+      # sat written two directories away. v0.2.1 went out that way.
       - name: Open
         env:
           GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           # Idempotent, and not out of politeness: a tag moved onto another
@@ -133,7 +139,29 @@ jobs:
           # the new commit without anyone touching it.
           if gh release view "${GITHUB_REF_NAME}" > /dev/null 2>&1; then
             echo "Release ${GITHUB_REF_NAME} already exists, and follows the tag."
+            exit 0
+          fi
+
+          # `## 1.2.3` in CHANGELOG.md, for the tag `v1.2.3`, up to the next
+          # heading of the same level.
+          notes="$(mktemp)"
+          awk -v heading="## ${GITHUB_REF_NAME#v}" '
+            $0 == heading { inside = 1; next }
+            inside && /^## / { exit }
+            inside { print }
+          ' CHANGELOG.md > "${notes}"
+
+          # A version nobody wrote an entry for still gets a release, with what
+          # `gh` can work out on its own: the gate must not close on a heading
+          # that is missing or spelled differently.
+          if grep -q '[^[:space:]]' "${notes}"; then
+            printf '\n**Full changelog**: https://github.com/%s/blob/%s/CHANGELOG.md\n' \
+              "${REPOSITORY}" "${GITHUB_REF_NAME}" >> "${notes}"
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "${GITHUB_REF_NAME}" \
+              --notes-file "${notes}"
           else
+            echo "No CHANGELOG section for ${GITHUB_REF_NAME}; falling back to generated notes."
             gh release create "${GITHUB_REF_NAME}" \
               --title "${GITHUB_REF_NAME}" \
               --generate-notes
