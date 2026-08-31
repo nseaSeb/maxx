@@ -652,4 +652,155 @@ mod tests {
             assert_ne!(original, copy, "two boxes cannot share one entity: {original} / {copy}");
         });
     }
+
+    /// The text prop a component of the catalogue offers first, and the value
+    /// standing in it.
+    ///
+    /// Read through the registry rather than off the node, because that is what
+    /// the inspector's field does: a test reaching into the tree by hand would
+    /// pass on a chain the inspector cannot actually edit.
+    fn text_prop(node: &Node) -> &'static crate::registry::Prop {
+        let spec = crate::registry::of(node).expect("the component is the catalogue's");
+        crate::registry::props(spec)
+            .into_iter()
+            .find(|prop| matches!(prop.kind, crate::registry::Kind::Text))
+            .expect("a label has text to type in")
+    }
+
+    /// Typing a word in the inspector is one undo step, not one per keystroke.
+    ///
+    /// The grain is the whole point, and it is held by two halves that have to
+    /// agree: `InputEvent::Focus` takes the snapshot, `close_text_edit` turns it
+    /// into a step on blur. Neither can be reached without a window, so what is
+    /// driven here is what the subscription does — take the snapshot, one
+    /// `edit_prop_text` per keystroke, then close.
+    ///
+    /// A checkpoint per keystroke is the shape this rules out: it floods the
+    /// stack, and — through the revision counter that rebuilds the fields —
+    /// destroys the box under the caret.
+    #[gpui::test]
+    fn typing_in_the_inspector_is_one_undo_step(cx: &mut TestAppContext) {
+        let scratch = Scratch::new("text-undo");
+        let workspace = workspace_on_a_view(&scratch, cx);
+
+        workspace.update(cx, |workspace, cx| {
+            workspace.drop_at(&[], 0, crate::designer::Dragged::Component("label"), cx);
+            workspace.select(vec![0], cx);
+            let prop = text_prop(workspace.view().expect("open").selected());
+            let value = |workspace: &Workspace| {
+                crate::registry::read(workspace.view().expect("open").selected(), prop)
+            };
+
+            let before = value(workspace);
+            let steps = workspace.view().expect("open").past.len();
+            let revision = workspace.revision;
+
+            // The field takes the focus.
+            workspace.edit_snapshot =
+                workspace.view().map(|view| (view.path.clone(), view.root.clone()));
+            for typed in ["H", "He", "Hel", "Hell", "Hello"] {
+                workspace.edit_prop_text(prop, typed, cx);
+            }
+            assert_eq!(value(workspace).as_deref(), Some("Hello"));
+            assert_eq!(
+                workspace.view().expect("open").past.len(),
+                steps,
+                "typing pushes nothing on its own, or every keystroke would be a step"
+            );
+            // The other half of the same promise, and the one that cannot be
+            // seen from the undo stack: `sync_prop_inputs` is keyed on
+            // `(revision, selection)`, so a bump here rebuilds `prop_inputs`
+            // between two keystrokes and the box under the caret goes with it.
+            assert_eq!(
+                workspace.revision, revision,
+                "typing must not bump the revision, or the field is rebuilt under the caret"
+            );
+
+            // And leaves it.
+            workspace.close_text_edit(cx);
+            assert_eq!(
+                workspace.view().expect("open").past.len(),
+                steps + 1,
+                "one visit to the field is one step"
+            );
+            assert_eq!(
+                workspace.revision,
+                revision + 1,
+                "and leaving it rebuilds the fields once, from the tree as it now stands"
+            );
+
+            workspace.undo(cx);
+            assert_eq!(value(workspace), before, "and one ⌘Z takes the whole word back");
+            assert!(
+                !workspace.view().expect("open").future.is_empty(),
+                "which leaves somewhere to redo to"
+            );
+
+            // A second visit ends that redo path, like any other edit.
+            workspace.edit_snapshot =
+                workspace.view().map(|view| (view.path.clone(), view.root.clone()));
+            workspace.edit_prop_text(prop, "Other", cx);
+            workspace.close_text_edit(cx);
+            assert!(
+                workspace.view().expect("open").future.is_empty(),
+                "a new edit ends the redo path"
+            );
+        });
+    }
+
+    /// Entering a field and leaving it without typing is not a step.
+    ///
+    /// Otherwise clicking through the inspector fills the stack with steps that
+    /// undo nothing, and `⌘Z` stops meaning anything: the first few presses
+    /// would appear to do nothing at all.
+    #[gpui::test]
+    fn a_visit_that_changed_nothing_is_not_a_step(cx: &mut TestAppContext) {
+        let scratch = Scratch::new("text-untouched");
+        let workspace = workspace_on_a_view(&scratch, cx);
+
+        workspace.update(cx, |workspace, cx| {
+            workspace.drop_at(&[], 0, crate::designer::Dragged::Component("label"), cx);
+            workspace.select(vec![0], cx);
+            let steps = workspace.view().expect("open").past.len();
+
+            workspace.edit_snapshot =
+                workspace.view().map(|view| (view.path.clone(), view.root.clone()));
+            workspace.close_text_edit(cx);
+
+            assert_eq!(workspace.view().expect("open").past.len(), steps);
+            assert!(workspace.edit_snapshot.is_none(), "and the snapshot is spent either way");
+        });
+    }
+
+    /// A snapshot belonging to another file is dropped, never applied here.
+    ///
+    /// The tab can change while a field holds the focus — `⌘⌥→`, a click in the
+    /// tree, a file opened from the palette. Pushing the pending snapshot onto
+    /// whichever view is in front would put one file's tree into another one's
+    /// undo stack, and the next `⌘Z` would replace the view wholesale.
+    #[gpui::test]
+    fn a_snapshot_left_by_another_file_is_dropped(cx: &mut TestAppContext) {
+        let scratch = Scratch::new("text-other-file");
+        let workspace = workspace_on_a_view(&scratch, cx);
+
+        workspace.update(cx, |workspace, cx| {
+            let stranger = workspace.view().expect("open").root.clone();
+            workspace.edit_snapshot = Some((PathBuf::from("somewhere/else.rs"), stranger));
+
+            // Something moves in the view that is actually in front, so the two
+            // trees genuinely differ and only the path can rule the snapshot out.
+            workspace.drop_at(&[], 0, crate::designer::Dragged::Component("label"), cx);
+            let steps = workspace.view().expect("open").past.len();
+            let shape_now = shape(&workspace.view().expect("open").root);
+
+            workspace.close_text_edit(cx);
+
+            assert_eq!(
+                workspace.view().expect("open").past.len(),
+                steps,
+                "another file's tree is no step of this one"
+            );
+            assert_eq!(shape(&workspace.view().expect("open").root), shape_now);
+        });
+    }
 }
