@@ -1591,6 +1591,142 @@ use std::fmt;
     assert_eq!(lines[3], "use gpui_component::button::Button;", "{out}");
 }
 
+/// The text fallback does not walk into a module body.
+///
+/// `mod tests {` is not `mod tests;`. Read as a declaration, the scan goes on
+/// into the body and anchors on the `use super::*;` inside it: the import is
+/// then written **in the module**, where the code maxx generated at the top
+/// level cannot see it — and `already_imported` finds it there textually, so it
+/// is never written again in the right place.
+#[test]
+fn the_text_fallback_does_not_walk_into_a_module_body() {
+    let source = "\
+//! Broken.
+
+use gpui::prelude::*;
+
+mod tests {
+    use super::*;
+    fn t() { broken(
+}
+";
+    let out = added_to(source);
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[3], "use gpui_component::button::Button;", "at the top level:\n{out}");
+    assert_eq!(lines[5], "mod tests {", "and the module is untouched:\n{out}");
+}
+
+/// An import is never written between an attribute and the item it decorates.
+///
+/// A `///` line and a `#[derive(…)]` line are not remarks about the file, they
+/// belong to what follows. With no import to join, anchoring under them does
+/// not merely read oddly: the attribute then applies to the `use`, and the file
+/// stops compiling. This is exactly the "view with no import yet" shape.
+#[test]
+fn an_import_is_never_written_between_an_attribute_and_its_item() {
+    for source in [
+        "//! Doc.\n\n#[derive(Clone)]\npub struct Home;\n\nfn broken( {\n",
+        "//! Doc.\n\n/// What this holds.\npub struct Home;\n\nfn broken( {\n",
+    ] {
+        let out = added_to(source);
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines[2], "use gpui_component::button::Button;", "above it:\n{out}");
+        assert_eq!(lines[4], "pub struct Home;", "which keeps what decorates it:\n{out}");
+    }
+}
+
+/// An import left open does not swallow the rest of the file.
+///
+/// A half-typed `use gpui::{` is the single most likely reason a view does not
+/// parse, since it does not parse for exactly as long as it is being written.
+/// Counted as a header line all the way to the end, it sent the new import to
+/// the bottom of the file — the very defect this pass exists to remove, and a
+/// step back from the text scan that came before it. Only a construct that
+/// closes advances the header.
+#[test]
+fn an_unterminated_import_does_not_swallow_the_file() {
+    let source = "\
+//! Broken.
+
+use gpui::{Context,
+
+pub struct Home;
+
+fn broken( {
+";
+    let out = added_to(source);
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[2], "use gpui_component::button::Button;", "in the header:\n{out}");
+    assert_ne!(
+        *lines.last().expect("a last line"),
+        "use gpui_component::button::Button;",
+        "and not at the bottom of the file:\n{out}"
+    );
+}
+
+/// A block comment is delimited, not recognised line by line.
+///
+/// Matching a leading `*` ends the header on the first unstarred line of a
+/// licence header — and the import is then written *inside* the comment, where
+/// it does nothing at all and where `already_imported` will nonetheless find it.
+#[test]
+fn a_block_comment_is_not_read_line_by_line() {
+    let source = "\
+/*
+Copyright someone.
+*/
+use gpui::prelude::*;
+fn broken( {
+";
+    let out = added_to(source);
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[1], "Copyright someone.", "the comment is left whole:\n{out}");
+    assert_eq!(lines[4], "use gpui_component::button::Button;", "{out}");
+}
+
+/// A re-export is an import too.
+///
+/// `syn` calls `pub use crate::a::B;` an `Item::Use` like any other; a scan
+/// looking for a line opening on `use ` does not, so a header opening on
+/// re-exports took the new line above them instead of after the last import.
+#[test]
+fn the_text_fallback_sees_a_re_export() {
+    let source = "\
+//! Broken.
+
+pub use crate::a::B;
+use gpui::prelude::*;
+
+fn broken( {
+";
+    let out = added_to(source);
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[2], "pub use crate::a::B;");
+    assert_eq!(lines[4], "use gpui_component::button::Button;", "after the last one:\n{out}");
+}
+
+/// A file whose last line has no terminator still gets its import on a line.
+///
+/// The anchor is then the very end of the source, and the import was written
+/// onto that last line — swallowed by the `//!` for the one shape that reaches
+/// it, and found there afterwards by `already_imported`, so never written
+/// anywhere else.
+#[test]
+fn a_file_with_no_final_newline_still_gets_its_import_on_a_line() {
+    let out = added_to("//! What this view is.");
+    assert_eq!(out.lines().next(), Some("//! What this view is."), "{out}");
+    assert!(out.contains("\nuse gpui_component::button::Button;"), "on its own line:\n{out}");
+    syn::parse_file(&out).expect("and what comes out still parses");
+}
+
+/// One import asked for, for every shape of header the tests above pin down.
+fn added_to(source: &str) -> String {
+    maxx::view::ensure_imports_for_test(
+        source.to_string(),
+        &["use gpui_component::button::Button;"],
+    )
+}
+
 /// An import written twice is pointed at, in the file, on the line.
 ///
 /// maxx adds; it does not take away what it did not write. One of the two lines

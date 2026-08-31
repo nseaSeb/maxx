@@ -321,6 +321,13 @@ fn ensure_imports(source: String, lines: &[&str]) -> String {
 
     let mut out = String::with_capacity(source.len() + missing.len() * 48);
     out.push_str(&source[..anchor]);
+    // A file whose last line carries no terminator anchors at its very end, and
+    // the import would be written onto that line — swallowed by a `//!` for the
+    // one shape that reaches it. `already_imported` would then find it there and
+    // never write it anywhere else.
+    if anchor > 0 && !source[..anchor].ends_with('\n') {
+        out.push('\n');
+    }
     for line in &missing {
         out.push_str(line);
         out.push('\n');
@@ -503,48 +510,126 @@ fn last_import_end(source: &str) -> usize {
 
 /// The same question asked of the text, for a file `syn` will not parse.
 ///
+/// Every rule here exists because the loose version of it put the new import
+/// somewhere that does not compile — and this path runs while the view is being
+/// written, which is when maxx is most likely to be saving it. Worse, a bad
+/// line sticks: `already_imported` finds it in the text wherever it landed, so
+/// the import is never written again in the right place.
+///
 /// A line belongs to the header when it is blank, a comment, an attribute, a
-/// declaration, or an import — and when an import is still open on the line
-/// before, since `use gpui::{\n    …\n};` spans several. The first line that is
-/// none of those ends it.
+/// **declaration** or an import. Four distinctions the naive reading misses:
+///
+/// - `mod tests {` is not `mod tests;`. Accepted as a declaration, the scan
+///   walks into the body and anchors on the `use super::*;` inside it — an
+///   import written inside a module, invisible to the code maxx generated at
+///   the top level.
+/// - A `///` line and a `#[derive(…)]` line are not comments about the file,
+///   they decorate what follows. Anchoring under them puts the `use` between an
+///   attribute and its item, which is not merely odd: the attribute then
+///   applies to the import. So a trailing run of them is stepped back over,
+///   blank lines included — an attribute may be separated from its item.
+/// - Only a *closed* construct advances the header. An unterminated `use
+///   gpui::{` — the single most likely reason a view does not parse while being
+///   typed — would otherwise swallow the rest of the file and put the import at
+///   the very bottom, which is the defect this whole pass exists to remove.
+/// - A block comment is delimited, not recognised line by line. Matching a
+///   leading `*` ends the header on the first unstarred line of a licence
+///   header, and writes the import inside the comment, where it does nothing.
 fn text_header_end(source: &str) -> usize {
+    // The end of the last line that certainly belongs to the header, the end of
+    // the last import that closed, and the start of the run of attributes and
+    // doc comments now standing open. Only a settled line moves the first two:
+    // that is what keeps an unterminated construct from taking the file with it.
     let mut offset = 0;
     let mut header_end = 0;
     let mut import_end = None;
-    let mut open = 0usize;
+    let mut decorated_from = None;
+    let mut braces = 0usize;
+    let mut comment = 0usize;
 
     for line in source.split_inclusive('\n') {
         let text = line.trim();
-        let continuing = open > 0;
-        if continuing || text.starts_with("use ") {
-            open += text.matches('{').count();
-            open = open.saturating_sub(text.matches('}').count());
+
+        if braces > 0 {
+            braces = (braces + text.matches('{').count()).saturating_sub(text.matches('}').count());
             offset += line.len();
-            if open == 0 {
+            if braces == 0 {
                 import_end = Some(offset);
+                header_end = offset;
             }
+            continue;
+        }
+        if comment > 0 {
+            comment =
+                (comment + text.matches("/*").count()).saturating_sub(text.matches("*/").count());
+            offset += line.len();
+            if comment == 0 {
+                header_end = offset;
+            }
+            continue;
+        }
+
+        let import = text.starts_with("use ")
+            || text.strip_prefix("pub").map(str::trim_start).is_some_and(|rest| {
+                rest.starts_with("use ")
+                    || rest
+                        .strip_prefix('(')
+                        .and_then(|rest| rest.split_once(')'))
+                        .is_some_and(|(_, rest)| rest.trim_start().starts_with("use "))
+            });
+        let declaration = !text.contains('{')
+            && (text.starts_with("mod ")
+                || text.starts_with("pub mod ")
+                || text.starts_with("extern crate "));
+        // What decorates the next item, as opposed to what is said about the
+        // file: `//!` and `#![…]` are the file's own and stay behind.
+        let decorates =
+            text.starts_with("///") || (text.starts_with("#[") && !text.starts_with("#!["));
+
+        if import {
+            braces = text.matches('{').count().saturating_sub(text.matches('}').count());
+            offset += line.len();
+            if braces == 0 {
+                import_end = Some(offset);
+                header_end = offset;
+            }
+            decorated_from = None;
+            continue;
+        }
+        if text.starts_with("/*") {
+            comment = text.matches("/*").count().saturating_sub(text.matches("*/").count());
+            offset += line.len();
+            if comment == 0 {
+                header_end = offset;
+            }
+            decorated_from = None;
+            continue;
+        }
+        if decorates {
+            decorated_from = decorated_from.or(Some(offset));
+            offset += line.len();
             header_end = offset;
             continue;
         }
-        if text.is_empty()
-            || text.starts_with("//")
-            || text.starts_with("/*")
-            || text.starts_with('*')
-            || text.starts_with('#')
-            || text.starts_with("mod ")
-            || text.starts_with("pub mod ")
-            || text.starts_with("extern crate ")
-        {
+        // A blank line carries the run rather than closing it: an attribute may
+        // stand one line above the item it decorates.
+        if text.is_empty() {
             offset += line.len();
             header_end = offset;
+            continue;
+        }
+        if text.starts_with("//") || text.starts_with("#![") || declaration {
+            offset += line.len();
+            header_end = offset;
+            decorated_from = None;
             continue;
         }
         break;
     }
 
-    // An import to join, or the header's own end — which for a file opening on
-    // `//!` is what keeps the new line below it.
-    import_end.unwrap_or(header_end)
+    // An import to join; failing that, the header's own end, stepped back over
+    // anything left standing open above the first item.
+    import_end.unwrap_or_else(|| decorated_from.unwrap_or(header_end))
 }
 
 /// Whether the mark on line `number` is one maxx wrote.
