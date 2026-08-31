@@ -1477,6 +1477,120 @@ fn main() {}
     );
 }
 
+/// An import maxx adds joins the header, not the last `use` of the file.
+///
+/// A `use` is a top-level item like any other, and nothing forbids one below an
+/// `impl` — a developer moving a type around leaves them there all the time.
+/// Anchored on the last of them, every import maxx writes went down with it, to
+/// the bottom of the file, away from the block where imports are read. It still
+/// compiles, which is why nothing said anything.
+#[test]
+fn an_added_import_joins_the_header_and_not_the_last_use_of_the_file() {
+    let source = "\
+//! What this view is.
+
+use gpui::prelude::*;
+
+pub struct Home;
+
+impl Home {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+use std::fmt;
+";
+    let out = maxx::view::ensure_imports_for_test(
+        source.to_string(),
+        &["use gpui_component::button::Button;"],
+    );
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[2], "use gpui::prelude::*;");
+    assert_eq!(lines[3], "use gpui_component::button::Button;", "in the header:\n{out}");
+    assert_eq!(*lines.last().expect("a last line"), "use std::fmt;", "which is left alone");
+}
+
+/// `mod inner;` above the imports does not end the header.
+///
+/// The rule is "the first item with a body", and not "the first item that is
+/// not a `use`": a declaration is written above the imports as often as below,
+/// and a header cut short by one would send the import above the `//!`.
+#[test]
+fn a_module_declaration_does_not_end_the_header() {
+    let source = "\
+//! What this view is.
+
+mod inner;
+
+use gpui::prelude::*;
+
+pub struct Home;
+";
+    let out = maxx::view::ensure_imports_for_test(
+        source.to_string(),
+        &["use gpui_component::button::Button;"],
+    );
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[4], "use gpui::prelude::*;");
+    assert_eq!(lines[5], "use gpui_component::button::Button;", "{out}");
+}
+
+/// With no import to join, the line goes under the `//!` and not above it.
+///
+/// The anchor was the start of the file, so a view carrying no import at all
+/// took maxx's first one before its own inner doc comment — where a `use` is not
+/// merely odd but refused: `//!` and `#![…]` have to come first, and the file
+/// stopped compiling on the line maxx had just written.
+#[test]
+fn the_first_import_of_a_file_goes_under_its_inner_doc_comment() {
+    let source = "\
+//! What this view is.
+
+pub struct Home;
+";
+    let out = maxx::view::ensure_imports_for_test(
+        source.to_string(),
+        &["use gpui_component::button::Button;"],
+    );
+    assert!(
+        out.starts_with("//! What this view is.\n"),
+        "the inner doc comment stays first:\n{out}"
+    );
+    assert!(out.contains("use gpui_component::button::Button;"), "{out}");
+    syn::parse_file(&out).expect("and what comes out still parses");
+}
+
+/// A file `syn` will not parse reads its header the same way.
+///
+/// The fallback is what maxx had before it could ask `syn`, and it carried the
+/// same defect: the last `\nuse ` of the text, wherever it sat. A view is
+/// unparseable exactly while it is being written, which is when maxx is most
+/// likely to be saving it.
+#[test]
+fn the_text_fallback_stops_at_the_header_too() {
+    let source = "\
+//! Broken.
+
+use gpui::prelude::*;
+
+impl Home { fn new( }
+
+use std::fmt;
+";
+    assert!(
+        syn::parse_file(source).is_err(),
+        "the case only exists for a file that does not parse"
+    );
+    let out = maxx::view::ensure_imports_for_test(
+        source.to_string(),
+        &["use gpui_component::button::Button;"],
+    );
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[2], "use gpui::prelude::*;");
+    assert_eq!(lines[3], "use gpui_component::button::Button;", "{out}");
+}
+
 /// An import written twice is pointed at, in the file, on the line.
 ///
 /// maxx adds; it does not take away what it did not write. One of the two lines

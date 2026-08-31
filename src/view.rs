@@ -453,31 +453,98 @@ fn flag_duplicate_imports(source: String) -> String {
     out
 }
 
-/// The byte after the last top-level `use` item, or the start of the file.
+/// The byte after the last `use` item of the file's **header**.
+///
+/// The header, and not the last `use` of the file: a `use` is a top-level item
+/// like any other and nothing forbids one below an `impl`. Anchored on the
+/// last of them, a view carrying such a line took every import maxx adds down
+/// with it, to the bottom of the file, away from the block where imports are
+/// read — a file that still compiles and that nobody would have written that
+/// way. So the run is walked from the top and stops at the first item with a
+/// body.
+///
+/// `mod inner;` and `extern crate` do not stop it. They belong to the same
+/// header, they are written above the imports as often as below, and a header
+/// declared empty by one of them would send the import above the `//!` — the
+/// defect just below.
+///
+/// With no import to join, the anchor is the end of the file's inner
+/// attributes, never the start of the file: `//!` and `#![…]` have to come
+/// first, and a `use` written above them does not compile. It was byte 0, and
+/// the one shape that reached it — a view with no import at all — is exactly
+/// the one this function exists to repair.
 ///
 /// From `syn`, so a `use` written inside a string is not one. A file that does
 /// not parse falls back to the text, which is what maxx had before it could ask
-/// — imperfect, and better than refusing to write an import the view needs.
+/// — imperfect, and better than refusing to write an import the view needs. The
+/// fallback reads the header the same way, line by line, and stops on the same
+/// rule.
 fn last_import_end(source: &str) -> usize {
     let line_end =
         |number: usize| source.split_inclusive('\n').take(number).map(str::len).sum::<usize>();
     if let Ok(parsed) = syn::parse_file(source) {
-        return parsed
-            .items
-            .iter()
-            .filter_map(|item| match item {
-                syn::Item::Use(item) => Some(item.span().end().line),
-                _ => None,
-            })
-            .max()
+        let mut last = None;
+        for item in &parsed.items {
+            match item {
+                syn::Item::Use(item) => last = Some(item.span().end().line),
+                // Declarations, not bodies: the header goes on.
+                syn::Item::ExternCrate(_) => {}
+                syn::Item::Mod(item) if item.content.is_none() => {}
+                _ => break,
+            }
+        }
+        return last
+            .or_else(|| parsed.attrs.iter().map(|attr| attr.span().end().line).max())
             .map(line_end)
             .unwrap_or(0);
     }
-    source
-        .match_indices("\nuse ")
-        .last()
-        .and_then(|(offset, _)| source[offset + 1..].find('\n').map(|end| offset + 1 + end + 1))
-        .unwrap_or(0)
+    text_header_end(source)
+}
+
+/// The same question asked of the text, for a file `syn` will not parse.
+///
+/// A line belongs to the header when it is blank, a comment, an attribute, a
+/// declaration, or an import — and when an import is still open on the line
+/// before, since `use gpui::{\n    …\n};` spans several. The first line that is
+/// none of those ends it.
+fn text_header_end(source: &str) -> usize {
+    let mut offset = 0;
+    let mut header_end = 0;
+    let mut import_end = None;
+    let mut open = 0usize;
+
+    for line in source.split_inclusive('\n') {
+        let text = line.trim();
+        let continuing = open > 0;
+        if continuing || text.starts_with("use ") {
+            open += text.matches('{').count();
+            open = open.saturating_sub(text.matches('}').count());
+            offset += line.len();
+            if open == 0 {
+                import_end = Some(offset);
+            }
+            header_end = offset;
+            continue;
+        }
+        if text.is_empty()
+            || text.starts_with("//")
+            || text.starts_with("/*")
+            || text.starts_with('*')
+            || text.starts_with('#')
+            || text.starts_with("mod ")
+            || text.starts_with("pub mod ")
+            || text.starts_with("extern crate ")
+        {
+            offset += line.len();
+            header_end = offset;
+            continue;
+        }
+        break;
+    }
+
+    // An import to join, or the header's own end — which for a file opening on
+    // `//!` is what keeps the new line below it.
+    import_end.unwrap_or(header_end)
 }
 
 /// Whether the mark on line `number` is one maxx wrote.

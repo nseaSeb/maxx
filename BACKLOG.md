@@ -285,9 +285,18 @@ ressortir sur trois. Ce qui est garanti est le contenu, pas la colonne.
   glissement et écrites à l'extinction, comme la géométrie de la fenêtre.
   Reste : le panneau de sortie est encore haut de 200 px, et l'éditeur de menus
   garde son inspecteur figé à 280.
-- **`view::ensure_imports` s'ancre sur le dernier `use` en colonne 0** du
-  fichier : un `use` placé après l'`impl` attirerait les imports insérés vers le
-  bas du fichier. Cas tordu, mais réel.
+- ~~**`view::ensure_imports` s'ancre sur le dernier `use` en colonne 0**~~ —
+  fait, et le cas n'était pas tordu : il s'ancrait sur le dernier `use` du
+  fichier, `syn` ou pas, donc un `use` placé après l'`impl` emportait vers le
+  bas tous les imports que maxx ajoute. Il s'ancre maintenant sur le dernier
+  `use` de l'**en-tête** — la suite d'items lue depuis le haut, qu'un `mod x;`
+  ou un `extern crate` ne clôt pas, et que le premier item à corps arrête.
+
+  Deux voisins sont tombés avec : le repli textuel, qui portait le même défaut
+  pour un fichier que `syn` refuse — c'est-à-dire pendant qu'on l'écrit —, et
+  l'ancre à défaut d'import, qui était l'octet 0. Une vue sans aucun `use`
+  recevait donc le premier au-dessus de son `//!`, ce qui ne compile pas : c'est
+  maintenant la fin des attributs internes du fichier.
 - ~~Voir un fichier que maxx ne sait pas dessiner~~ — fait, en lecture seule.
   N'importe quel fichier texte de l'explorateur s'ouvre dans `workspace/code.rs`,
   colorisé par tree-sitter, avec ses numéros de ligne ; un `.rs` sans région

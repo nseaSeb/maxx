@@ -61,6 +61,13 @@ futures = "0.3"
 proptest = { version = "1.11.0", default-features = false, features = ["std", "bit-set"] }
 # Already in the tree through gpui: used to rasterise the icon drafts.
 resvg = "0.45"
+# The same `syn` the crate itself depends on, taken again here because an
+# integration test sees only the public API and the dev-dependencies. Two
+# questions need it, both about `view::ensure_imports`: that what comes out of
+# it still parses, and — for the text fallback — that the case under test really
+# is a file `syn` refuses, which a later edit could otherwise make untrue
+# without the test ever noticing.
+syn = { version = "3", features = ["full"] }
 # The same gpui, plus what it takes to run an application without a screen:
 # `#[gpui::test]` and `TestAppContext`. Under `cargo test` only — a release
 # build never sees the feature, and the window that ships is the real one.
