@@ -74,10 +74,12 @@ au catalogue ne rattrapait ça.
 
 ## Les quatre chantiers, dans l'ordre
 
-### 1. Le démarrage — de zéro à la première fenêtre
+### 1. Le démarrage — de zéro à la première fenêtre — clos
 
-C'est là que maxx est irremplaçable, et c'est ce sur quoi il est le plus
-maigre : `Fichier ▸ Nouveau projet…` écrit toujours le même squelette.
+C'est là que maxx est irremplaçable, et c'est là qu'il était le plus maigre :
+`Fichier ▸ Nouveau projet…` écrivait toujours le même squelette. Le chantier
+est terminé — le détail des points est plus bas, et le critère de fin est
+atteint.
 
 - ~~**Des modèles de projet à la création.**~~ — fait pour deux des trois
   formes. *Vide*, *Barre latérale et contenu*, *Avec des réglages*, sous
@@ -374,7 +376,8 @@ Rien de technique, et c'est ce qui décide de tout le reste.
   où `macos-latest` change d'architecture, une sortie « automatique » changerait
   de cible sans que personne l'ait demandé ; une matrice déclarée casse
   bruyamment, ce qu'on veut d'un portail de publication.
-- **crates.io**, ensuite, surtout pour réserver le nom.
+- ~~**crates.io**, ensuite, surtout pour réserver le nom.~~ — fait : `maxx` y
+  est publié, en 0.1.0 puis 0.2.0.
 - **Un essai humain sur Linux et sur Windows.** La CI prouve que ça compile ;
   aucun test n'ouvre de fenêtre.
 

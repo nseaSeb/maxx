@@ -340,12 +340,12 @@ ressortir sur trois. Ce qui est garanti est le contenu, pas la colonne.
 - ~~CI GitHub Actions~~ — faite, en matrice sur les trois systèmes, plus un
   travail qui compile la démo.
 - ~~Métadonnées `Cargo.toml`~~ — faites, `rust-version = "1.88"` compris.
-- **Publier.** Le nom `maxx` est libre sur crates.io (revérifié). Le verrou
-  `publish = false` est levé, la description est passée en anglais et `exclude`
-  écarte les médias du README : `cargo package` rend 78 fichiers et un paquet
-  qui se construit. Reste le geste lui-même, `cargo publish`, avec un jeton que
-  seul un humain pose. À savoir avant : `cargo install` demande à l'utilisateur
-  Linux les paquets de développement de Vulkan, de Wayland et de fontconfig.
+- ~~**Publier.**~~ — fait : `maxx` est sur crates.io, en 0.1.0 puis 0.2.0. Le
+  verrou `publish = false` était levé, la description passée en anglais et
+  `exclude` écartait les médias du README ; restait le geste lui-même, avec un
+  jeton que seul un humain pose. Ce qui vaut toujours d'être su : `cargo
+  install` demande à l'utilisateur Linux les paquets de développement de
+  Vulkan, de Wayland et de fontconfig.
   C'est assumé — maxx s'adresse à des gens qui compilent, et la version ouverte
   par un tag n'attache plus aucun binaire depuis `v0.1.0`. Et une version
   publiée ne se supprime pas, elle se *yank*.
