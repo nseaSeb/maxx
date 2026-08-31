@@ -63,7 +63,31 @@ That is what makes the round trip safe:
 The corollary: what you write by hand in Zed is read back by maxx, and what maxx
 writes is Rust you could have written yourself.
 
+## Installing
+
+```sh
+cargo install maxx
+```
+
+maxx is built from its source, and there is no binary to download. That is a
+choice rather than an omission: it writes Rust into a cargo project, so it is
+addressed to people who have a toolchain already — and the `cargo check` it runs
+on your project needs one anyway.
+
+The build is a large one the first time. `gpui` and `gpui-component` are around
+750 crates, so expect several minutes, and read [Requirements](#requirements)
+first: on Linux the compilation stops on missing C headers rather than on Rust
+if the development packages are not there.
+
 ## Usage
+
+```sh
+maxx                   # welcome screen
+maxx <path>            # open a project directly
+```
+
+From a clone of this repository instead, which is what you want if you intend to
+change maxx itself:
 
 ```sh
 cargo run              # welcome screen
@@ -197,11 +221,13 @@ fontconfig, ALSA. The exact list is in
 
 **Windows**: the MSVC toolchain.
 
-CI checks macOS on every push, and all three systems on pull requests, on
-demand and once a week. A `v*` tag opens the release gate: the whole matrix, a
-release build on each system, and a release opened on GitHub. No binary is
-attached to it — maxx is built from its source, by people who have a Rust
-toolchain anyway.
+CI builds and tests all three systems on every push and every pull request,
+plus once a week. A separate job runs on the weekly schedule alone: it scaffolds
+whole projects and compiles them, which is the only check that what maxx *writes*
+holds together — nothing in compiling maxx verifies the calls its catalogue puts
+in your file. A `v*` tag opens the release gate: the whole matrix, a release
+build on each system, and a release opened on GitHub. No binary is attached to
+it — maxx is built from its source, by people who have a Rust toolchain anyway.
 
 What CI does not prove: that maxx is usable. No test opens a window — they cover
 the model, the parser, the templates and the settings. maxx is developed on

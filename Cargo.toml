@@ -1,6 +1,6 @@
 [package]
 name = "maxx"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 license = "MIT"
 description = "A visual workshop that builds GPUI views and writes them out as real Rust source"

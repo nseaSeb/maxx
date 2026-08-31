@@ -3,6 +3,46 @@
 What changed, for whoever opens maxx and wonders what is new. The commits say
 how; this says what for.
 
+## 0.2.1
+
+### An import maxx adds is an import that compiles
+
+maxx writes the `use` lines a view needs into your file. It could put them where
+Rust does not accept them, and the file you were working in stopped compiling on
+a line you had not written.
+
+- **Above the `//!`.** A view carrying no import yet got its first one before the
+  file's own doc comment, which is not merely odd — inner attributes have to come
+  first, and the file is refused.
+- **Between an attribute and what it decorates.** The `use` landed under a
+  `#[derive(…)]` or a `///`, so the attribute applied to the import instead of to
+  your struct.
+- **At the bottom of the file.** A `use` written below an `impl` — which anyone
+  leaves behind while moving a type around — pulled every import maxx adds down
+  with it, out of the block where imports are read. That one compiled, which is
+  why it could last.
+
+The worst of it was that a line put in the wrong place stayed there: maxx found
+it in the text wherever it had landed and never wrote it again in the right one.
+So a single bad save was permanent, and the import the view needed was never
+added at all.
+
+### While you are still typing
+
+A view being edited is, for a moment, a file Rust cannot parse — and that is
+exactly when maxx is likely to save it. In that moment the import could be
+written inside a module body, inside a block comment, or at the very bottom of
+the file, and the same permanence applied. maxx now reads the header the same
+way whether or not the file parses.
+
+### Under the floor
+
+The five tests that scaffold whole projects and compile them — the only proof
+that what maxx writes holds together — now run every Monday in the CI instead of
+only by hand. And what maxx does to your undo history while you type in the
+inspector is under test: a word typed is one step, not one per keystroke, and
+never a rebuild of the box under the caret.
+
 ## 0.2.0
 
 ### Your own components
