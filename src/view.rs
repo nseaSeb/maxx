@@ -549,9 +549,13 @@ fn text_header_end(source: &str) -> usize {
 
     for line in source.split_inclusive('\n') {
         let text = line.trim();
+        // Braces are counted on the code alone. `use a::b; // {` would otherwise
+        // open an import that never closes, and the rest of the file be read as
+        // its continuation — the very thing the counter is here to prevent.
+        let code = code_of(text);
 
         if braces > 0 {
-            braces = (braces + text.matches('{').count()).saturating_sub(text.matches('}').count());
+            braces = (braces + code.matches('{').count()).saturating_sub(code.matches('}').count());
             offset += line.len();
             if braces == 0 {
                 import_end = Some(offset);
@@ -569,37 +573,26 @@ fn text_header_end(source: &str) -> usize {
             continue;
         }
 
-        let import = text.starts_with("use ")
-            || text.strip_prefix("pub").map(str::trim_start).is_some_and(|rest| {
-                rest.starts_with("use ")
-                    || rest
-                        .strip_prefix('(')
-                        .and_then(|rest| rest.split_once(')'))
-                        .is_some_and(|(_, rest)| rest.trim_start().starts_with("use "))
-            });
-        let declaration = !text.contains('{')
-            && (text.starts_with("mod ")
-                || text.starts_with("pub mod ")
-                || text.starts_with("extern crate "));
+        // `pub`, `pub(crate)` and the rest are stripped once, for the import and
+        // the declaration alike: `pub(crate) mod inner;` belongs to the header
+        // exactly as much as `mod inner;` does.
+        let item = without_visibility(text);
+        let import = item.starts_with("use ");
+        // Ended by its semicolon, and not merely free of a brace: `mod inner`
+        // with the brace on the next line would pass that test and let the scan
+        // walk into the body.
+        let declaration =
+            item.ends_with(';') && (item.starts_with("mod ") || item.starts_with("extern crate "));
         // What decorates the next item, as opposed to what is said about the
         // file: `//!` and `#![…]` are the file's own and stay behind.
         let decorates =
             text.starts_with("///") || (text.starts_with("#[") && !text.starts_with("#!["));
 
         if import {
-            braces = text.matches('{').count().saturating_sub(text.matches('}').count());
+            braces = code.matches('{').count().saturating_sub(code.matches('}').count());
             offset += line.len();
             if braces == 0 {
                 import_end = Some(offset);
-                header_end = offset;
-            }
-            decorated_from = None;
-            continue;
-        }
-        if text.starts_with("/*") {
-            comment = text.matches("/*").count().saturating_sub(text.matches("*/").count());
-            offset += line.len();
-            if comment == 0 {
                 header_end = offset;
             }
             decorated_from = None;
@@ -611,14 +604,28 @@ fn text_header_end(source: &str) -> usize {
             header_end = offset;
             continue;
         }
-        // A blank line carries the run rather than closing it: an attribute may
-        // stand one line above the item it decorates.
-        if text.is_empty() {
+        // A blank line, a plain comment and a block comment carry the run rather
+        // than closing it: an attribute may stand a line above the item it
+        // decorates, with a note in between. Closing it there is how the import
+        // ended up between `#[derive(…)]` and its struct, where the attribute
+        // applies to the import and the file stops compiling.
+        if text.starts_with("/*") {
+            comment = text.matches("/*").count().saturating_sub(text.matches("*/").count());
+            offset += line.len();
+            if comment == 0 {
+                header_end = offset;
+            }
+            continue;
+        }
+        if text.is_empty() || (text.starts_with("//") && !text.starts_with("//!")) {
             offset += line.len();
             header_end = offset;
             continue;
         }
-        if text.starts_with("//") || text.starts_with("#![") || declaration {
+        // These three close it. `//!` and `#![…]` cannot stand under an outer
+        // attribute in a file that compiles, and a declaration consumes the run
+        // above it — `#[cfg(test)]` belongs to the `mod tests;` it precedes.
+        if text.starts_with("//!") || text.starts_with("#![") || declaration {
             offset += line.len();
             header_end = offset;
             decorated_from = None;
@@ -630,6 +637,26 @@ fn text_header_end(source: &str) -> usize {
     // An import to join; failing that, the header's own end, stepped back over
     // anything left standing open above the first item.
     import_end.unwrap_or_else(|| decorated_from.unwrap_or(header_end))
+}
+
+/// A line with its trailing comment cut off, for counting brackets.
+fn code_of(text: &str) -> &str {
+    let cut = [text.find("//"), text.find("/*")].into_iter().flatten().min();
+    cut.map_or(text, |at| &text[..at])
+}
+
+/// A line stripped of `pub`, `pub(crate)`, `pub(in …)` and the rest.
+///
+/// The visibility is written the same way on an import and on a declaration, so
+/// it is taken off once and both questions are asked of what is left.
+fn without_visibility(text: &str) -> &str {
+    let Some(rest) = text.strip_prefix("pub") else {
+        return text;
+    };
+    if let Some(inner) = rest.strip_prefix('(') {
+        return inner.split_once(')').map_or(text, |(_, rest)| rest.trim_start());
+    }
+    if rest.starts_with(char::is_whitespace) { rest.trim_start() } else { text }
 }
 
 /// Whether the mark on line `number` is one maxx wrote.

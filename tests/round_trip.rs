@@ -1624,14 +1624,27 @@ mod tests {
 /// stops compiling. This is exactly the "view with no import yet" shape.
 #[test]
 fn an_import_is_never_written_between_an_attribute_and_its_item() {
+    // The last two carry a line between the attribute and its item: a blank, a
+    // note, a block comment. Anything that closes the run there puts the import
+    // back between the two.
     for source in [
         "//! Doc.\n\n#[derive(Clone)]\npub struct Home;\n\nfn broken( {\n",
         "//! Doc.\n\n/// What this holds.\npub struct Home;\n\nfn broken( {\n",
+        "//! Doc.\n\n#[derive(Clone)]\n// a note\npub struct Home;\n\nfn broken( {\n",
+        "//! Doc.\n\n#[derive(Clone)]\n/* a note */\npub struct Home;\n\nfn broken( {\n",
     ] {
         let out = added_to(source);
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(lines[2], "use gpui_component::button::Button;", "above it:\n{out}");
-        assert_eq!(lines[4], "pub struct Home;", "which keeps what decorates it:\n{out}");
+        assert_eq!(
+            *lines.last().filter(|line| !line.is_empty()).unwrap_or(&""),
+            "fn broken( {",
+            "and nothing has moved below:\n{out}"
+        );
+        assert!(
+            out.contains("#[derive(Clone)]\n") || out.contains("/// What this holds.\n"),
+            "what decorates the item is still above it:\n{out}"
+        );
     }
 }
 
@@ -1682,6 +1695,51 @@ fn broken( {
     let lines: Vec<&str> = out.lines().collect();
     assert_eq!(lines[1], "Copyright someone.", "the comment is left whole:\n{out}");
     assert_eq!(lines[4], "use gpui_component::button::Button;", "{out}");
+}
+
+/// A brace inside a trailing comment does not open an import.
+///
+/// `use a::b; // {` counted as an import left open, so every line after it was
+/// read as its continuation and a stray `}` further down closed the count in
+/// the middle of the file. The counter reads the code, not the comment.
+#[test]
+fn a_brace_in_a_trailing_comment_does_not_open_an_import() {
+    let source = "\
+//! Doc.
+
+use a::b; // {
+
+const X: u8 = 1;
+}
+fn broken( {
+";
+    let out = added_to(source);
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[2], "use a::b; // {");
+    assert_eq!(lines[3], "use gpui_component::button::Button;", "right after it:\n{out}");
+}
+
+/// A declaration is known by its visibility and its semicolon.
+///
+/// `pub(crate) mod inner;` belongs to the header exactly as much as
+/// `mod inner;`, and reading only the second split the import block in two. And
+/// a declaration ends on a semicolon, not merely on the absence of a brace:
+/// `mod inner` with the brace on the next line passes that weaker test and lets
+/// the scan walk into the body, which is where the import would then be written.
+#[test]
+fn a_declaration_is_known_by_its_visibility_and_its_semicolon() {
+    let out =
+        added_to("//! Doc.\n\npub(crate) mod inner;\n\nuse gpui::prelude::*;\n\nfn broken( {\n");
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[4], "use gpui::prelude::*;");
+    assert_eq!(lines[5], "use gpui_component::button::Button;", "after the import:\n{out}");
+
+    let out = added_to(
+        "//! Doc.\n\nuse gpui::prelude::*;\n\nmod inner\n{\n    use super::*;\n    fn t( {\n}\n",
+    );
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[3], "use gpui_component::button::Button;", "at the top level:\n{out}");
+    assert_eq!(lines[5], "mod inner", "and the module is untouched:\n{out}");
 }
 
 /// A re-export is an import too.
