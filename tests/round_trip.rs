@@ -57,14 +57,14 @@ v_flex()
 
 #[test]
 fn unknown_method_is_kept() {
-    // `.shadow_lg()` and `.bg(rgb(0x1e2127))` are not in the registry; the
-    // model must still carry them and emit them unchanged.
-    let source = "div().shadow_lg().bg(rgb(0x1e2127))";
+    // `.debug()` is nothing the catalogue knows, and `.bg(rgb(0x1e2127))` is a
+    // shared property: the model must carry both alike and emit them unchanged.
+    let source = "div().debug().bg(rgb(0x1e2127))";
     let file = file_with(source);
     let (node, _) = parser::parse(&file).expect("the region should parse");
 
     assert_eq!(node.calls.len(), 2);
-    assert_eq!(node.calls[0].name, "shadow_lg");
+    assert_eq!(node.calls[0].name, "debug");
     assert_eq!(node.calls[1].args[0], Arg::Verbatim("rgb(0x1e2127)".into()));
     assert_eq!(render(&node, 0), source);
 }
@@ -1414,7 +1414,7 @@ impl Render for Home {
 
 #[test]
 fn every_subtree_template_reads_back_as_a_tree() {
-    for (id, _, source) in maxx::scaffold::templates::SUBTREES {
+    for (id, _, _, source) in maxx::scaffold::templates::SUBTREES {
         let node = maxx::parser::parse_expr(source)
             .unwrap_or_else(|error| panic!("{id} must parse: {error}"));
         // An opaque node is one maxx cannot take apart, which is exactly what a
@@ -1431,7 +1431,7 @@ fn every_subtree_template_reads_back_as_a_tree() {
 
 #[test]
 fn every_subtree_template_wears_a_label() {
-    for (id, _, _) in maxx::scaffold::templates::SUBTREES {
+    for (id, _, _, _) in maxx::scaffold::templates::SUBTREES {
         assert!(
             maxx::registry::SUBTREE_LABELS.iter().any(|(this, _)| this == id),
             "{id} has no label — the palette would show a blank row"
@@ -1439,7 +1439,7 @@ fn every_subtree_template_wears_a_label() {
     }
     for (id, _) in maxx::registry::SUBTREE_LABELS {
         assert!(
-            maxx::scaffold::templates::SUBTREES.iter().any(|(this, _, _)| this == id),
+            maxx::scaffold::templates::SUBTREES.iter().any(|(this, _, _, _)| this == id),
             "{id} has a label but no expression"
         );
     }
@@ -2040,4 +2040,310 @@ fn a_mark_follows_the_indentation_of_what_it_points_at() {
         flagged.lines().any(|line| line.starts_with("  // maxx: C is imported twice")),
         "{flagged:?}"
     );
+}
+
+/// The shared box properties are written and read back to the byte.
+///
+/// Margins, border, limits, shadow, opacity and the flags beside them are
+/// ordinary calls, and that is exactly the claim worth checking: a family added
+/// to the catalogue is only real once what the inspector writes for it comes
+/// back out of the parser unchanged, with the `use` lines its arguments need.
+#[test]
+fn the_box_properties_survive_a_round_trip() {
+    let mut node = maxx::registry::instantiate("column").expect("column is in the catalogue");
+    let spec = maxx::registry::of(&node).expect("v_flex is in the catalogue");
+    let prop = |label: &str| {
+        maxx::registry::props(spec)
+            .into_iter()
+            .find(|prop| prop.label == label)
+            .unwrap_or_else(|| panic!("{label} is missing from the catalogue"))
+    };
+
+    for (label, value) in [
+        ("prop.margin", "m_4"),
+        ("prop.margin_x", "mx_2"),
+        ("prop.margin_y", "my_1"),
+        ("prop.border", "border_2"),
+        ("prop.shadow", "shadow_md"),
+        ("prop.justify", "justify_between"),
+    ] {
+        maxx::registry::write(&mut node, prop(label), value);
+    }
+    for (label, value) in [
+        ("prop.min_width", "120"),
+        ("prop.max_width", "480"),
+        ("prop.min_height", "40"),
+        ("prop.max_height", "600"),
+        ("prop.line_height", "20"),
+        ("prop.border_color", "1e2127"),
+        ("prop.opacity", "0.5"),
+    ] {
+        maxx::registry::write(&mut node, prop(label), value);
+    }
+    for label in ["prop.wrap", "prop.clip", "prop.cursor", "prop.italic", "prop.underline"] {
+        maxx::registry::write(&mut node, prop(label), "true");
+    }
+
+    let written = render(&node, 0);
+    assert_eq!(reparse(&written), written, "the chain has to come back byte for byte");
+
+    // And each value reads back as it was typed, not as it was encoded.
+    assert_eq!(maxx::registry::read(&node, prop("prop.margin")).as_deref(), Some("m_4"));
+    assert_eq!(maxx::registry::read(&node, prop("prop.min_width")).as_deref(), Some("120"));
+    assert_eq!(maxx::registry::read(&node, prop("prop.opacity")).as_deref(), Some("0.5"));
+    assert_eq!(maxx::registry::read(&node, prop("prop.border_color")).as_deref(), Some("1e2127"));
+    assert_eq!(maxx::registry::read(&node, prop("prop.cursor")).as_deref(), Some("true"));
+
+    // The arguments bring their own `use` lines with them: `px` and `rgb` are
+    // functions of gpui, not methods of the component.
+    let imports = maxx::registry::imports(&node);
+    assert!(imports.contains(&"use gpui::px;"), "{imports:?}");
+    assert!(imports.contains(&"use gpui::rgb;"), "{imports:?}");
+}
+
+/// A dropdown's entries go into the initializer, and come back out of it.
+///
+/// The one property whose value is not in the managed region: it is an argument
+/// of a constructor the view's `new` calls, so what has to round-trip is a line
+/// of the file the designer never re-renders. Written by maxx, read by maxx —
+/// and, when the developer has changed it, read as theirs and left alone.
+#[test]
+fn the_dropdown_entries_survive_the_initializer() {
+    let spec = maxx::registry::by_id("select").expect("the dropdown is in the catalogue");
+    let prop = maxx::registry::props(spec)
+        .into_iter()
+        .find(|prop| prop.label == "prop.items")
+        .expect("the dropdown carries its entries");
+    let maxx::registry::Target::Initializer(init) = prop.target else {
+        panic!("the entries live in the initializer");
+    };
+    let state = spec.state.expect("the dropdown is bound to a field");
+
+    // What a fresh drop writes reads back as the two names it holds.
+    assert_eq!(init.read(prop.kind, state.initializer).as_deref(), Some("First, Second"));
+
+    // And what the field writes reads back as what was typed.
+    let written = init.write(prop.kind, "Un, Deux, Trois").expect("three entries encode");
+    assert_eq!(init.read(prop.kind, &written).as_deref(), Some("Un, Deux, Trois"));
+    assert!(written.contains("SharedString::from(\"Trois\")"), "{written}");
+
+    // `rustfmt` over `new` is not an edit by hand: the same code laid out
+    // differently still reads back.
+    let reflowed = written.replace('\n', " ").replace("    ", " ");
+    assert_eq!(init.read(prop.kind, &reflowed).as_deref(), Some("Un, Deux, Trois"));
+
+    // A list the developer fills from their own data is theirs.
+    assert_eq!(
+        init.read(prop.kind, "cx.new(|cx| SelectState::new(self.rows(), None, window, cx))"),
+        None
+    );
+
+    // And there is no empty shape: clearing the field writes nothing.
+    assert_eq!(init.write(prop.kind, "  "), None);
+}
+
+/// The multi-line switch is the same mechanism, with two shapes instead of one.
+#[test]
+fn the_multi_line_switch_survives_the_initializer() {
+    let spec = maxx::registry::by_id("input").expect("the text input is in the catalogue");
+    let prop = maxx::registry::props(spec)
+        .into_iter()
+        .find(|prop| prop.label == "prop.multi_line")
+        .expect("the input carries its multi-line switch");
+    let maxx::registry::Target::Initializer(init) = prop.target else {
+        panic!("the switch lives in the initializer");
+    };
+    let state = spec.state.expect("the input is bound to a field");
+
+    // Off is what a fresh drop writes, and it reads back as off rather than as
+    // a line maxx cannot recognise.
+    assert_eq!(init.read(prop.kind, state.initializer).as_deref(), Some(""));
+
+    let on = init.write(prop.kind, "true").expect("the switch has an on shape");
+    assert!(on.contains(".multi_line(true)"), "{on}");
+    assert_eq!(init.read(prop.kind, &on).as_deref(), Some("true"));
+
+    let off = init.write(prop.kind, "false").expect("and an off one");
+    assert_eq!(off, state.initializer);
+
+    // A state the developer built themselves is left alone.
+    assert_eq!(init.read(prop.kind, "cx.new(|cx| InputState::new(window, cx).rows(4))"), None);
+}
+
+/// A hover closure survives being read and written back.
+///
+/// The second chain of calls on a node, and the one place the model holds a
+/// chain it does not own: it lives inside the closure's own text. What has to
+/// hold is that reading it and writing it back changes nothing else — the
+/// parameter name the developer chose, and the calls maxx has no property for.
+#[test]
+fn a_hover_closure_survives() {
+    let source = "div().hover(|this| this.bg(rgb(0x1e2127)).rounded_md())";
+    assert_eq!(reparse(source), source);
+
+    // The parameter name is the developer's, and a call maxx offers no
+    // property for is carried along untouched.
+    let source = "\
+div()
+    .id(\"row\")
+    .hover(|s| s.bg(rgb(0x1e2127)).text_decoration_1().shadow_lg())";
+    assert_eq!(reparse(source), source);
+}
+
+/// And the inspector reads and writes it through the ordinary style properties.
+#[test]
+fn the_hover_properties_read_and_write_the_closure() {
+    let spec = maxx::registry::by_id("column").expect("the column is in the catalogue");
+    let props = maxx::registry::props(spec);
+    let background = props
+        .iter()
+        .find(|prop| prop.label == "prop.hover_background")
+        .expect("a column carries a hover background");
+    let corners =
+        props.iter().find(|prop| prop.label == "prop.hover_rounded").expect("and its corners");
+
+    let mut node = Node::known("v_flex");
+    assert_eq!(maxx::registry::read(&node, background), None);
+
+    maxx::registry::write(&mut node, background, "1e2127");
+    assert_eq!(
+        node.call("hover").and_then(|call| call.args.first()).map(|arg| arg.to_source()),
+        Some("|this| this.bg(rgb(0x1e2127))".to_string())
+    );
+    assert_eq!(maxx::registry::read(&node, background).as_deref(), Some("1e2127"));
+
+    // A second property joins the same closure rather than opening another.
+    maxx::registry::write(&mut node, corners, "rounded_md");
+    assert_eq!(
+        node.call("hover").and_then(|call| call.args.first()).map(|arg| arg.to_source()),
+        Some("|this| this.bg(rgb(0x1e2127)).rounded_md()".to_string())
+    );
+
+    // Emptying the last of them takes the closure away: `.hover(|this| this)`
+    // is a call that says nothing.
+    maxx::registry::write(&mut node, corners, "");
+    maxx::registry::write(&mut node, background, "");
+    assert!(node.call("hover").is_none());
+}
+
+/// A closure the developer wrote is shown and left alone.
+#[test]
+fn a_hover_closure_maxx_did_not_write_is_not_touched() {
+    let spec = maxx::registry::by_id("column").expect("the column is in the catalogue");
+    let background = maxx::registry::props(spec)
+        .into_iter()
+        .find(|prop| prop.label == "prop.hover_background")
+        .expect("a column carries a hover background");
+
+    let mut node = Node::known("v_flex");
+    // Two parameters is not a shape gpui's `hover` takes, and it is exactly the
+    // kind of thing a developer may have written by hand for something else.
+    let theirs = "|this, cx| this.bg(cx.theme().accent)";
+    node.set_call("hover", Arg::Verbatim(theirs.into()));
+
+    assert!(!maxx::registry::editable(&node, background));
+    // And it is shown rather than hidden: the property reads nothing, so the
+    // inspector files the call among the ones no property owns.
+    assert_eq!(maxx::registry::read(&node, background), None);
+    assert!(maxx::registry::hover_calls(&node).is_none());
+    maxx::registry::write(&mut node, background, "1e2127");
+    assert_eq!(
+        node.call("hover").and_then(|call| call.args.first()).map(|arg| arg.to_source()),
+        Some(theirs.to_string())
+    );
+}
+
+/// The initializer is found in `new`, whole, and put back whole.
+///
+/// The balanced scanner behind the two properties that live outside the managed
+/// region. What it has to survive: a field whose value holds commas and
+/// brackets of its own, a field after it, and a last one written without a
+/// trailing comma.
+#[test]
+fn a_state_field_initializer_is_read_and_written_whole() {
+    let source = "\
+use gpui::*;
+
+pub struct Home {
+    pub title: SharedString,
+    pub choices: Entity<SelectState<SearchableVec<SharedString>>>,
+    pub count: usize,
+}
+
+impl Home {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self {
+            title: \"Accueil\".into(),
+            choices: cx.new(|cx| {
+                SelectState::new(
+                    SearchableVec::new(vec![
+                        SharedString::from(\"First\"),
+                        SharedString::from(\"Second\"),
+                    ]),
+                    Some(IndexPath::new(0)),
+                    window,
+                    cx,
+                )
+            }),
+            count: 0,
+        }
+    }
+}
+
+impl Render for Home {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        // maxx:begin
+        Select::new(&self.choices)
+        // maxx:end
+    }
+}
+";
+    let directory = std::env::temp_dir().join("maxx-initializer-round-trip");
+    std::fs::create_dir_all(&directory).expect("a scratch directory");
+    let path = directory.join("home.rs");
+    std::fs::write(&path, source).expect("the view is written");
+
+    let mut view = maxx::view::View::load(&path).expect("the view loads");
+    let held = view.state_initializer("choices").expect("the dropdown's initializer");
+    assert!(held.starts_with("cx.new(|cx| {"), "{held}");
+    assert!(held.ends_with("})"), "{held}");
+    assert!(held.contains("SharedString::from(\"Second\")"), "{held}");
+
+    // The field before it and the one after are untouched by the read.
+    assert_eq!(view.state_initializer("title").as_deref(), Some("\"Accueil\".into()"));
+    // The last field of the literal carries no trailing comma.
+    assert_eq!(view.state_initializer("count").as_deref(), Some("0"));
+
+    assert!(view.set_state_initializer("choices", "cx.new(|cx| SelectState::empty(window, cx))"));
+    assert_eq!(
+        view.state_initializer("choices").as_deref(),
+        Some("cx.new(|cx| SelectState::empty(window, cx))")
+    );
+    // And nothing else moved.
+    assert_eq!(view.state_initializer("count").as_deref(), Some("0"));
+    assert!(view.dirty(), "an initializer changed is a view with something to save");
+
+    let _ = std::fs::remove_file(&path);
+}
+
+/// A hover closure `cargo fmt` has wrapped in a block still reads back.
+///
+/// rustfmt turns a closure body that no longer fits on one line into a block,
+/// and a developer who ran it has not edited anything: read without the braces,
+/// the six rows would go quiet after the first save.
+#[test]
+fn a_hover_closure_in_a_block_still_reads() {
+    let spec = maxx::registry::by_id("column").expect("the column is in the catalogue");
+    let background = maxx::registry::props(spec)
+        .into_iter()
+        .find(|prop| prop.label == "prop.hover_background")
+        .expect("a column carries a hover background");
+
+    let mut node = Node::known("v_flex");
+    node.set_call(
+        "hover",
+        Arg::Verbatim("|this| {\n    this.bg(rgb(0x1e2127)).rounded_md()\n}".into()),
+    );
+    assert!(maxx::registry::editable(&node, background));
+    assert_eq!(maxx::registry::read(&node, background).as_deref(), Some("1e2127"));
 }

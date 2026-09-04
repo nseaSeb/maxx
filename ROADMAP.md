@@ -185,7 +185,9 @@ Par coût croissant, pas par ordre alphabétique.
   et l'icône a demandé la vraie nouveauté, `Target::VariantArg` : une variante
   en **argument du constructeur**, `Icon::new(IconName::Check)`, qui n'a pas
   d'état vide puisque le composant ne compile pas sans elle. Vingt-deux icônes
-  offertes sur les quatre-vingt-huit, chacune dessinée sur le canvas.
+  offertes alors sur les quatre-vingt-six — le compte disait quatre-vingt-huit
+  et il était faux —, chacune dessinée sur le canvas ; les quatre-vingt-six
+  sont arrivées plus bas, engendrées.
 - ~~**Une entrée qui refuse `COMMON`.**~~ — faite, et elles sont deux : `Badge`
   comme prévu, et `Spinner`, qui n'implémente pas `Styled` non plus. Le
   `Common::None` existait déjà ; ce sont ses deux premiers usages.
@@ -348,7 +350,8 @@ des données ; `webview` est une dépendance lourde.
   Les trois sont **sans état**, exprès : un modèle portant `&self.champ`
   nommerait un champ que la vue n'a peut-être pas, et le collage ne relie qu'à
   des champs déjà là. Un formulaire avec de vraies zones de saisie est un modèle
-  qui doit d'abord déclarer son état — c'est une autre fonctionnalité.
+  qui doit d'abord déclarer son état — c'est une autre fonctionnalité. (Elle est
+  arrivée depuis, avec les cinq modèles suivants : la règle est tombée.)
 
   La table est écrite dans la graphie de `codegen`, et un test l'y tient : ce
   qu'un dépôt met dans le fichier est alors ce texte, caractère pour caractère,
@@ -359,16 +362,22 @@ des données ; `webview` est une dépendance lourde.
 
 Rien de technique, et c'est ce qui décide de tout le reste.
 
-- **Un GIF dans le README.** Pour un outil visuel, l'élément à plus fort
-  rendement de tout ce document. `demo/` est fait pour ça.
-- ~~**Des binaires attachés aux versions.**~~ — fait, et ce point était périmé :
-  `.github/workflows/release.yml` part sur une étiquette `v*`, vérifie les
-  trois systèmes (`fmt`, clippy, tests, puis une construction en release que la
-  CI ordinaire ne fait jamais), nomme les binaires par système, emballe le
-  `.app` sur macOS, contrôle ce que `cargo package` emporterait — `build.rs` et
-  `Cargo.lock` présents, `demo/` absent — et attache le tout à la version par
-  `gh`. C'est ce qui évite à l'utilisateur Linux d'installer Vulkan, Wayland et
-  fontconfig pour un `cargo install`.
+- ~~**Un GIF dans le README.**~~ — fait : `docs/maxx-demo.gif`, la démo de
+  `demo/` filmée, en tête du README.
+- ~~**Des binaires attachés aux versions.**~~ — décidé autrement, et ce
+  point disait le contraire de ce que le dépôt fait :
+  `.github/workflows/release.yml` part bien sur une étiquette `v*`,
+  vérifie les trois systèmes (`fmt`, clippy, tests, puis une construction
+  en release que la CI ordinaire ne fait jamais), contrôle ce que `cargo
+  package` emporterait — `build.rs` et `Cargo.lock` présents, `demo/`
+  absent — et ouvre la version par `gh` avec la section du CHANGELOG pour
+  corps. Mais **aucun binaire n'est attaché, et c'est voulu** : un
+  exécutable est une distribution au sens des licences — Apache-2.0 pour
+  gpui, MPL-2.0 pour `option-ext` —, avec les mentions qui doivent
+  voyager avec ; publier la source n'en demande aucune, et `cargo install`
+  suffit à qui a une chaîne de compilation. `scripts/bundle-macos.sh`
+  existe et n'est appelé par aucun workflow. Le README et `ARCHITECTURE.md`
+  disent encore l'inverse ; c'est noté dans `BACKLOG.md`.
 
   La matrice et les noms de sortie sont **déclarés**, et non déduits de la
   machine : ce qui est détecté se limite à ce qui ne peut pas être écrit, le
@@ -380,6 +389,240 @@ Rien de technique, et c'est ce qui décide de tout le reste.
   est publié, en 0.1.0 puis 0.2.0.
 - **Un essai humain sur Linux et sur Windows.** La CI prouve que ça compile ;
   aucun test n'ouvre de fenêtre.
+
+## Le prochain cycle
+
+Les quatre chantiers ont fait ce qu'ils promettaient : un projet se crée, se
+lance, se rouvre où on l'avait laissé, et ce que maxx y écrit compile sans
+avertissement. Ce qui manque maintenant ne se voit pas dans un test — ça se
+voit à la dixième minute d'usage. Trois chantiers, dans l'ordre où le manque
+se fait sentir, et la même règle d'arbitrage qu'avant : chacun doit
+raccourcir le chemin vers le premier écran qui tourne, ou reprendre une
+décision de bureau que personne ne veut reprendre.
+
+**Où en est ce cycle.** La 0.3.0 en emporte dix-neuf points sur vingt-quatre :
+tout le geste sauf la sélection multiple et le dépôt entre l'arbre et le
+canvas, tout GPUI, et du côté des formes les six applications types, les
+modèles de sous-arbre et `maxx new`. Restent cinq points, barrés nulle part
+plus bas : la **sélection multiple**, le **dépôt arbre ⇄ canvas**, la
+**galerie de formes à la création**, les **templates pris dans un dossier**,
+et la **mise à jour d'une forme déjà posée**. Les trois derniers vont
+ensemble — c'est le même chantier vu par trois portes — et c'est par là que
+le cycle suivant commence.
+
+### 5. Le geste — l'usage au quotidien
+
+Tout ce que maxx sait faire s'atteint par la barre de menus ou par `⌘K`.
+C'est exact, et c'est le problème : un développeur qui construit une vue a la
+souris sur le canvas, et la barre de menus est à l'autre bout de l'écran. Le
+seul menu contextuel est celui de l'explorateur ; le canvas, l'arbre de
+structure, les onglets et la palette n'en ont pas, et aucune touche ne
+déplace un nœud. Le détail est dans `BACKLOG.md`, section *Le geste*.
+
+- ~~**Le clic droit sur un nœud**, sur le canvas comme dans l'arbre.~~ —
+  fait : un menu par panneau, agissant sur la sélection que le clic droit
+  vient de déplacer, comme l'explorateur le fait déjà et pour la même
+  raison — `ContextMenuExt::context_menu` code en dur l'identifiant de ce
+  qu'il ouvre. Les deux panneaux partagent un seul constructeur de menu,
+  puisqu'ils parlent du même nœud. *Monter* et *Descendre* ont demandé la
+  seule commande qui manquait, `MoveNodeUp` / `MoveNodeDown` ; *Aller au
+  gestionnaire* ouvre la vue à la ligne de la méthode, ce que
+  `View::method_line` savait déjà dire.
+- ~~**Envelopper et désenvelopper.**~~ — fait : `⌘⌥G` enveloppe le nœud
+  sélectionné dans une colonne, `⌘⌥⇧G` dans une ligne, `⌘⌥U` remplace un
+  conteneur par son unique enfant. Un seul point de reprise par geste, et le
+  nœud garde ses appels de style — l'enveloppe est une `v_flex()` neuve avec
+  ses valeurs par défaut, pas un déménagement du style vers le haut.
+  Désenvelopper refuse la racine et un conteneur à zéro ou plusieurs
+  enfants, plutôt que d'en promouvoir un au hasard.
+- ~~**Le clavier dans l'arbre.**~~ — fait, dans un contexte « Tree » que le
+  panneau ne porte que lorsqu'il a le focus, comme « Palette » : `↑` `↓`
+  parcourent les rangées dans l'ordre où elles sont peintes, `⌥↑` `⌥↓`
+  déplacent le nœud parmi ses frères, `⏎` donne le curseur au champ texte
+  de l'inspecteur et `⌫` supprime. `←` `→` ne plient rien : l'arbre n'a pas
+  de pliage — chaque nœud est toujours une rangée —, donc les deux touches
+  parcourent la profondeur, parent et premier enfant.
+- ~~**Le clic droit ailleurs** : sur un onglet, sur la palette, dans
+  l'éditeur de menus.~~ — fait : trois menus de plus, chacun posé sur son
+  conteneur et agissant sur la sélection que le clic droit vient d'y
+  déplacer. L'onglet ferme, ferme les autres, ferme celles de droite, révèle
+  dans le panneau de projet, copie le chemin et ouvre dans l'éditeur ; la
+  palette insère avant, après ou dans la sélection, par la route du glisser
+  pour que le champ d'un composant à état soit nommé au même endroit ;
+  l'éditeur de menus reprend ses propres boutons. Le menu appartient chaque
+  fois à une liste et non à une rangée, donc ce qui n'en fait pas partie
+  reste en dehors du conteneur : l'onglet du lecteur, les composants du
+  projet, les gabarits — un menu ouvert au-dessus d'eux aurait parlé d'un
+  voisin.
+- ~~**Éditer le texte sur place**~~ — fait : le double-clic ouvre la saisie là
+  où le texte est, prérempli et sélectionné. Le champ est une session
+  d'annulation de plus, pas un mécanisme parallèle, et ce qu'il ouvre est la
+  propriété que le composant dit à voix haute — la table des titres range déjà
+  l'identifiant ailleurs, donc rien ici ne teste un nom.
+- ~~**Les poignées**~~ — faites : bord droit et bord bas, `w(px(…))` et
+  `h(px(…))`, un seul pas d'annulation par glissement. Par le même travail,
+  l'aperçu montre enfin la taille posée — sur une image, cadre manquant
+  compris, et sur la douzaine de composants qui étaient dessinés sans leurs
+  appels de style et répondaient donc à un glissement en ne bougeant pas.
+- **La sélection multiple**, `⇧`-clic et `⌘`-clic, pour supprimer,
+  déplacer ou envelopper en bloc. Elle vient après le reste : chaque
+  commande ci-dessus doit d'abord savoir agir sur plusieurs nœuds.
+- ~~**L'annulation des saisies texte.**~~ — faite : le pas se prend à la
+  sortie du champ, comme `[run]` s'écrit à la sortie du champ. Une visite
+  dans un champ est un pas, `⌘S` en est une frontière, et la session porte
+  le nom du champ qui l'a ouverte — gpui livre un seul événement de focus à
+  tous ses auditeurs, alors remonter l'inspecteur fait parler le nouveau
+  champ avant l'ancien.
+- **Le dépôt entre l'arbre et le canvas**, resté ouvert plus haut :
+  tranché dans ce cycle, dans un sens ou dans l'autre.
+- ~~**Les deux panneaux figés**~~ — fait : la sortie et l'inspecteur de
+  l'éditeur de menus ont chacun leur poignée, comme les quatre autres
+  joints, et leur taille se retrouve à la réouverture.
+- ~~**L'écran d'accueil**~~ — fait : chaque projet récent est une carte
+  qui montre sa vue d'entrée, dessinée par le canvas depuis le fichier, et
+  le bouton « Ouvrir la démo » paraît quand le dépôt est là pour la donner.
+
+Critère de fin : *construire une vue de dix nœuds sans ouvrir la barre de
+menus ni `⌘K`, et sans lâcher la souris pour aller à l'inspecteur.*
+
+### 6. GPUI — ce que le canvas sait dessiner et écrire
+
+Deux moitiés, qui ne se ressemblent pas. La première est le style de gpui,
+ce que `Styled` offre sur n'importe quel élément : le catalogue n'en écrit
+que quatre propriétés communes — largeur, hauteur, fond, arrondi —, trois de
+texte, et six sur les colonnes et les lignes. Tout le reste — une marge, une
+bordure, une largeur maximale — se tape dans Zed. La seconde est ce que
+`gpui-component` sait construire et que la palette n'offre pas encore.
+
+- ~~**Le style, par ordre de manque.**~~ — fait : quatre propriétés
+  communes sont devenues dix-sept, et trois de texte huit. Les marges
+  s'arrêtent à `m`, `mx`, `my` — les quatre côtés seuls doublaient les
+  rangées pour dire ce que deux disent déjà —, et l'inspecteur a gagné un
+  sixième titre, « Boîte », faute de quoi les deux propriétés d'un bouton
+  disparaissaient sous vingt qu'il partage avec tout le monde.
+- ~~**Les composants gratuits — la moitié sans état.**~~ — fait :
+  `avatar`, `breadcrumb`, `kbd`, `clipboard` et la barre d'onglets sont
+  dans la palette. Deux choses ont été tranchées en chemin. Le texte
+  Markdown est écarté : `TextView::markdown` réclame une fenêtre et un
+  contexte, or le `render` engendré laisse la sienne sous un tiret bas et
+  le canvas dessine un nœud depuis une fonction qui n'en a aucune. Et les
+  enfants d'un fil d'Ariane comme d'une barre d'onglets sont des types, pas
+  des éléments : ils sont devenus une propriété « Éléments » — un tableau
+  de littéraux, la seule écriture qu'ils acceptent d'une chaîne — plutôt
+  que des nœuds, ce qui aurait demandé à l'arbre de savoir quel parent
+  accepte quel enfant.
+- ~~**Les composants gratuits — la moitié à état.**~~ — fait : le sélecteur
+  de date, le calendrier, le champ numérique et le champ de code sont au
+  catalogue avec leur `StateSpec`. Le multi-lignes n'est pas une entrée mais
+  une propriété du champ texte, parce que `InputState::multi_line` construit
+  l'état et non l'élément — et c'est ce qui a ouvert la seule mécanique
+  nouvelle du lot : une propriété qui s'écrit dans l'initialiseur que `new`
+  pose, hors de la région gérée.
+- ~~**Le survol.**~~ — fait : un titre « Au survol » qui reprend six
+  propriétés de style — les couleurs, l'ombre, le coin, l'opacité —, écrites
+  dans la fermeture que gpui prend, lues et réécrites appel par appel, et
+  montrées par le canvas puisqu'il reçoit déjà le survol. Deux choses
+  tranchées : `hover` vient de `InteractiveElement`, donc il n'est offert
+  qu'aux conteneurs, les seuls nœuds qui en sont un ; et six propriétés et
+  non vingt-cinq, parce qu'un survol qui déplace une marge fait sauter la
+  mise en page sous le curseur.
+- ~~**Les quatre-vingt-six icônes.**~~ — fait, et elles sont quatre-vingt-six
+  et non quatre-vingt-huit : `IconName` n'a ni `FromStr`, ni `Display`, ni
+  moyen de s'énumérer en 0.5.1, donc `build.rs` lit l'énumération dans les
+  sources que cargo a dépliées et écrit les deux tables — celle que
+  l'inspecteur offre et celle que le canvas dessine. Elles ne peuvent plus
+  diverger, et `tests/components.rs` relit l'énumération pour le prouver.
+- ~~**La propriété « Éléments »**~~ — fait : les entrées de la liste
+  déroulante s'écrivent dans l'initialiseur, avec la règle des gestionnaires
+  — maxx réécrit ce qu'il a posé, à l'espacement près, et laisse ce que le
+  développeur a changé. Pas de forme vide : une liste sans entrée irait avec
+  un index sélectionné qui ne pointe sur rien.
+- ~~**`svg`.**~~ — fait : `Kind::Path` sur `.path(…)`, la même copie dans
+  `assets/images/`, le même refus d'un chemin absolu. Deux choses tranchées :
+  `TEXT_COMMON` ne s'applique pas — la couleur seule le fait, comme pour
+  `icon`, parce qu'une graisse sur un dessin est une rangée vide —, et le
+  canvas le dessine avec `img`, puisque `Svg::path` passe par l'`AssetSource`
+  de l'application et que celui de l'atelier répondrait avec ses propres
+  fichiers.
+- ~~**Suivre `gpui-component`.**~~ — fait : `tests/components.rs` lit les
+  sources de la crate dans le registre de cargo, à la version que
+  `Cargo.lock` épingle, et range ses soixante-deux modules en trois listes
+  — offerts, écartés, à regarder. Les offerts sont *déduits* des lignes
+  `use` que le catalogue écrit, donc rien à tenir à jour de ce côté ;
+  0.5 → 0.6 échouera sur le module que personne n'a classé.
+- **Les emplacements multiples restent fermés.** La mesure du chantier 2
+  tient toujours, et les composants gratuits ci-dessus passent avant. À
+  rouvrir si une forme de projet du chantier 7 en a besoin — ce qui
+  serait, cette fois, une raison mesurée.
+
+Critère de fin : *toute vue de la galerie de `gpui-component` qui n'est ni
+un délégué ni un emplacement multiple se dépose depuis la palette, et une
+marge ou une bordure se pose sans ouvrir Zed.*
+
+### 7. Les templates — de zéro à une application qui ressemble à quelque chose
+
+Les trois formes de projet répondent à « qu'est-ce qui tient quoi » ; aucune
+ne répond à « qu'est-ce que ça fait ». Un projet créé aujourd'hui est une
+coquille avec une page vide dedans, et les trois premiers jours qu'on
+voulait épargner recommencent là : une liste et son détail, un formulaire
+qui enregistre, un tableau de bord. Ce sont des décisions de bureau, et
+c'est exactement ce que maxx est censé reprendre.
+
+- ~~**Des formes qui font quelque chose**~~ — faites : six de plus, et
+  `Template` en porte neuf. *Liste et détail*, *Formulaire*, *Tableau de
+  bord*, *Assistant*, *Utilitaire*, *Éditeur*, chacune une coquille autour
+  de pages, et chaque page une vue que maxx continue de dessiner. Ce qui a
+  été tranché : la barre de titre du projet n'est plus une décision à part,
+  c'est `has_shell()` — `shell.rs` est le seul fichier qui dessine un
+  `TitleBar`, donc une fenêtre ouverte sans lui n'aurait qu'une bande nue.
+  L'*Utilitaire* n'a pas de barre latérale, donc pas de coquille, donc la
+  barre du système et une fenêtre de 480 × 360.
+- ~~**Une forme déclare son état**~~ — faite : une page écrite sur le disque
+  ne passe par aucun enregistrement, donc elle porte son champ et son
+  initialisation elle-même, dans le même fichier que l'arbre qui le lie.
+  C'est ce qui donne au *Formulaire* des zones de saisie qui saisissent, et
+  à l'*Éditeur* sa zone multi-lignes.
+- ~~**Des modèles de sous-arbre de plus**~~ — faits : cinq de plus, un champ
+  de formulaire (étiquette, saisie, texte d'aide), un en-tête de page, une
+  barre d'état, une liste vide et une rangée Annuler / OK. Les modèles ont
+  gagné l'**état** au passage, et pour une ligne : le dépôt renomme comme le
+  collage, et la déclaration du champ était déjà écrite — chaque
+  enregistrement parcourt l'arbre pour ses liaisons. Deux dépôts du champ de
+  formulaire donnent donc deux champs distincts, et non deux zones qui se
+  recopient.
+- **Une galerie à la création** : une vignette par forme, dessinée par le
+  canvas lui-même, au lieu d'une liste de noms qu'il faut essayer pour
+  comprendre.
+- **Un template est un projet.** Un dossier de templates de l'utilisateur,
+  ou un chemin donné : un projet maxx ordinaire, avec son `maxx.toml`,
+  copié et renommé. Pas de format — le `.rs` reste la vérité, et
+  « enregistrer le projet courant comme forme » en est le geste inverse.
+- ~~**`maxx new <chemin> --shape …`**~~ — fait : `src/cli.rs`, sur
+  `std::env::args` seul et sans dépendance. `new`, `--help` et `--version`
+  répondent sur le terminal et sortent avant que gpui ne démarre, donc ni
+  un script, ni une CI, ni une machine sans écran n'ouvrent de fenêtre pour
+  écrire un projet. Le nom du crate vient du dernier segment du chemin,
+  comme la boîte de dialogue — la même fonction sert aux deux — et
+  `Template::ALL` tient la liste des formes que l'usage et le refus
+  affichent. Reste l'essai humain sur Linux et Windows.
+- **Une forme se met à jour.** `shell.rs` et les pages qu'une forme écrit
+  doivent entrer dans `maxx.toml` avec les deux empreintes, comme les
+  modules ; sinon une forme corrigée dans maxx n'atteint jamais les projets
+  déjà écrits.
+
+Critère de fin : *choisir « Liste et détail », lancer, et voir une
+application qu'on n'a pas honte de montrer — sans avoir ouvert Zed.*
+
+### Ce que ce cycle ne fait pas
+
+Les non de plus bas tiennent, et trois choses restent où elles étaient,
+parce qu'aucun des trois chantiers ne les fait avancer : **l'essai humain
+sur Linux et sur Windows**, qui ne se règle pas au clavier ; **la palette
+par projet** et **le diff avant de remplacer un module**, qui attendent
+qu'un projet les demande. Et deux dettes qui ne changent rien à l'usage
+mais qu'on note pour ne pas les redécouvrir : `fold()` est écrit deux fois
+(`palette.rs`, `designer/palette.rs`), et `view.rs` est le dernier fichier
+au-dessus de mille lignes.
 
 ## Ce qu'on ne fera pas
 

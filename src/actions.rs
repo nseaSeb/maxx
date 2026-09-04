@@ -24,6 +24,12 @@ actions!(
         NewProject,
         NewSidebarProject,
         NewSettingsProject,
+        NewListDetailProject,
+        NewFormProject,
+        NewDashboardProject,
+        NewWizardProject,
+        NewUtilityProject,
+        NewEditorProject,
         NewView,
         AddSystemModule,
         AddSettingsModule,
@@ -35,6 +41,7 @@ actions!(
         NoRecentProject,
         ClearRecentProjects,
         OpenFolder,
+        OpenDemo,
         AdoptView,
         SetEntryView,
         ReloadView,
@@ -44,6 +51,12 @@ actions!(
         DeleteFile,
         CloseFolder,
         CloseWindow,
+        // The tab strip's own, reached by a right click on a tab and from the
+        // File menu — which is what puts them in `⌘K` as well.
+        CloseOtherTabs,
+        CloseTabsToTheRight,
+        RevealTabInProject,
+        CopyTabPath,
         // Edit menu
         Undo,
         Redo,
@@ -61,13 +74,35 @@ actions!(
         PaletteDown,
         PaletteClose,
         DuplicateNode,
+        WrapInColumn,
+        WrapInRow,
+        Unwrap,
         CopyNode,
         PasteNode,
         AddMenu,
         AddMenuEntry,
         AddMenuSeparator,
+        AddSubmenu,
+        DeleteMenuEntry,
         MoveMenuUp,
         MoveMenuDown,
+        MoveNodeUp,
+        MoveNodeDown,
+        // The palette's own three. They carry no menu entry on purpose: each
+        // one acts on the row a right click lit, and from `⌘K` — where no row
+        // was ever right-clicked — all three could only answer that they have
+        // nothing to insert.
+        InsertBefore,
+        InsertAfter,
+        InsertInto,
+        // The structure tree's own keys. They carry no menu entry: `↑` on a row
+        // is not a command one goes looking for in a bar, and the palette
+        // flattens the bar.
+        SelectPreviousNode,
+        SelectNextNode,
+        SelectParentNode,
+        SelectChildNode,
+        EditNodeText,
         // View menu
         ToggleProjectPanel,
         ToggleStatusBar,
@@ -86,6 +121,7 @@ actions!(
         OpenTerminal,
         OpenInZed,
         OpenProjectInZed,
+        OpenHandler,
         // Window menu
         Minimize,
         Zoom,
@@ -126,6 +162,12 @@ pub fn register_handlers(cx: &mut App) {
     cx.on_action(new_project);
     cx.on_action(new_sidebar_project);
     cx.on_action(new_settings_project);
+    cx.on_action(new_list_detail_project);
+    cx.on_action(new_form_project);
+    cx.on_action(new_dashboard_project);
+    cx.on_action(new_wizard_project);
+    cx.on_action(new_utility_project);
+    cx.on_action(new_editor_project);
 
     cx.on_action(|action: &OpenRecent, cx: &mut App| {
         let path = crate::settings::state(cx).recent_projects.get(action.index).cloned();
@@ -137,6 +179,17 @@ pub fn register_handlers(cx: &mut App) {
         // `with_active`, which cannot enter a window update from inside one —
         // called directly it would silently fail to reuse and open a second
         // window every time, leaving the empty one behind.
+        cx.defer(move |cx: &mut App| workspace::open_folder(path, cx));
+    });
+    // No menu entry and no shortcut: the demo is a way *in*, offered on the
+    // welcome screen to a hand that has nothing to open yet. An action all the
+    // same, because dispatching one is how a button on that screen reaches the
+    // deferral `open_folder` needs — reusing the empty window instead of
+    // leaving it behind, exactly as `OpenRecent` does above.
+    cx.on_action(|_: &OpenDemo, cx: &mut App| {
+        let Some(path) = crate::project::demo() else {
+            return;
+        };
         cx.defer(move |cx: &mut App| workspace::open_folder(path, cx));
     });
     cx.on_action(|_: &ClearRecentProjects, cx: &mut App| {
@@ -207,6 +260,15 @@ pub fn register_handlers(cx: &mut App) {
     cx.on_action(|_: &DuplicateNode, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.duplicate_selected(cx));
     });
+    cx.on_action(|_: &WrapInColumn, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.wrap_selected("column", cx));
+    });
+    cx.on_action(|_: &WrapInRow, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.wrap_selected("row", cx));
+    });
+    cx.on_action(|_: &Unwrap, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.unwrap_selected(cx));
+    });
     cx.on_action(|_: &CopyNode, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.copy_selection(cx));
     });
@@ -228,11 +290,56 @@ pub fn register_handlers(cx: &mut App) {
     cx.on_action(|_: &AddMenuSeparator, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.add_menu_item(true, cx));
     });
+    cx.on_action(|_: &AddSubmenu, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.add_submenu(cx));
+    });
+    cx.on_action(|_: &DeleteMenuEntry, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.remove_menu_selection(cx));
+    });
+    cx.on_action(|_: &InsertBefore, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| {
+            workspace.insert_from_palette(workspace::Insert::Before, cx);
+        });
+    });
+    cx.on_action(|_: &InsertAfter, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| {
+            workspace.insert_from_palette(workspace::Insert::After, cx);
+        });
+    });
+    cx.on_action(|_: &InsertInto, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| {
+            workspace.insert_from_palette(workspace::Insert::Into, cx);
+        });
+    });
     cx.on_action(|_: &MoveMenuUp, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.move_menu_selection(true, cx));
     });
     cx.on_action(|_: &MoveMenuDown, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.move_menu_selection(false, cx));
+    });
+    cx.on_action(|_: &MoveNodeUp, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.move_selected_node(true, cx));
+    });
+    cx.on_action(|_: &MoveNodeDown, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.move_selected_node(false, cx));
+    });
+    cx.on_action(|_: &SelectPreviousNode, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.step_selection(false, cx));
+    });
+    cx.on_action(|_: &SelectNextNode, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.step_selection(true, cx));
+    });
+    cx.on_action(|_: &SelectParentNode, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.step_depth(false, cx));
+    });
+    cx.on_action(|_: &SelectChildNode, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.step_depth(true, cx));
+    });
+    cx.on_action(|_: &EditNodeText, cx: &mut App| {
+        with_active_workspace(cx, |workspace, window, cx| workspace.focus_prop_text(window, cx));
+    });
+    cx.on_action(|_: &OpenHandler, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.open_selected_handler(cx));
     });
     cx.on_action(|_: &Undo, cx: &mut App| {
         with_active_workspace(cx, |workspace, _, cx| workspace.undo(cx));
@@ -263,6 +370,21 @@ pub fn register_handlers(cx: &mut App) {
                 None => window.remove_window(),
             }
         });
+    });
+
+    cx.on_action(|_: &CloseOtherTabs, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.close_other_views(cx));
+    });
+    cx.on_action(|_: &CloseTabsToTheRight, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.close_views_to_the_right(cx));
+    });
+    // The view in front, not the explorer selection: this one hangs off the tab
+    // strip, and it is about the tab the right click just lit.
+    cx.on_action(|_: &RevealTabInProject, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.reveal_view_in_project(cx));
+    });
+    cx.on_action(|_: &CopyTabPath, cx: &mut App| {
+        with_active_workspace(cx, |workspace, _, cx| workspace.copy_view_path(cx));
     });
 
     cx.on_action(|_: &ToggleProjectPanel, cx: &mut App| {
@@ -374,7 +496,32 @@ pub fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("escape", PaletteClose, Some("Palette")),
         KeyBinding::new("up", PaletteUp, Some("Palette")),
         KeyBinding::new("down", PaletteDown, Some("Palette")),
+        // The structure tree's own, and they hold nowhere else: `up`, `down`,
+        // `left`, `right`, `enter` and `backspace` taken globally would be taken
+        // away from every text box in the window. Same shape as the palette's
+        // three, and the same reason.
+        KeyBinding::new("up", SelectPreviousNode, Some("Tree")),
+        KeyBinding::new("down", SelectNextNode, Some("Tree")),
+        KeyBinding::new("left", SelectParentNode, Some("Tree")),
+        KeyBinding::new("right", SelectChildNode, Some("Tree")),
+        KeyBinding::new("enter", EditNodeText, Some("Tree")),
+        KeyBinding::new("backspace", DeleteNode, Some("Tree")),
+        KeyBinding::new("delete", DeleteNode, Some("Tree")),
+        KeyBinding::new("alt-up", MoveNodeUp, Some("Tree")),
+        KeyBinding::new("alt-down", MoveNodeDown, Some("Tree")),
+        // The same two, unscoped, and they are what the Edit menu shows. Not a
+        // convenience: macOS reads a menu item's key equivalent out of the
+        // keymap and falls back to the *first* binding when none of them holds
+        // in a default context — so an entry whose only binding carries a
+        // predicate would display `⌥↑` and let the system fire it from inside a
+        // text field, where `⌥↑` is a caret move. A binding that holds
+        // everywhere is what the menu is allowed to promise.
+        KeyBinding::new("cmd-alt-up", MoveNodeUp, None),
+        KeyBinding::new("cmd-alt-down", MoveNodeDown, None),
         KeyBinding::new("cmd-d", DuplicateNode, None),
+        KeyBinding::new("cmd-alt-g", WrapInColumn, None),
+        KeyBinding::new("cmd-alt-shift-g", WrapInRow, None),
+        KeyBinding::new("cmd-alt-u", Unwrap, None),
         KeyBinding::new("cmd-alt-c", CopyNode, None),
         KeyBinding::new("cmd-alt-v", PasteNode, None),
         KeyBinding::new("cmd-shift-backspace", DeleteNode, None),
@@ -437,6 +584,36 @@ fn new_settings_project(_: &NewSettingsProject, cx: &mut App) {
     scaffold_project(crate::scaffold::Template::Settings, cx);
 }
 
+/// A list, and a panel showing the row that is selected.
+fn new_list_detail_project(_: &NewListDetailProject, cx: &mut App) {
+    scaffold_project(crate::scaffold::Template::ListDetail, cx);
+}
+
+/// Fields that are really typed into, and a button that reads them.
+fn new_form_project(_: &NewFormProject, cx: &mut App) {
+    scaffold_project(crate::scaffold::Template::Form, cx);
+}
+
+/// A header, a grid of cards, and the numbers they carry.
+fn new_dashboard_project(_: &NewDashboardProject, cx: &mut App) {
+    scaffold_project(crate::scaffold::Template::Dashboard, cx);
+}
+
+/// Steps, an indicator, and the two buttons that move between them.
+fn new_wizard_project(_: &NewWizardProject, cx: &mut App) {
+    scaffold_project(crate::scaffold::Template::Wizard, cx);
+}
+
+/// One compact window and one job, with no sidebar around it.
+fn new_utility_project(_: &NewUtilityProject, cx: &mut App) {
+    scaffold_project(crate::scaffold::Template::Utility, cx);
+}
+
+/// A strip of tabs, a text area, and a status bar.
+fn new_editor_project(_: &NewEditorProject, cx: &mut App) {
+    scaffold_project(crate::scaffold::Template::Editor, cx);
+}
+
 /// Asks for a location, writes `template` there and opens it.
 fn scaffold_project(template: crate::scaffold::Template, cx: &mut App) {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/".into());
@@ -450,10 +627,7 @@ fn scaffold_project(template: crate::scaffold::Template, cx: &mut App) {
             return;
         };
         cx.update(|cx| {
-            let name = path
-                .file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "mon_app".into());
+            let name = crate::scaffold::project_name(&path);
             match crate::scaffold::create_project(&path, &name, template) {
                 Ok(()) => {
                     workspace::open_folder(path, cx);

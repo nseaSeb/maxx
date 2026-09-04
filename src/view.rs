@@ -72,6 +72,14 @@ pub struct View {
     /// only the tree, and `ensure_imports` only ever adds — so nothing would
     /// have taken that line back out.
     pub extra_imports: Vec<String>,
+    /// Whether the text outside the managed region has been edited in memory.
+    ///
+    /// The tree is not the only thing a view holds any more: the initializer of
+    /// a state field — what a dropdown contains, whether an input is
+    /// multi-line — is a constructor's argument, and it lives in `new`. Nothing
+    /// about it shows in `root`, so `dirty` would answer "nothing to save"
+    /// after a change the developer just made.
+    source_edited: bool,
 }
 
 impl View {
@@ -88,13 +96,14 @@ impl View {
             past: Vec::new(),
             future: Vec::new(),
             extra_imports: Vec::new(),
+            source_edited: false,
         })
     }
 
     /// Whether the tree differs from what is on disk. Derived rather than
     /// flagged, so undoing back to the saved state reports clean again.
     pub fn dirty(&self) -> bool {
-        self.root != self.saved
+        self.root != self.saved || self.source_edited
     }
 
     /// The fields declared on the view's struct, read from the source.
@@ -142,6 +151,45 @@ impl View {
             .filter(|field| field.ty == ty)
             .map(|field| field.name)
             .collect()
+    }
+
+    /// What `new` builds the field `field` with, read out of the `Self { .. }`
+    /// literal.
+    ///
+    /// The other half of [`state_fields`](Self::state_fields): the struct says
+    /// what the field *is*, this says what it *holds* — which is where a
+    /// dropdown keeps its entries and an input its multi-line switch, because
+    /// both are arguments of a constructor and neither is a call on the element
+    /// the region draws.
+    pub fn state_initializer(&self, field: &str) -> Option<String> {
+        let type_name = view_type_name(&self.source)?;
+        let range = initializer_range(&self.source, &type_name, field)?;
+        Some(self.source[range].to_string())
+    }
+
+    /// Replaces that initializer, in memory.
+    ///
+    /// In memory and not on disk, unlike [`add_state_field`](Self::add_state_field):
+    /// this one is driven from a field the developer types in, and writing the
+    /// file on every keystroke is not what a text field should cost. The save
+    /// carries it out, like everything else the view holds.
+    ///
+    /// It is outside the undo stack, which snapshots the tree alone — the same
+    /// place adding a state field already sits. Saying so here rather than
+    /// pretending otherwise: `⌘Z` moves the tree back, not this line.
+    pub fn set_state_initializer(&mut self, field: &str, text: &str) -> bool {
+        let Some(type_name) = view_type_name(&self.source) else {
+            return false;
+        };
+        let Some(range) = initializer_range(&self.source, &type_name, field) else {
+            return false;
+        };
+        if self.source[range.clone()] == *text {
+            return false;
+        }
+        self.source.replace_range(range, text);
+        self.source_edited = true;
+        true
     }
 
     /// Adds a field to the view's struct and initializes it in `new`.
@@ -270,6 +318,7 @@ impl View {
         std::fs::write(&self.path, &source).map_err(|error| error.to_string())?;
         self.source = source;
         self.saved = self.root.clone();
+        self.source_edited = false;
         Ok(())
     }
 }
@@ -1063,6 +1112,70 @@ fn self_brace(source: &str, name: &str) -> Option<usize> {
         search = at + "Self ".len();
     }
     None
+}
+
+/// The byte range of what `field` is initialized with inside `Self { .. }`.
+///
+/// Balanced rather than split on commas: a dropdown's initializer holds a
+/// `vec![..]` with commas of its own, and cutting at the first one would hand
+/// back half an expression — which the caller would then write back.
+///
+/// String literals are skipped; comments are not. A `//` written between the
+/// fields of the `Self { .. }` literal, holding a bracket or a `name:`, would
+/// throw the count off. That is a line maxx never writes, and the caller checks
+/// its own reading anyway — an initializer that does not read back is one maxx
+/// leaves alone — so the failure is a property that goes quiet, never a file cut
+/// in the wrong place.
+fn initializer_range(source: &str, name: &str, field: &str) -> Option<std::ops::Range<usize>> {
+    let open = self_brace(source, name)?;
+    let close = matching_brace(source, open)?;
+    let block = &source[open + 1..close];
+
+    let mut depth = 0usize;
+    let mut index = 0usize;
+    let mut start: Option<usize> = None;
+    let bytes = block.as_bytes();
+    while index < bytes.len() {
+        match bytes[index] {
+            b'"' => {
+                // A literal may hold a brace or a comma, and neither counts.
+                index += 1;
+                while index < bytes.len() && bytes[index] != b'"' {
+                    index += if bytes[index] == b'\\' { 2 } else { 1 };
+                }
+                index += 1;
+                continue;
+            }
+            b'{' | b'(' | b'[' => depth += 1,
+            b'}' | b')' | b']' => depth = depth.saturating_sub(1),
+            b',' if depth == 0 => {
+                if let Some(start) = start {
+                    return Some(trimmed(source, open + 1 + start..open + 1 + index));
+                }
+            }
+            b':' if depth == 0 && start.is_none() => {
+                // The name is whatever word ends right before the colon.
+                let before = block[..index].trim_end();
+                let word_start =
+                    before.rfind(|c: char| c != '_' && !c.is_alphanumeric()).map_or(0, |at| at + 1);
+                if &before[word_start..] == field {
+                    start = Some(index + 1);
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    // The last field of the literal, written without a trailing comma.
+    start.map(|start| trimmed(source, open + 1 + start..open + 1 + block.len()))
+}
+
+/// The same range with the whitespace on either side left out.
+fn trimmed(source: &str, range: std::ops::Range<usize>) -> std::ops::Range<usize> {
+    let text = &source[range.clone()];
+    let start = range.start + (text.len() - text.trim_start().len());
+    let end = range.end - (text.len() - text.trim_end().len());
+    start..end.max(start)
 }
 
 /// Inserts `line` just inside the block opening at `brace`, collapsing `{}`

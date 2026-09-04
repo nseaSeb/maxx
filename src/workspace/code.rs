@@ -351,7 +351,9 @@ impl Workspace {
                     gpui::img(file.path.clone())
                         .max_w_full()
                         .max_h_full()
-                        .with_fallback(crate::designer::missing_image),
+                        // The reader shows a file and not a node, so there are no
+                        // calls to size the frame with.
+                        .with_fallback(|| crate::designer::missing_image(&[])),
                 )
                 .into_any_element();
         }

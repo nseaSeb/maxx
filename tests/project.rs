@@ -429,6 +429,145 @@ fn the_empty_shape_is_what_it_always_was() {
     assert_eq!(projectfile::entry(&root).as_deref(), Some("home"));
 }
 
+/// Every shape, held to what a shape has to be.
+///
+/// One test over `Template::ALL` rather than nine: what is checked here is not
+/// what each shape draws but what makes it a project — a window that opens on
+/// something, a record that says so, and pages maxx can go on designing.
+#[test]
+fn every_shape_writes_a_project_maxx_can_open() {
+    for template in Template::ALL {
+        let root = scratch(&format!("maxx_template_all_{}", template.name()));
+        scaffold::create_project(&root, "trial", *template).unwrap();
+
+        let entry = projectfile::entry(&root).unwrap_or_else(|| {
+            panic!("{}: no entry recorded", template.name());
+        });
+        let file = root.join(format!("src/ui/{entry}.rs"));
+        assert!(file.exists(), "{}: {} is missing", template.name(), file.display());
+
+        // The record and the code have to name the same view: `maxx.toml` is
+        // read back by maxx, and `main.rs` is what actually opens the window.
+        let main = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+        let type_name = scaffold::to_type_name(&entry);
+        assert!(
+            main.contains(&format!("{type_name}::new(window, cx)")),
+            "{}: main.rs does not open {type_name}:\n{main}",
+            template.name()
+        );
+
+        // A title bar of its own and a shell go together, always: `shell.rs` is
+        // the only file that draws one, so the options without it are a bare
+        // strip where the traffic lights sit.
+        let shell = root.join("src/ui/shell.rs").exists();
+        assert_eq!(shell, template.has_shell(), "{}: shell and shape disagree", template.name());
+        assert_eq!(
+            main.contains("TitleBar::title_bar_options()"),
+            shell,
+            "{}: the title bar and the shell disagree:\n{main}",
+            template.name()
+        );
+
+        // Every page stays a view maxx draws. `shell.rs` and the settings
+        // screen are the two files maxx writes once and never opens again.
+        for entry in std::fs::read_dir(root.join("src/ui")).unwrap().flatten() {
+            let path = entry.path();
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if matches!(name.as_str(), "mod.rs" | "shell.rs" | "settings_screen.rs") {
+                continue;
+            }
+            View::load(&path).unwrap_or_else(|error| {
+                panic!("{}: {name} must read back as a view: {error}", template.name())
+            });
+        }
+    }
+}
+
+/// A shape that has something to show opens on it.
+///
+/// The sidebar lists `home` first because `home` is what that shape is: an
+/// empty view with a place to put the next one. A shape named after a page puts
+/// that page first, or the window comes up on “Welcome” and the shape answers
+/// “what does it do” only after a click.
+#[test]
+fn a_shape_named_after_a_page_opens_on_it() {
+    for (template, page) in [
+        (Template::ListDetail, "Items"),
+        (Template::Form, "Form"),
+        (Template::Dashboard, "Dashboard"),
+        (Template::Wizard, "Wizard"),
+        (Template::Editor, "Editor"),
+    ] {
+        let root = scratch(&format!("maxx_template_first_{}", template.name()));
+        scaffold::create_project(&root, "trial", template).unwrap();
+
+        let shell = std::fs::read_to_string(root.join("src/ui/shell.rs")).unwrap();
+        assert!(
+            shell.contains(&format!("page: Page::{page},")),
+            "{}: the shell opens on something else:\n{shell}",
+            template.name()
+        );
+        assert!(shell.contains("Self::Home => \"Home\","), "{}: home is gone", template.name());
+    }
+}
+
+/// A shape declares the state its tree binds.
+///
+/// The other way round from a view drawn in the designer, where
+/// `view::render_source` writes the field at the save: a page written straight
+/// to disk never goes through one, so it carries its own struct field and its
+/// own initializer — and that is what makes the form's fields fields you can
+/// actually type into.
+#[test]
+fn a_shape_that_binds_a_field_declares_it() {
+    for (template, module, fields) in [
+        (Template::Form, "form", &["name", "email"][..]),
+        (Template::Editor, "editor", &["content"][..]),
+        (Template::Utility, "home", &["entry"][..]),
+    ] {
+        let root = scratch(&format!("maxx_template_state_{}", template.name()));
+        scaffold::create_project(&root, "trial", template).unwrap();
+
+        let path = root.join(format!("src/ui/{module}.rs"));
+        let view = View::load(&path).expect("the page must read back as a view");
+        let declared = view.state_fields();
+        let source = std::fs::read_to_string(&path).unwrap();
+        for field in fields {
+            assert!(
+                declared
+                    .iter()
+                    .any(|state| state.name == *field && state.ty == "Entity<InputState>"),
+                "{}: {field} is bound but not declared:\n{source}",
+                template.name()
+            );
+            assert!(
+                source.contains(&format!("Input::new(&self.{field})")),
+                "{}: {field} is declared but nothing binds it:\n{source}",
+                template.name()
+            );
+        }
+    }
+}
+
+/// The shape with no sidebar, which is therefore the shape with no shell.
+#[test]
+fn the_utility_shape_is_one_window_and_no_shell() {
+    let root = scratch("maxx_template_utility");
+    scaffold::create_project(&root, "trial", Template::Utility).unwrap();
+
+    assert!(!root.join("src/ui/shell.rs").exists(), "a utility has no shell");
+    assert_eq!(projectfile::entry(&root).as_deref(), Some("home"));
+
+    let main = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
+    // The system title bar, because nothing here would draw another one.
+    assert!(!main.contains("TitleBar"), "{main}");
+    assert!(main.contains("px(480.), px(360.)"), "the window is compact:\n{main}");
+
+    // And its one view is the tool, not the welcome view.
+    let home = std::fs::read_to_string(root.join("src/ui/home.rs")).unwrap();
+    assert!(home.contains("Input::new(&self.entry)"), "{home}");
+}
+
 /// The deep proof, and the slow one: what maxx writes has to compile.
 ///
 /// Ignored by default — it is a `cargo check` over some 750 crates, minutes on
@@ -437,14 +576,11 @@ fn the_empty_shape_is_what_it_always_was() {
 /// `examples/shapes.rs` cannot is the wiring: `main.rs`, `src/ui/mod.rs`, the
 /// settings module and its crates, all of it together.
 #[test]
-#[ignore = "builds two whole projects"]
+#[ignore = "builds every shape"]
 fn every_shape_compiles() {
-    for (name, template) in [
-        ("maxx_template_build_sidebar", Template::Sidebar),
-        ("maxx_template_build_settings", Template::Settings),
-    ] {
-        let root = scratch(name);
-        scaffold::create_project(&root, "trial", template).unwrap();
+    for template in Template::ALL {
+        let root = scratch(&format!("maxx_template_build_{}", template.name()));
+        scaffold::create_project(&root, "trial", *template).unwrap();
 
         let status = std::process::Command::new("cargo")
             .arg("check")

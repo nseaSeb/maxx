@@ -2,20 +2,56 @@
 
 use gpui::prelude::*;
 use gpui::{AnyElement, Context, SharedString, div, px};
+use gpui_component::menu::ContextMenuExt as _;
+use gpui_component::scroll::Scrollbar;
 use gpui_component::v_flex;
 
 use crate::model::{Node, Path};
-use crate::preview::Preview;
 use crate::registry::{self};
 use crate::theme;
 use gpui::{Pixels, Point};
 
 use crate::workspace::Workspace;
 
-use super::canvas::node_element;
+use super::canvas::{Board, node_element};
 use super::{DragGhost, Dragged, section_title};
 
 impl Workspace {
+    /// The structure pane: the tree, its scrollbar, its focus and its menu.
+    ///
+    /// The focus is the whole reason this is a method rather than three lines at
+    /// the call site: `key_context` binds nothing on its own — gpui dispatches a
+    /// keystroke along the path of the *focused* element — so `↑` `↓` `←` `→`
+    /// mean something here, and nothing anywhere else, only because the pane
+    /// takes the focus when a row is clicked.
+    pub(super) fn render_tree_pane(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .relative()
+            .size_full()
+            .track_focus(&self.tree_focus)
+            .key_context("Tree")
+            .child(
+                div()
+                    .id("side-structure")
+                    .size_full()
+                    .overflow_y_scroll()
+                    .track_scroll(&self.tree_scroll)
+                    .child(self.render_tree(cx)),
+            )
+            // A sibling of what scrolls, never a child of it: gpui offsets every
+            // child of a scrolling box, absolutely positioned ones included, so a
+            // bar written inside would travel away with the content.
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .right_0()
+                    .bottom_0()
+                    .child(Scrollbar::vertical(&self.tree_scroll)),
+            )
+            .context_menu(super::node_menu)
+    }
+
     /// The node tree, mirroring the canvas selection.
     pub(super) fn render_tree(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let view = self.view().expect("checked by the caller");
@@ -88,6 +124,7 @@ pub(super) fn tree_zone(parent: Path, index: usize, cx: &mut Context<Workspace>)
 pub(super) fn tree_row(row: TreeRow, cx: &mut Context<Workspace>) -> AnyElement {
     let TreeRow { path, label, depth, selected, container, children } = row;
     let clicked = path.clone();
+    let menu_path = path.clone();
     let dropped = path.clone();
     let ghost = label.clone();
     // A leaf takes the drop beside it, a container inside it. A root that is
@@ -135,9 +172,23 @@ pub(super) fn tree_row(row: TreeRow, cx: &mut Context<Workspace>) -> AnyElement 
             )
         })
         .child(label)
-        .on_click(cx.listener(move |this, _, _, cx| {
+        .on_click(cx.listener(move |this, _, window, cx| {
+            // The click is also what hands the pane its focus, and with it the
+            // "Tree" keymap: an arrow key means nothing until something says
+            // which panel it is aimed at.
+            window.focus(&this.tree_focus);
             this.select(clicked.clone(), cx);
         }))
+        // The menu acts on the selection, so the right click has to move it
+        // before the menu is built — which it does, the menu being deferred to
+        // the next frame. Same shape as the project panel's rows.
+        .on_mouse_down(
+            gpui::MouseButton::Right,
+            cx.listener(move |this, _, window, cx| {
+                window.focus(&this.tree_focus);
+                this.select(menu_path.clone(), cx);
+            }),
+        )
         .into_any_element()
 }
 
@@ -168,10 +219,8 @@ pub(super) fn drop_zone(
 pub(super) fn children_with_zones(
     node: &Node,
     path: &[usize],
-    selected: &[usize],
+    board: &Board,
     vertical: bool,
-    root: Option<&std::path::Path>,
-    preview: &Preview,
     cx: &mut Context<Workspace>,
 ) -> Vec<AnyElement> {
     let mut out = Vec::with_capacity(node.children.len() * 2 + 1);
@@ -179,7 +228,7 @@ pub(super) fn children_with_zones(
     for (index, child) in node.children.iter().enumerate() {
         let mut child_path = path.to_vec();
         child_path.push(index);
-        out.push(node_element(child, &child_path, selected, root, preview, cx));
+        out.push(node_element(child, &child_path, board, cx));
         out.push(drop_zone(path.to_vec(), index + 1, vertical, cx));
     }
     out

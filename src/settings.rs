@@ -97,6 +97,10 @@ pub struct State {
     pub panel_width: Option<f32>,
     /// Width of the inspector, in logical pixels.
     pub inspector_width: Option<f32>,
+    /// Height of the output panel, in logical pixels.
+    pub output_height: Option<f32>,
+    /// Width of the menu editor's inspector, in logical pixels.
+    pub menu_inspector_width: Option<f32>,
 }
 
 impl State {

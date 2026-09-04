@@ -82,8 +82,11 @@ if the development packages are not there.
 ## Usage
 
 ```sh
-maxx                   # welcome screen
-maxx <path>            # open a project directly
+maxx                               # welcome screen
+maxx <path>                        # open a project directly
+maxx new <path>                    # write a project, without opening a window
+maxx new <path> --shape sidebar    # …in a shape: empty, sidebar or settings
+maxx --help                        # the whole of the above
 ```
 
 From a clone of this repository instead, which is what you want if you intend to
@@ -95,7 +98,12 @@ cargo run -- <path>    # open a project directly
 ```
 
 `File > New project` creates a complete project in one of three shapes, and
-`File > New view…` adds a view and registers it in `src/ui/mod.rs`.
+`File > New view…` adds a view and registers it in `src/ui/mod.rs`. The same
+three shapes are on the command line: `maxx new <path> --shape sidebar` writes
+the project, prints where it is, and exits — no window is opened, so a script,
+a CI job and a machine with no display can all use it. The crate is named after
+the last segment of the path, as the save panel names it, and an existing
+`Cargo.toml` is never written over.
 
 The shapes answer the question a desktop project asks on its first day, which is
 not which component to drop but what holds what. *Empty* is one window and one
@@ -577,8 +585,9 @@ iconutil -c icns maxx.iconset -o maxx.icns && rm -rf maxx.iconset
 
 `scripts/bundle-macos.sh` assembles `maxx.app` around a built binary, because an
 icon does not attach to an executable: on macOS the bundle carries it, along
-with the name the Dock shows. The release workflow runs it and attaches the
-bundle beside the bare binaries.
+with the name the Dock shows. No workflow calls it — the release attaches no
+binary at all — so run it by hand after a `cargo build --release` if you want a
+`.app` of your own to keep in `/Applications`.
 
 ## Licence
 

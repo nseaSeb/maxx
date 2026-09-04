@@ -104,7 +104,7 @@ fn nothing_is_found_on_an_empty_path() {
 
 #[test]
 fn rustfmt_reformats_a_file_and_says_so() {
-    let path = std::env::temp_dir().join("maxx_format_test.rs");
+    let path = scratch_file("maxx_format_test.rs");
     std::fs::write(&path, "fn   main(){let  x=1;let _=x;}\n").unwrap();
 
     match maxx::run::format_rust(&path) {
@@ -124,7 +124,7 @@ fn rustfmt_reformats_a_file_and_says_so() {
 
 #[test]
 fn a_file_that_is_not_rust_is_refused_rather_than_mangled() {
-    let path = std::env::temp_dir().join("maxx_format_invalid.rs");
+    let path = scratch_file("maxx_format_invalid.rs");
     std::fs::write(&path, "this is not Rust {{{\n").unwrap();
 
     // The text of the message is not what is checked: it is translated, so it
@@ -137,4 +137,20 @@ fn a_file_that_is_not_rust_is_refused_rather_than_mangled() {
     }
     // And above all: the file has not been mangled.
     assert!(std::fs::read_to_string(&path).unwrap().contains("this is not Rust"));
+}
+
+/// A directory of this run's own, under `MAXX_SCRATCH` when it is set.
+///
+/// Fixed names under `temp_dir()` collide whenever two `cargo test` runs
+/// overlap — a second checkout, a CI job beside a local run — and the failure
+/// then lands on whichever test read a file the other had just removed. The
+/// pid separates two runs even when the variable is unset. Repeated per file
+/// because each integration test is a crate of its own.
+fn scratch_file(name: &str) -> std::path::PathBuf {
+    let root = std::env::var_os("MAXX_SCRATCH")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    let directory = root.join(format!("maxx-{}-{}", "tools", std::process::id()));
+    std::fs::create_dir_all(&directory).expect("the test directory must be created");
+    directory.join(name)
 }

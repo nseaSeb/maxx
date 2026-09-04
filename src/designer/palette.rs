@@ -3,6 +3,7 @@
 use gpui::prelude::*;
 use gpui::{Context, SharedString, div};
 use gpui_component::input::Input;
+use gpui_component::menu::ContextMenuExt as _;
 use gpui_component::tooltip::Tooltip;
 use gpui_component::{Sizable as _, h_flex, v_flex};
 
@@ -32,6 +33,7 @@ impl Workspace {
 
     /// The component palette. Clicking inserts into the selected container.
     pub(crate) fn render_palette(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let target = self.palette_target();
         let query = self
             .palette_filter()
             .map(|filter| filter.read(cx).value().to_string())
@@ -117,21 +119,56 @@ impl Workspace {
                         .child(crate::tr("designer.no_component")),
                 )
             })
-            .children(matching.into_iter().map(|spec| {
-                div()
-                    .id(SharedString::from(format!("palette-{}", spec.id)))
-                    .px_3()
-                    .py_1()
-                    .cursor_pointer()
-                    .hover(|this| this.bg(theme::hover_bg()))
-                    .child(crate::tr(spec.label))
-                    .on_drag(Dragged::Component(spec.id), move |_, _: Point<Pixels>, _, cx| {
-                        cx.new(|_| DragGhost { label: crate::tr(spec.label) })
-                    })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.insert_component(spec.id, cx);
+            // The catalogue rows, and only them, under the menu. The project's
+            // own components and the templates stay outside it: the three
+            // entries insert what the tree accepts from a drag, and neither a
+            // brick nor a template is dragged. A menu opening over one of those
+            // rows could only speak about some other row — `ContextMenuExt`
+            // hard-codes the id of what it opens, so the menu belongs to a list.
+            .child(
+                v_flex()
+                    .children(matching.into_iter().map(|spec| {
+                        div()
+                            .id(SharedString::from(format!("palette-{}", spec.id)))
+                            .px_3()
+                            .py_1()
+                            .cursor_pointer()
+                            // Lit like a selection, because that is what it is:
+                            // the menu acts on this row long after the click
+                            // that chose it, and a choice nobody can see is a
+                            // menu acting somewhere else.
+                            .when(target == Some(spec.id), |this| this.bg(theme::selected_bg()))
+                            .hover(|this| this.bg(theme::hover_bg()))
+                            .child(crate::tr(spec.label))
+                            .on_drag(
+                                Dragged::Component(spec.id),
+                                move |_, _: Point<Pixels>, _, cx| {
+                                    cx.new(|_| DragGhost { label: crate::tr(spec.label) })
+                                },
+                            )
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.insert_component(spec.id, cx);
+                            }))
+                            // The menu acts on the row the right click lit, so
+                            // it has to light this one before the menu is built
+                            // — which it does, the menu being deferred to the
+                            // next frame.
+                            .on_mouse_down(
+                                gpui::MouseButton::Right,
+                                cx.listener(move |this, _, _, cx| {
+                                    this.target_palette_component(spec.id, cx);
+                                }),
+                            )
                     }))
-            }))
+                    .context_menu(|menu, _window, _cx| {
+                        menu.menu(
+                            crate::tr("menu.insert_before"),
+                            Box::new(crate::actions::InsertBefore),
+                        )
+                        .menu(crate::tr("menu.insert_after"), Box::new(crate::actions::InsertAfter))
+                        .menu(crate::tr("menu.insert_into"), Box::new(crate::actions::InsertInto))
+                    }),
+            )
             // The templates come after the components and under a title of
             // their own: they answer the same search box, but a card is not a
             // component — it is several, already arranged.

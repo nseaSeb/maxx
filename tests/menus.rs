@@ -297,7 +297,7 @@ pub fn app_menus() -> Vec<Menu> {{
 
 #[test]
 fn a_shortcut_travels_with_its_entry_and_is_written_at_save() {
-    let path = std::env::temp_dir().join("maxx_raccourci.rs");
+    let path = scratch_file("maxx_raccourci.rs");
     let source = fichier_complet("        KeyBinding::new(\"cmd-q\", Quitter, None),\n");
     std::fs::write(&path, &source).unwrap();
 
@@ -331,7 +331,7 @@ fn a_shortcut_travels_with_its_entry_and_is_written_at_save() {
 fn removing_a_shortcut_removes_every_line_that_bound_it() {
     // gpui accepts several keystrokes for one action: rewriting only one would
     // leave the old one alive behind the user's back.
-    let path = std::env::temp_dir().join("maxx_raccourci_double.rs");
+    let path = scratch_file("maxx_raccourci_double.rs");
     let source = fichier_complet(
         "        KeyBinding::new(\"cmd-n\", Nouveau, None),\n        KeyBinding::new(\"ctrl-n\", Nouveau, None),\n",
     );
@@ -351,7 +351,7 @@ fn removing_a_shortcut_removes_every_line_that_bound_it() {
 fn a_file_without_key_bindings_is_left_whole() {
     // The defect this test locks down: the source was emptied before it could
     // fail, and everything became unrecoverable.
-    let path = std::env::temp_dir().join("maxx_sans_bindings.rs");
+    let path = scratch_file("maxx_sans_bindings.rs");
     let source = r#"use gpui::{Menu, MenuItem};
 
 pub fn app_menus() -> Vec<Menu> {
@@ -613,4 +613,20 @@ fn the_palette_search_takes_words_in_any_order() {
     assert_eq!(found, vec!["Fichier ▸ Ajouter au projet ▸ Les réglages"], "{found:?}");
 
     assert!(search("zzzz").is_empty());
+}
+
+/// A directory of this run's own, under `MAXX_SCRATCH` when it is set.
+///
+/// Fixed names under `temp_dir()` collide whenever two `cargo test` runs
+/// overlap — a second checkout, a CI job beside a local run — and the failure
+/// then lands on whichever test read a file the other had just removed. The
+/// pid separates two runs even when the variable is unset. Repeated per file
+/// because each integration test is a crate of its own.
+fn scratch_file(name: &str) -> std::path::PathBuf {
+    let root = std::env::var_os("MAXX_SCRATCH")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    let directory = root.join(format!("maxx-{}-{}", "menus", std::process::id()));
+    std::fs::create_dir_all(&directory).expect("the test directory must be created");
+    directory.join(name)
 }

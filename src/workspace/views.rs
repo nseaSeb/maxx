@@ -30,7 +30,11 @@ impl Workspace {
 
     /// Brings the view at `index` to the front.
     pub fn activate_view(&mut self, index: usize, cx: &mut Context<Self>) {
-        self.edit_snapshot = None;
+        // Closed rather than dropped: the view being left is still the one in
+        // front here, so the step lands where it belongs. `⌘⌥→` moves no focus
+        // at all, and a word typed just before it would otherwise be in the
+        // tree with nothing able to take it back.
+        self.close_text_edit(cx);
         if self.discard_menu_edits(cx) {
             return;
         }
@@ -124,6 +128,75 @@ impl Workspace {
         };
         self.revision += 1;
         cx.notify();
+    }
+
+    /// Closes every tab but the one in front.
+    ///
+    /// One `close_view` at a time rather than a `retain` over the list: a view
+    /// with unsaved edits refuses to close and says so, and keeping that refusal
+    /// is the whole reason the strip cannot be emptied in one line. The indices
+    /// are walked from the right for the reason `tabs::others` gives — closing
+    /// shifts everything after it.
+    pub fn close_other_views(&mut self, cx: &mut Context<Self>) {
+        let Some(active) = self.active else {
+            self.message = Some(crate::tr("message.no_open_view"));
+            cx.notify();
+            return;
+        };
+        let others = crate::tabs::others(self.views.len(), active);
+        if others.is_empty() {
+            self.message = Some(crate::tr("message.no_other_tab"));
+            cx.notify();
+            return;
+        }
+        for index in others {
+            self.close_view(index, cx);
+        }
+    }
+
+    /// Closes every tab after the one in front.
+    pub fn close_views_to_the_right(&mut self, cx: &mut Context<Self>) {
+        let Some(active) = self.active else {
+            self.message = Some(crate::tr("message.no_open_view"));
+            cx.notify();
+            return;
+        };
+        let after = crate::tabs::to_the_right(self.views.len(), active);
+        if after.is_empty() {
+            self.message = Some(crate::tr("message.no_tab_to_the_right"));
+            cx.notify();
+            return;
+        }
+        for index in after {
+            self.close_view(index, cx);
+        }
+    }
+
+    /// Puts the path of the view in front on the system clipboard.
+    ///
+    /// The same gesture as `⌘⌥C` on a node, and the same reason: what maxx
+    /// holds is a file on disk, and the way to hand it to a terminal or to
+    /// another editor is the clipboard.
+    pub fn copy_view_path(&mut self, cx: &mut Context<Self>) {
+        let paths: Vec<PathBuf> = self.views.iter().map(|view| view.path.clone()).collect();
+        let Some(path) = crate::tabs::path_to_copy(&paths, self.active) else {
+            self.message = Some(crate::tr("message.no_open_view"));
+            cx.notify();
+            return;
+        };
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(path));
+        self.message = Some(crate::tr("message.path_copied"));
+        cx.notify();
+    }
+
+    /// Lights the view in front in the project panel.
+    pub fn reveal_view_in_project(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = self.view().map(|view| view.path.clone()) else {
+            self.message = Some(crate::tr("message.no_open_view"));
+            cx.notify();
+            return;
+        };
+        self.reveal_in_project(path, cx);
     }
 
     pub(super) fn select_file(&mut self, path: PathBuf, cx: &mut Context<Self>) {
@@ -277,6 +350,11 @@ impl Workspace {
     }
 
     fn write_view(&mut self, force: bool, cx: &mut Context<Self>) {
+        // What the caret is in the middle of typing is already in the tree —
+        // every keystroke writes it — so the save needs nothing from the field.
+        // What it does need is the undo step: saving is a boundary, and what was
+        // typed before it should not come back with a later `⌘Z`.
+        self.split_text_edit(cx);
         if let Some(menus) = self.menu_file_mut() {
             let path = menus.path.clone();
             let saved = match menus.save(force) {
@@ -530,6 +608,12 @@ impl Workspace {
         // inspector, and `close_text_edit` then records no undo step at all.
         if !reloaded.is_empty() {
             self.edit_snapshot = None;
+            // And the box open on the canvas goes with it, losing whatever was
+            // not written yet. Which is the same bargain the reload itself
+            // strikes: an untouched view is taken back from the disk without
+            // asking, and a box standing over a tree that has just been
+            // replaced is typing into a node that may no longer be there.
+            self.canvas_edit = None;
         }
 
         for index in reloaded {

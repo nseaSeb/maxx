@@ -17,6 +17,7 @@ fn main() {
     println!("cargo::rerun-if-changed={}", lock.display());
 
     write_shapes();
+    write_icons();
 
     let version = std::fs::read_to_string(&lock)
         .ok()
@@ -46,6 +47,19 @@ fn write_shapes() {
     std::fs::write(out.join("settings_screen.rs"), as_module_body(&settings_screen_rs()))
         .expect("the shape must be written");
 
+    // The pages the shapes bring with them, each in a module of its own — the
+    // shape it has in a project, where every page is one file of `src/ui/`.
+    // These are views and not hand-written screens, so what is checked here is
+    // the half maxx does not rewrite at a save: the struct, the fields the tree
+    // binds, and the methods the tree names.
+    let mut pages = String::new();
+    for (module, source) in SHAPE_PAGES {
+        pages.push_str(&format!("pub mod {module} {{\n"));
+        pages.push_str(&as_module_body(&source()));
+        pages.push_str("}\n");
+    }
+    std::fs::write(out.join("pages.rs"), pages).expect("the pages must be written");
+
     // The handler bodies, each wrapped in the two parameters a handler stub
     // carries. Written from the same table `view::fill_handler` inserts from,
     // so a call gpui-component drops is a build that fails here rather than a
@@ -69,12 +83,17 @@ fn write_shapes() {
     }
     std::fs::write(out.join("boxes.rs"), boxes).expect("the boxes must be written");
 
-    // The sub-tree templates, each as the expression it is. Same reason as the
-    // boxes: a call gpui-component drops has to fail here rather than in a
-    // project, on a line maxx wrote.
+    // The sub-tree templates, each inside the one place it can land: a view.
+    // Same reason as the boxes — a call gpui-component drops has to fail here
+    // rather than in a project, on a line maxx wrote — but a template may bind
+    // `&self.field` and name `Self::on_click`, and neither of those means
+    // anything in a free function. So each one is compiled as the body of a
+    // `Render`, with the fields the table declares and a stub for every handler
+    // it names: exactly what `ensure_state_field` and `ensure_handler` write
+    // into the developer's file at the save.
     let mut subtrees = String::new();
     let mut seen: Vec<&str> = Vec::new();
-    for (id, imports, source) in SUBTREES {
+    for (id, imports, state, source) in SUBTREES {
         for import in *imports {
             if !seen.contains(import) {
                 seen.push(import);
@@ -82,9 +101,27 @@ fn write_shapes() {
                 subtrees.push('\n');
             }
         }
+        // Paths are written out in full below so that the wrapper owes no `use`
+        // line: an import added for a check and unused by the next template is
+        // a warning in a build that refuses them.
+        let name = camel_case(id);
+        subtrees.push_str(&format!("#[allow(dead_code)]\nstruct {name} {{\n"));
+        for field in *state {
+            subtrees.push_str(&format!("    {field},\n"));
+        }
+        subtrees.push_str("}\n");
+        let cx = if source.contains("cx.") { "cx" } else { "_cx" };
         subtrees.push_str(&format!(
-            "#[allow(dead_code)]\nfn a_{id}() -> impl IntoElement {{\n    {source}\n}}\n"
+            "impl gpui::Render for {name} {{\n    fn render(&mut self, _window: &mut gpui::Window, {cx}: &mut gpui::Context<Self>) -> impl gpui::IntoElement {{\n        {source}\n    }}\n}}\n"
         ));
+        // A `&ClickEvent` because every handler a template writes today sits on
+        // a button. One posed on a switch would take the new state instead, and
+        // this is where that would have to be told apart.
+        for handler in handler_names(source) {
+            subtrees.push_str(&format!(
+                "#[allow(dead_code)]\nimpl {name} {{\n    fn {handler}(&mut self, _event: &gpui::ClickEvent, _window: &mut gpui::Window, _cx: &mut gpui::Context<Self>) {{\n    }}\n}}\n"
+            ));
+        }
     }
     std::fs::write(out.join("subtrees.rs"), subtrees).expect("the templates must be written");
 
@@ -98,6 +135,146 @@ fn write_shapes() {
         components.push_str("}\n");
     }
     std::fs::write(out.join("components.rs"), components).expect("the components must be written");
+}
+
+/// Writes the icon tables into `OUT_DIR`, read from `gpui-component`'s own
+/// `IconName`.
+///
+/// Eighty-six variants, and every one of them has to appear twice: once in the
+/// list the inspector offers, once in the match the canvas draws from. Kept by
+/// hand, that pair drifted the moment the crate added an icon — twenty-two were
+/// offered out of eighty-six, and the missing ones were not missing on purpose.
+///
+/// `IconName` has no `FromStr`, no `Display` and no way to enumerate itself in
+/// 0.5.1, so the enum is read where the compiler reads it: the sources cargo
+/// unpacked, at the version `Cargo.lock` pins. The same lookup `tests/components.rs`
+/// makes, and copied for the same reason — a build script cannot import the
+/// crate it builds.
+fn write_icons() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let lock = std::fs::read_to_string(manifest.join("Cargo.lock")).expect("Cargo.lock");
+    let version = locked_version(&lock, "gpui-component")
+        .expect("Cargo.lock must pin gpui-component: maxx does not build without it");
+    let source = icon_source(&version);
+    println!("cargo::rerun-if-changed={}", source.display());
+
+    let text = std::fs::read_to_string(&source)
+        .unwrap_or_else(|error| panic!("{}: {error}", source.display()));
+    let names = icon_variants(&text);
+    // A parse that reads nothing would leave the palette with an empty list and
+    // say nothing about it — the silent hole this whole table exists to close.
+    assert!(
+        names.len() > 50,
+        "{}: {} variants read, expected the whole enum",
+        source.display(),
+        names.len()
+    );
+
+    let out = std::path::PathBuf::from(std::env::var("OUT_DIR").expect("cargo sets OUT_DIR"));
+
+    let mut list = String::from(
+        "// Written by build.rs from gpui-component's own `IconName`. Do not edit.\n\
+         /// Every icon the crate names, offered whole.\n\
+         const ICONS: &[&str] = &[\n",
+    );
+    for name in &names {
+        list.push_str(&format!("    \"IconName::{name}\",\n"));
+    }
+    list.push_str("];\n");
+    std::fs::write(out.join("icons.rs"), list).expect("the icon list must be written");
+
+    let mut table = String::from(
+        "// Written by build.rs from gpui-component's own `IconName`. Do not edit.\n\
+         /// The variant a `IconName::…` path names, when the crate has one.\n\
+         ///\n\
+         /// `None` for a name written by hand that the crate does not carry: the\n\
+         /// canvas draws its fallback rather than a wrong icon.\n\
+         pub fn icon_name(source: &str) -> Option<gpui_component::IconName> {\n\
+         \x20   use gpui_component::IconName;\n\
+         \x20   Some(match source {\n",
+    );
+    for name in &names {
+        table.push_str(&format!("        \"IconName::{name}\" => IconName::{name},\n"));
+    }
+    table.push_str("        _ => return None,\n    })\n}\n");
+    std::fs::write(out.join("icon_name.rs"), table).expect("the icon table must be written");
+}
+
+/// Where cargo unpacked `gpui-component`'s `icon.rs`.
+fn icon_source(version: &str) -> std::path::PathBuf {
+    let home = std::env::var("CARGO_HOME").map(std::path::PathBuf::from).unwrap_or_else(|_| {
+        let home = std::env::var("HOME").expect("HOME must be set to find ~/.cargo");
+        std::path::PathBuf::from(home).join(".cargo")
+    });
+    let registry = home.join("registry/src");
+    let indexes = std::fs::read_dir(&registry)
+        .unwrap_or_else(|error| panic!("{}: {error}", registry.display()));
+    for index in indexes.flatten() {
+        // Exactly the directory, not a prefix: `gpui-component-macros-0.5.1`
+        // sits right beside `gpui-component-0.5.1` and would match a glob.
+        let candidate = index.path().join(format!("gpui-component-{version}")).join("src/icon.rs");
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+    panic!("gpui-component-{version}/src/icon.rs found nowhere under {}", registry.display())
+}
+
+/// The variants of `enum IconName`, in the order the crate declares them.
+///
+/// Read by scanning rather than parsed: a build script that pulled `syn` in
+/// would make every build of maxx wait for it, to answer a question one brace
+/// and one indent already answer.
+fn icon_variants(source: &str) -> Vec<String> {
+    let Some(offset) = source.find("pub enum IconName {") else {
+        return Vec::new();
+    };
+    let body = &source[offset + "pub enum IconName {".len()..];
+    let mut names = Vec::new();
+    for line in body.lines() {
+        let line = line.trim();
+        if line == "}" {
+            break;
+        }
+        // A variant is a bare name and a comma; anything else — an attribute, a
+        // comment, a variant carrying data — is not one to write.
+        let Some(name) = line.strip_suffix(',') else { continue };
+        if !name.is_empty()
+            && name.starts_with(|c: char| c.is_ascii_uppercase())
+            && name.chars().all(|c| c.is_ascii_alphanumeric())
+        {
+            names.push(name.to_string());
+        }
+    }
+    names
+}
+
+/// `form_field` as the type name a wrapper can wear: `FormField`.
+fn camel_case(id: &str) -> String {
+    id.split('_')
+        .map(|word| {
+            let mut characters = word.chars();
+            match characters.next() {
+                Some(first) => first.to_ascii_uppercase().to_string() + characters.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect()
+}
+
+/// The methods a template names, read off its `Self::…` as the inspector reads
+/// them off the tree.
+fn handler_names(source: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    for (index, _) in source.match_indices("Self::") {
+        let rest = &source[index + "Self::".len()..];
+        let name: String =
+            rest.chars().take_while(|c| *c == '_' || c.is_ascii_alphanumeric()).collect();
+        if !name.is_empty() && !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
 }
 
 /// The same text, as something `include!` accepts.

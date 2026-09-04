@@ -148,7 +148,7 @@ fn the_documented_defaults_are_readable_and_hold_the_defaults() {
 
 #[test]
 fn a_damaged_file_falls_back_to_the_defaults() {
-    let path = std::env::temp_dir().join("maxx_settings_damaged.json");
+    let path = scratch_file("maxx_settings_damaged.json");
     std::fs::write(&path, "this is not JSON = = =\n").unwrap();
 
     let preferences: Preferences = maxx::settings::read_json(&path);
@@ -160,7 +160,7 @@ fn a_damaged_file_falls_back_to_the_defaults() {
 
 #[test]
 fn a_partial_file_keeps_the_defaults_for_what_it_omits() {
-    let path = std::env::temp_dir().join("maxx_settings_partial.json");
+    let path = scratch_file("maxx_settings_partial.json");
     std::fs::write(&path, "{ \"show_output\": true }\n").unwrap();
 
     let preferences: Preferences = maxx::settings::read_json(&path);
@@ -198,7 +198,7 @@ fn the_recent_list_moves_deduplicates_and_stops_at_ten() {
 
 #[test]
 fn a_project_that_no_longer_exists_leaves_the_list() {
-    let root = std::env::temp_dir().join("maxx_settings_missing");
+    let root = scratch_file("maxx_settings_missing");
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
 
@@ -256,4 +256,48 @@ fn a_brace_in_the_header_comment_does_not_anchor_the_walk() {
     let reread: Preferences =
         serde_json_lenient::from_str_lenient(&patched).expect("the file stays readable: {patched}");
     assert!(reread.show_output);
+}
+
+#[test]
+fn the_panel_sizes_survive_a_round_trip_and_default_when_absent() {
+    let state = State {
+        panel_width: Some(300.),
+        inspector_width: Some(320.),
+        output_height: Some(260.),
+        menu_inspector_width: Some(420.),
+        ..State::default()
+    };
+    // The very writer `save_state` uses, so what the file holds is what this
+    // produces.
+    let body = serde_json_lenient::to_string_pretty(&state).unwrap();
+    let path = scratch_file("maxx_state_sizes.json");
+    std::fs::write(&path, format!("{body}\n")).unwrap();
+
+    let read: State = maxx::settings::read_json(&path);
+    assert_eq!(read, state);
+
+    // A `state.json` written by an older maxx knows neither key; the handles
+    // then start where they always did rather than at zero.
+    let old = scratch_file("maxx_state_old.json");
+    std::fs::write(&old, "{ \"panel_width\": 300.0 }\n").unwrap();
+    let read: State = maxx::settings::read_json(&old);
+    assert_eq!(read.panel_width, Some(300.));
+    assert_eq!(read.output_height, None, "an absent key is the default, not a zero size");
+    assert_eq!(read.menu_inspector_width, None, "an absent key is the default, not a zero size");
+}
+
+/// A directory of this run's own, under `MAXX_SCRATCH` when it is set.
+///
+/// Fixed names under `temp_dir()` collide whenever two `cargo test` runs
+/// overlap — a second checkout, a CI job beside a local run — and the failure
+/// then lands on whichever test read a file the other had just removed. The
+/// pid separates two runs even when the variable is unset. Repeated per file
+/// because each integration test is a crate of its own.
+fn scratch_file(name: &str) -> std::path::PathBuf {
+    let root = std::env::var_os("MAXX_SCRATCH")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    let directory = root.join(format!("maxx-{}-{}", "settings", std::process::id()));
+    std::fs::create_dir_all(&directory).expect("the test directory must be created");
+    directory.join(name)
 }

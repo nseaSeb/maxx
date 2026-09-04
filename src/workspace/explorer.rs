@@ -21,6 +21,32 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Shows `path` in the project panel: the panel itself, the folders above
+    /// it, and the row lit.
+    ///
+    /// Opening the folders is the half one forgets. `entries` is the flattened
+    /// tree of what is unfolded, so a file inside a folded directory is not a
+    /// row at all — the selection would be set on something nobody can see, and
+    /// "reveal" would look like it did nothing.
+    pub fn reveal_in_project(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        // A panel that is off shows nothing either, and the gesture asked for
+        // the file to be *seen*.
+        if !crate::settings::prefs(cx).show_project_panel {
+            self.toggle_project_panel(cx);
+        }
+        if let Some(root) = self.project.as_ref().map(|project| project.root.clone()) {
+            let mut folder = path.parent();
+            // Up to the root and no further: the project panel is drawn from
+            // it, and a directory above it is not a row it could ever show.
+            while let Some(above) = folder.filter(|above| above.starts_with(&root)) {
+                self.expanded.insert(above.to_path_buf());
+                folder = above.parent();
+            }
+        }
+        self.refresh_entries();
+        self.select_entry(path, cx);
+    }
+
     /// The entry the project panel is on, falling back to the project root.
     pub fn selected_entry(&self) -> Option<PathBuf> {
         self.selected.clone().or_else(|| self.project.as_ref().map(|project| project.root.clone()))

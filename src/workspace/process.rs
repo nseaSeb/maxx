@@ -139,8 +139,10 @@ impl Workspace {
         div()
             .flex()
             .flex_col()
-            .h(px(200.))
-            .flex_none()
+            // No height here: the resizable panel is what gives it, and a
+            // fixed height inside would fight with the handle.
+            .size_full()
+            .min_h(px(0.))
             .bg(theme::panel_bg())
             .border_t_1()
             .border_color(theme::border())

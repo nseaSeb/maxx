@@ -1,6 +1,6 @@
 [package]
 name = "maxx"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 license = "MIT"
 description = "A visual workshop that builds GPUI views and writes them out as real Rust source"
@@ -73,6 +73,10 @@ syn = { version = "3", features = ["full"] }
 # build never sees the feature, and the window that ships is the real one.
 gpui = { version = "0.2.2", features = ["runtime_shaders", "test-support"] }
 notify = "7"
+# The same writer `save_state` uses, taken again here because an integration
+# test sees only the public API: `tests/settings.rs` has to serialise a `State`
+# exactly as maxx does to check that what it writes is what it reads back.
+serde_json_lenient = "0.2"
 
 [profile.dev]
 opt-level = 0

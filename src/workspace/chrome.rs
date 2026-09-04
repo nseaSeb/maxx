@@ -124,62 +124,141 @@ impl Workspace {
                     })),
             )
             .child(div().text_xs().text_color(theme::text_muted()).child("⌘O"))
+            // Only when there is one: a button that opens nothing is worse than
+            // no button, and `demo/` is versioned beside maxx's sources — a
+            // `cargo install` gets the binary and not the folder.
+            .children(self.demo.as_ref().map(|_| {
+                div()
+                    .id("welcome-open-demo")
+                    .px_4()
+                    .py_2()
+                    .rounded_md()
+                    .cursor_pointer()
+                    .border_1()
+                    .border_color(theme::border())
+                    .text_color(theme::text_muted())
+                    .hover(|this| this.bg(theme::hover_bg()))
+                    .child(crate::tr("welcome.open_demo"))
+                    .on_click(cx.listener(|_, _, window, cx| {
+                        window.dispatch_action(Box::new(crate::actions::OpenDemo), cx);
+                    }))
+            }))
             .children(self.render_recent_projects(cx))
             .into_any_element()
+    }
+
+    /// Reads what the welcome screen draws, once per change of the list.
+    ///
+    /// Called from [`Render::render`] rather than from the handful of places
+    /// that change the recent list, and the reason is the first branch: a
+    /// project open in front of the cards is a chance for the very files they
+    /// were read from to change, and closing it changes no list. Comparing ten
+    /// paths per frame is the price of never showing a stale picture.
+    pub(crate) fn sync_recent_cards(&mut self, cx: &mut Context<Self>) {
+        if self.project.is_some() {
+            self.recent_cards.clear();
+            self.recent_synced = None;
+            return;
+        }
+        let recent = crate::settings::state(cx).recent_projects.clone();
+        if self.recent_synced.as_ref() == Some(&recent) {
+            return;
+        }
+        self.recent_cards = recent
+            .iter()
+            .map(|root| RecentCard {
+                root: root.clone(),
+                tree: crate::project::entry_tree(root),
+                preview: crate::preview::Preview::read(root),
+            })
+            .collect();
+        self.recent_synced = Some(recent);
     }
 
     /// The recent projects, on the welcome screen.
     ///
     /// The same list as the one in the File menu, put where someone who has
-    /// just launched maxx is already looking.
+    /// just launched maxx is already looking — and each one shown as its entry
+    /// view rather than as its name alone, because a project is what it draws.
     fn render_recent_projects(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let recent = crate::settings::state(cx).recent_projects.clone();
-        if recent.is_empty() {
+        if self.recent_cards.is_empty() {
             return None;
         }
 
-        let rows = recent.into_iter().enumerate().map(|(index, path)| {
-            let name = path
+        let cards = self.recent_cards.iter().enumerate().map(|(index, card)| {
+            let name = card
+                .root
                 .file_name()
                 .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_else(|| path.to_string_lossy().into_owned());
-            let parent = path
+                .unwrap_or_else(|| card.root.to_string_lossy().into_owned());
+            let parent = card
+                .root
                 .parent()
                 .map(|parent| parent.to_string_lossy().into_owned())
                 .unwrap_or_default();
 
-            div()
+            v_flex()
                 .id(SharedString::from(format!("recent-{index}")))
-                .flex()
-                .items_baseline()
-                .gap_2()
-                .px_3()
-                .py_1()
-                .rounded_sm()
+                .w(px(200.))
+                .gap_1()
+                .p_2()
+                .rounded_md()
                 .cursor_pointer()
                 .hover(|this| this.bg(theme::hover_bg()))
-                .child(div().child(name))
-                .child(div().text_xs().text_color(theme::text_muted()).child(parent))
+                .child(
+                    div()
+                        .h(px(120.))
+                        .w_full()
+                        .overflow_hidden()
+                        .p_1()
+                        .rounded_sm()
+                        .border_1()
+                        .border_color(theme::border())
+                        // The project's own colours, exactly as the board paints
+                        // them: a thumbnail in maxx's greys is a thumbnail of
+                        // maxx.
+                        .bg(card.preview.bg())
+                        .text_color(card.preview.text())
+                        // The smallest type the workshop has, and the frame cuts
+                        // whatever still does not fit: gpui has no scale
+                        // transform, so "small" is a small box and not a shrunk
+                        // one.
+                        .text_xs()
+                        // Nothing at all when the view could not be read. An
+                        // empty frame says "no picture" without claiming the
+                        // project is broken — it may simply have moved.
+                        .children(card.tree.as_ref().map(|tree| {
+                            crate::designer::still_node(
+                                tree,
+                                &[],
+                                Some(card.root.as_path()),
+                                &card.preview,
+                            )
+                        })),
+                )
+                .child(div().truncate().child(name))
+                .child(div().text_xs().text_color(theme::text_muted()).truncate().child(parent))
                 .on_click(cx.listener(move |_, _, window, cx| {
                     window.dispatch_action(Box::new(crate::actions::OpenRecent { index }), cx);
                 }))
         });
 
         Some(
-            div()
-                .flex()
-                .flex_col()
+            v_flex()
                 .mt_4()
-                .gap_1()
+                .gap_2()
                 .items_start()
+                .max_w(px(660.))
                 .child(
                     div()
-                        .px_3()
+                        .px_2()
                         .text_xs()
                         .text_color(theme::text_muted())
                         .child(crate::tr("welcome.recent")),
                 )
-                .children(rows)
+                // A row that wraps rather than a column: a card is wide, and ten
+                // of them stacked would leave the screen.
+                .child(h_flex().flex_wrap().gap_2().children(cards))
                 .into_any_element(),
         )
     }
@@ -323,6 +402,10 @@ impl Render for Workspace {
             });
         }
 
+        // Before anything is drawn, and only worth a look while the welcome
+        // screen is what would be drawn: it is the screen that shows them.
+        self.sync_recent_cards(cx);
+
         self.sync_prop_inputs(window, cx);
         self.sync_menu_inputs(window, cx);
         self.sync_run_inputs(window, cx);
@@ -334,6 +417,7 @@ impl Render for Workspace {
         let show_files = visible.show_project_panel;
         let show_panel = self.project.is_some();
         let panel_width = crate::settings::state(cx).panel_width.unwrap_or(240.);
+        let output_height = crate::settings::state(cx).output_height.unwrap_or(200.);
 
         // The handle moves the split inside gpui-component's entity; this is
         // where it is read back to be remembered. In memory only, like the
@@ -345,6 +429,65 @@ impl Render for Workspace {
                 crate::settings::stage_state(cx, |state| state.panel_width = Some(largeur));
             }
         }
+        // The output is the second pane of that group, hence `last`.
+        if visible.show_output
+            && let Some(hauteur) = self.output_split.read(cx).sizes().last().copied()
+        {
+            let hauteur = f32::from(hauteur);
+            if hauteur > 0. {
+                crate::settings::stage_state(cx, |state| state.output_height = Some(hauteur));
+            }
+        }
+
+        // The workshop proper: everything between the titlebar and the output.
+        let middle = div()
+            .flex()
+            .flex_1()
+            .overflow_hidden()
+            .when(!show_panel, |this| this.child(self.render_main(cx)))
+            .when(show_panel, |this| {
+                this.child(
+                    h_resizable("panneaux")
+                        .with_state(&self.panel_split)
+                        .child(
+                            resizable_panel()
+                                .size(px(panel_width))
+                                // Below this the tree becomes
+                                // unreadable; beyond it, it eats
+                                // the canvas.
+                                .size_range(px(160.)..px(520.))
+                                .child(fillable(self.render_left_column(show_files, cx))),
+                        )
+                        .child(resizable_panel().child(fillable(self.render_main(cx)))),
+                )
+            });
+
+        // No output, no handle, exactly as above for the project panel: a
+        // resizable group with a single pane would cost a state for nothing.
+        let body = if visible.show_output {
+            div()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .overflow_hidden()
+                .child(
+                    v_resizable("sortie")
+                        .with_state(&self.output_split)
+                        .child(resizable_panel().child(fillable(middle)))
+                        .child(
+                            resizable_panel()
+                                .size(px(output_height))
+                                // Below this the output shows a line and a
+                                // half; beyond it there is no workshop left
+                                // above it.
+                                .size_range(px(120.)..px(600.))
+                                .child(fillable(self.render_output(cx))),
+                        ),
+                )
+                .into_any_element()
+        } else {
+            middle.into_any_element()
+        };
 
         div()
             .flex()
@@ -354,32 +497,7 @@ impl Render for Workspace {
             .text_color(theme::text())
             .text_sm()
             .child(self.render_titlebar())
-            .child(
-                // No panel, no handle: a resizable group with a single pane
-                // would cost a state for nothing.
-                div()
-                    .flex()
-                    .flex_1()
-                    .overflow_hidden()
-                    .when(!show_panel, |this| this.child(self.render_main(cx)))
-                    .when(show_panel, |this| {
-                        this.child(
-                            h_resizable("panneaux")
-                                .with_state(&self.panel_split)
-                                .child(
-                                    resizable_panel()
-                                        .size(px(panel_width))
-                                        // Below this the tree becomes
-                                        // unreadable; beyond it, it eats
-                                        // the canvas.
-                                        .size_range(px(160.)..px(520.))
-                                        .child(fillable(self.render_left_column(show_files, cx))),
-                                )
-                                .child(resizable_panel().child(fillable(self.render_main(cx)))),
-                        )
-                    }),
-            )
-            .when(visible.show_output, |this| this.child(self.render_output(cx)))
+            .child(body)
             .when(visible.show_status_bar, |this| this.child(self.render_status_bar()))
             .children(self.render_command_palette(cx))
     }

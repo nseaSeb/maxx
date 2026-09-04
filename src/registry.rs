@@ -9,15 +9,18 @@ mod scrollbar;
 mod state;
 
 pub use ids::{unique_element_id, unique_element_ids};
-pub use props::{covers, editable, props, read, tooltip_text, validate, write};
+pub use props::{
+    covers, editable, hover_calls, keystroke_text, label_texts, props, read, spoken_text,
+    tooltip_text, validate, write,
+};
 pub use scrollbar::{is_scrollbar_wrapper, scrollbar_assembly, unwrap_scrollbar};
 pub use state::{
-    handler_name, handlers, read_binding, rebind_state_fields, suggested_handler,
+    bindable, handler_name, handlers, read_binding, rebind_state_fields, suggested_handler,
     unique_input_field, write_binding,
 };
 
-pub use catalogue::{CATALOGUE, COMMON, INTERACTIVE, TEXT_COMMON};
-use props::path_arg;
+pub use catalogue::{CATALOGUE, COMMON, HOVER, INTERACTIVE, TEXT_COMMON};
+use props::{keystroke_arg, labels_arg, path_arg};
 
 /// How a property maps onto the builder chain.
 #[derive(Clone, Copy, Debug)]
@@ -78,6 +81,146 @@ pub enum Target {
     /// scroll it. The id has to be unique among siblings, which no single node
     /// can know — that is why the workspace writes this one, not [`write`].
     Scrollable(&'static str),
+    /// A keystroke, as an argument of the constructor:
+    /// `Kbd::new(Keystroke::parse("cmd-k").unwrap_or_default())`.
+    ///
+    /// Its own target and not a [`Kind`], for the reason [`Target::Tooltip`] is
+    /// one: what the inspector shows is plain text — `cmd-k` — and what goes
+    /// into the file is an expression around it. A kind would have had to be
+    /// added to two lists of editor kinds in the inspectors, where forgetting
+    /// one leaves a field that never appears; every match on a target is
+    /// exhaustive, so the compiler names each place instead.
+    ///
+    /// `unwrap_or_default` and not `unwrap`: maxx refuses a keystroke gpui
+    /// cannot read — the same check `menufile` makes before writing a shortcut
+    /// — but a file the developer has edited by hand is not maxx's to panic on.
+    Keystroke(usize),
+    /// A list of labels, written as one call taking an array of literals:
+    /// `.children(["Home", "Files"])`.
+    ///
+    /// What a breadcrumb and a tab bar hold. Their children are typed —
+    /// `BreadcrumbItem`, `Tab` — so they cannot be nodes of the tree: a label
+    /// dropped inside one would write a call that does not compile. The array
+    /// is what both types accept from a string literal, and it keeps the whole
+    /// component in a single node.
+    ///
+    /// A comma separates them in the field, so a label holding one cannot be
+    /// written here. The alternative was a second editor for a list of strings,
+    /// which is the property the backlog still owes the dropdown.
+    Labels(&'static str),
+    /// A property of the *state field* rather than of the node: it is written
+    /// into the initializer `view::ensure_state_field` posts, not into the
+    /// managed region.
+    ///
+    /// Two things live there and nowhere else — whether a text input is
+    /// multi-line, and what a dropdown holds — because both are arguments of a
+    /// constructor the view's `new` calls, not calls on the element the region
+    /// draws. `InputState::multi_line` is a builder of the state; there is no
+    /// `Input::multi_line` to write beside it.
+    ///
+    /// Which is why it is a target of its own rather than a [`Kind`]: the value
+    /// does not come from the node, so [`read`] and [`write`] answer nothing
+    /// here — [`Init::read`] and [`Init::write`] work on the initializer's own
+    /// text, and the workspace is what carries it to and from the file.
+    Initializer(&'static Init),
+    /// One style call written inside gpui's hover closure:
+    /// `.hover(|this| this.bg(rgb(0x1e2127)))`.
+    ///
+    /// A second chain of calls on the same node, which [`Node`] does not carry —
+    /// it holds one. So the chain lives where the parser already puts it: inside
+    /// the closure, as the argument's own text, read back and rewritten call by
+    /// call. Nothing new in the model, and the closure the developer wrote comes
+    /// out with the parameter name they gave it.
+    ///
+    /// Wrapping a [`Target`] rather than repeating one per property: what a
+    /// hover background *is* is a `bg`, and saying so twice would let the two
+    /// spellings disagree.
+    ///
+    /// Offered on `Common::Element` alone, beside [`INTERACTIVE`], and for the
+    /// same reason: `hover` comes from `InteractiveElement`, which a `div` has
+    /// and no `gpui-component` widget does. Written on a `Label`, it is a call
+    /// that does not compile.
+    Hover(&'static Target),
+}
+
+/// The shape of an initializer maxx writes, and the value inside it.
+///
+/// The rule the handlers already follow, applied to a line outside the region:
+/// maxx rewrites an initializer it wrote itself and leaves one the developer
+/// has changed. Which of the two is decided by matching the text against these
+/// templates — with whitespace collapsed, so that a `cargo fmt` over `new` does
+/// not read as a rewrite by hand.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Init {
+    /// What is written when the property carries nothing, when there is such a
+    /// shape at all.
+    ///
+    /// `None` where emptiness is not a state the component has: a dropdown
+    /// holding no entries would be written `SearchableVec::new(vec![])` beside a
+    /// selected index of nought — an index into nothing — and would leave the
+    /// `IndexPath` import behind with nothing to use it. Clearing the field
+    /// therefore leaves the line alone and says so, rather than writing a shape
+    /// nobody wants.
+    pub off: Option<&'static str>,
+    /// What is written otherwise, with `{}` standing for the encoded value.
+    pub on: &'static str,
+}
+
+impl Init {
+    /// The value this initializer holds, or `None` when maxx did not write it.
+    ///
+    /// `None` is what leaves the developer's own line alone: the inspector
+    /// shows the property as not editable rather than overwriting an expression
+    /// it cannot read.
+    pub fn read(&self, kind: Kind, source: &str) -> Option<String> {
+        let text = squeezed(source);
+        if self.off.is_some_and(|off| text == squeezed(off)) {
+            return Some(String::new());
+        }
+        let (prefix, suffix) = squeezed(self.on).split_once("{}").map(|(a, b)| {
+            // The slot is written against the surrounding text, so the spaces
+            // that touch it belong to neither side.
+            (a.trim_end().to_string(), b.trim_start().to_string())
+        })?;
+        let inner = text.strip_prefix(&prefix)?.strip_suffix(&suffix)?.trim();
+        match kind {
+            // The value and nothing else. Stripping a prefix and a suffix says
+            // where maxx's line starts and ends, not that what sits between
+            // them is only the flag: an initializer the developer extended —
+            // `…multi_line(true).placeholder("Nom")` — leaves
+            // `true).placeholder("Nom"` here, and answering `Some` for it is
+            // the whole proof `edit_initializer` uses that maxx owns the line.
+            // Toggling the switch then rewrote it from the table and took the
+            // placeholder with it, which is exactly what this type exists to
+            // prevent. The list arm never had the hole: `shared_strings`
+            // answers `None` on anything it cannot parse.
+            Kind::Bool => matches!(inner, "true" | "false").then(|| inner.to_string()),
+            // A list, in the encoding `write` below puts there.
+            _ => props::shared_strings(inner).map(|items| items.join(", ")),
+        }
+    }
+
+    /// The initializer text this value asks for, or `None` for a value that
+    /// cannot be encoded.
+    pub fn write(&self, kind: Kind, value: &str) -> Option<String> {
+        let encoded = match kind {
+            Kind::Bool => (value == "true").then(|| "true".to_string()),
+            _ => props::shared_strings_arg(value),
+        };
+        match encoded {
+            Some(inner) => Some(self.on.replace("{}", &inner)),
+            None => self.off.map(str::to_string),
+        }
+    }
+}
+
+/// The same text with every run of whitespace collapsed to one space.
+///
+/// What makes the match above survive `rustfmt`: the initializer of a dropdown
+/// is six lines in the file and one string in the table, and a developer who
+/// reformatted `new` has not edited anything.
+fn squeezed(source: &str) -> String {
+    source.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// What kind of editor the inspector shows.
@@ -158,36 +301,60 @@ pub struct Prop {
 
 /// The heading a property is shown under in the inspector.
 ///
-/// Five, and no more: a sixth would be a heading nobody scans past. The order
-/// they are declared in is the order they are drawn — what a node *is* before
-/// what it *looks like*, and what it *does* last.
+/// Six, and the sixth was earned rather than assumed. `Styled` gives every
+/// component margins, borders, minimum and maximum sizes, a shadow, an opacity;
+/// filed under the five that existed, they buried the two or three properties a
+/// button actually has under twenty it shares with everything else. `Box` is
+/// where the shared box lives, folded shut by default in practice because it is
+/// the same twenty rows on every node.
+///
+/// The order they are declared in is the order they are drawn — what a node
+/// *is* before what it *looks like*, and what it *does* last.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Group {
     /// Where it sits and how it takes room.
     Layout,
     /// The air around and inside it.
     Spacing,
+    /// The box `Styled` draws around it: margins, border, limits, shadow.
+    Box,
     /// What it looks like.
     Appearance,
     /// The words it carries and how they are set.
     Text,
     /// What it does when someone uses it.
     Action,
+    /// What changes while the pointer is over it.
+    ///
+    /// A heading of its own and not a row among the others: what it holds are
+    /// the same style properties said a second time, and interleaving the two
+    /// would leave twenty rows where every other one is about a state the node
+    /// is not in.
+    Hover,
 }
 
 impl Group {
-    /// The five, in the order the inspector draws them.
-    pub const ALL: [Group; 5] =
-        [Group::Layout, Group::Spacing, Group::Appearance, Group::Text, Group::Action];
+    /// The seven, in the order the inspector draws them.
+    pub const ALL: [Group; 7] = [
+        Group::Layout,
+        Group::Spacing,
+        Group::Box,
+        Group::Appearance,
+        Group::Text,
+        Group::Action,
+        Group::Hover,
+    ];
 
     /// Translation key of the heading.
     pub fn label(self) -> &'static str {
         match self {
             Group::Layout => "group.layout",
             Group::Spacing => "group.spacing",
+            Group::Box => "group.box",
             Group::Appearance => "group.appearance",
             Group::Text => "group.text",
             Group::Action => "group.action",
+            Group::Hover => "group.hover",
         }
     }
 }
@@ -210,19 +377,37 @@ const GROUPS: &[(&str, Group)] = &[
     ("prop.fit", Group::Layout),
     ("prop.flex", Group::Layout),
     ("prop.height", Group::Layout),
+    ("prop.justify", Group::Layout),
     ("prop.scroll", Group::Layout),
     ("prop.scrollbar", Group::Layout),
     ("prop.size", Group::Layout),
     ("prop.width", Group::Layout),
+    ("prop.wrap", Group::Layout),
     // The air around and inside it.
     ("prop.gap", Group::Spacing),
     ("prop.padding", Group::Spacing),
+    // The box `Styled` draws around every component alike.
+    ("prop.border", Group::Box),
+    ("prop.border_color", Group::Box),
+    ("prop.clip", Group::Box),
+    ("prop.cursor", Group::Box),
+    ("prop.margin", Group::Box),
+    ("prop.margin_x", Group::Box),
+    ("prop.margin_y", Group::Box),
+    ("prop.max_height", Group::Box),
+    ("prop.max_width", Group::Box),
+    ("prop.min_height", Group::Box),
+    ("prop.min_width", Group::Box),
+    ("prop.opacity", Group::Box),
+    ("prop.shadow", Group::Box),
     // What it looks like.
     ("prop.background", Group::Appearance),
     ("prop.checked", Group::Appearance),
     ("prop.count", Group::Appearance),
+    ("prop.groups", Group::Appearance),
     ("prop.icon", Group::Appearance),
     ("prop.max", Group::Appearance),
+    ("prop.months", Group::Appearance),
     ("prop.on", Group::Appearance),
     ("prop.outline", Group::Appearance),
     ("prop.rounded", Group::Appearance),
@@ -235,19 +420,36 @@ const GROUPS: &[(&str, Group)] = &[
     // The words it carries and how they are set.
     ("prop.bound_field", Group::Text),
     ("prop.href", Group::Text),
+    ("prop.italic", Group::Text),
+    ("prop.items", Group::Text),
+    ("prop.keystroke", Group::Text),
     ("prop.label", Group::Text),
+    ("prop.name", Group::Text),
+    ("prop.line_height", Group::Text),
     ("prop.message", Group::Text),
+    ("prop.multi_line", Group::Text),
+    ("prop.nowrap", Group::Text),
+    ("prop.placeholder", Group::Text),
     ("prop.text", Group::Text),
     ("prop.text_color", Group::Text),
     ("prop.text_size", Group::Text),
     ("prop.title", Group::Text),
     ("prop.tooltip", Group::Text),
+    ("prop.truncate", Group::Text),
+    ("prop.underline", Group::Text),
     ("prop.weight", Group::Text),
     // What it does when someone uses it.
     ("prop.action", Group::Action),
     ("prop.disabled", Group::Action),
     // The element's own name, which is what a handler and a tooltip hang on.
     ("prop.id", Group::Action),
+    // What changes under the pointer: the same properties, said again.
+    ("prop.hover_background", Group::Hover),
+    ("prop.hover_text_color", Group::Hover),
+    ("prop.hover_border_color", Group::Hover),
+    ("prop.hover_opacity", Group::Hover),
+    ("prop.hover_rounded", Group::Hover),
+    ("prop.hover_shadow", Group::Hover),
 ];
 
 /// The heading this property belongs under.
@@ -366,8 +568,16 @@ pub struct StateSpec {
 /// Beside the catalogue rather than beside the templates: the expressions live
 /// in `scaffold::templates`, which `build.rs` includes verbatim to compile them
 /// and which therefore holds nothing of the interface.
-pub const SUBTREE_LABELS: &[(&str, &str)] =
-    &[("card", "template.card"), ("toolbar", "template.toolbar"), ("section", "template.section")];
+pub const SUBTREE_LABELS: &[(&str, &str)] = &[
+    ("card", "template.card"),
+    ("toolbar", "template.toolbar"),
+    ("section", "template.section"),
+    ("form_field", "template.form_field"),
+    ("page_header", "template.page_header"),
+    ("status_bar", "template.status_bar"),
+    ("empty_state", "template.empty_state"),
+    ("confirm_row", "template.confirm_row"),
+];
 
 /// The catalogue entry with this identifier.
 pub fn by_id(id: &str) -> Option<&'static Spec> {
@@ -410,12 +620,16 @@ pub fn instantiate(id: &str) -> Option<Node> {
                 let target = spec.props.iter().find_map(|prop| match prop.target {
                     Target::BaseArg(at) if at == index => Some((prop.target, prop.kind)),
                     Target::VariantArg(at, _) if at == index => Some((prop.target, prop.kind)),
+                    Target::Keystroke(at) if at == index => Some((prop.target, prop.kind)),
                     _ => None,
                 });
                 match target {
                     // The encoder is the one `write` uses, so a fresh node and
                     // an edited one hold the same shape.
                     Some((_, Kind::Path)) => path_arg(None, value),
+                    // A keystroke is an expression too: `Kbd::new("cmd-k")`
+                    // does not compile.
+                    Some((Target::Keystroke(_), _)) => keystroke_arg(value),
                     // A variant is a path, not a string: `Icon::new("IconName::Check")`
                     // does not compile.
                     Some((Target::VariantArg(..), _)) => Arg::Verbatim((*value).into()),
@@ -436,6 +650,30 @@ pub fn instantiate(id: &str) -> Option<Node> {
         "radio" => node.set_call("label", Arg::Str("Radio".into())),
         "group_box" => node.set_call("title", Arg::Str("Group".into())),
         "alert" => node.set_call("title", Arg::Str("Note".into())),
+        // A copy button with nothing to copy is a button that does nothing.
+        "clipboard" => node.set_call("value", Arg::Str("Copied".into())),
+        // A breadcrumb and a tab bar with no labels draw an empty line: the
+        // component is there, the canvas shows nothing, and the drop reads as
+        // a failure. Two names each, in the same encoding `write` uses.
+        "breadcrumb" => {
+            if let Some(arg) = labels_arg("Home, Files") {
+                node.set_call("children", arg);
+            }
+        }
+        "tab_bar" => {
+            if let Some(arg) = labels_arg("First, Second") {
+                node.set_call("children", arg);
+            }
+        }
+        // Two calls and not one argument: `svg()` takes none, and gpui paints
+        // a drawing only where `style.text.color` says what to tint it with —
+        // an svg dropped without a colour is an element that lays out, takes
+        // its room, and shows nothing, which reads as a broken file rather than
+        // as a missing property.
+        "svg" => {
+            node.set_call("path", Arg::Str("assets/images/drawing.svg".into()));
+            node.set_call("text_color", Arg::Verbatim("rgb(0x333333)".into()));
+        }
         // A spacer with no `flex_1` takes no room and cannot be found again.
         "spacer" => node.set_flag("flex_1", true),
         _ => {}
@@ -458,12 +696,21 @@ pub fn uses_an_asset(root: &Node) -> bool {
             return;
         };
         for prop in spec.props {
-            if let (Target::BaseArg(index), Kind::Path) = (prop.target, prop.kind)
-                && let Base::Known { args, .. } = &node.base
-                && matches!(args.get(index), Some(Arg::Str(_)))
-            {
-                found = true;
-            }
+            // On the constructor for an image, on a call for an avatar — the
+            // question is the same one, and asking it of the base alone left
+            // every avatar in a project whose assets module was never declared,
+            // which is a picture that draws here and nowhere else.
+            let written = match (prop.target, prop.kind) {
+                (Target::BaseArg(index), Kind::Path) => match &node.base {
+                    Base::Known { args, .. } => matches!(args.get(index), Some(Arg::Str(_))),
+                    Base::Opaque(_) => false,
+                },
+                (Target::Method(name), Kind::Path) => {
+                    matches!(node.call(name).and_then(|call| call.args.first()), Some(Arg::Str(_)))
+                }
+                _ => false,
+            };
+            found |= written;
         }
     });
     found

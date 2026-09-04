@@ -3,6 +3,8 @@
 use gpui::prelude::*;
 use gpui::{AnyElement, Context, SharedString, div, px};
 use gpui_component::input::Input;
+use gpui_component::menu::ContextMenuExt as _;
+use gpui_component::resizable::{h_resizable, resizable_panel};
 use gpui_component::{Sizable as _, h_flex, v_flex};
 
 use crate::menu_model::ItemDef;
@@ -10,7 +12,7 @@ use crate::menufile::{Drop as MenuDrop, Selection};
 use crate::theme;
 use gpui::{Pixels, Point};
 
-use crate::workspace::{MenuField, Workspace};
+use crate::workspace::{MenuField, Workspace, fillable};
 
 use super::{DragGhost, section_title};
 
@@ -78,73 +80,150 @@ impl Workspace {
         }
         rows.push(menu_zone(MenuDrop::Menu(menus.menus.len()), cx));
 
+        let inspector_width = self.menu_inspector_width(cx);
+
         div()
             .flex()
             .flex_row()
             .flex_1()
             .overflow_hidden()
             .child(
-                v_flex()
-                    .flex_1()
-                    .p_4()
-                    .gap_1()
+                h_resizable("menus-inspecteur")
+                    .with_state(&self.menu_inspector_split)
                     .child(
-                        div()
-                            .text_xs()
-                            .text_color(theme::text_muted())
-                            .child(crate::tr("designer.project_menu_bar")),
+                        resizable_panel().child(fillable(
+                            v_flex()
+                                .size_full()
+                                .p_4()
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(theme::text_muted())
+                                        .child(crate::tr("designer.project_menu_bar")),
+                                )
+                                .children(rows)
+                                // One menu for the whole column, acting on the
+                                // selected row: `ContextMenuExt` hard-codes the
+                                // id of what it opens, so a menu per row would
+                                // leave every row sharing one open state. The
+                                // entries are the panel's own buttons, brought
+                                // to where the rows are.
+                                .context_menu(|menu, _window, _cx| {
+                                    menu.menu(
+                                        crate::tr("menu.move_up"),
+                                        Box::new(crate::actions::MoveMenuUp),
+                                    )
+                                    .menu(
+                                        crate::tr("menu.move_down"),
+                                        Box::new(crate::actions::MoveMenuDown),
+                                    )
+                                    .separator()
+                                    .menu(
+                                        crate::tr("menu.add_entry"),
+                                        Box::new(crate::actions::AddMenuEntry),
+                                    )
+                                    .menu(
+                                        crate::tr("menu.add_submenu"),
+                                        Box::new(crate::actions::AddSubmenu),
+                                    )
+                                    .menu(
+                                        crate::tr("menu.delete_menu_entry"),
+                                        Box::new(crate::actions::DeleteMenuEntry),
+                                    )
+                                }),
+                        )),
                     )
-                    .children(rows),
-            )
-            .child(
-                v_flex()
-                    .w(px(280.))
-                    .flex_none()
-                    .border_l_1()
-                    .border_color(theme::border())
-                    .bg(theme::panel_bg())
-                    .child(self.render_menu_inspector(cx))
-                    .child(section_title("designer.add"))
                     .child(
-                        v_flex()
-                            .gap_1()
-                            .p_2()
-                            .child(menu_button("menu-add", "designer.menu", cx, |this, cx| {
-                                this.add_menu(cx)
-                            }))
-                            .child(menu_button("item-add", "designer.entry", cx, |this, cx| {
-                                this.add_menu_item(false, cx)
-                            }))
-                            .child(menu_button("sep-add", "designer.separator", cx, |this, cx| {
-                                this.add_menu_item(true, cx)
-                            }))
-                            .child(menu_button(
-                                "submenu-add",
-                                "designer.submenu",
-                                cx,
-                                |this, cx| this.add_submenu(cx),
-                            ))
-                            .child(menu_button("menu-del", "designer.delete", cx, |this, cx| {
-                                this.remove_menu_selection(cx)
-                            })),
-                    )
-                    .child(section_title("designer.order"))
-                    .child(
-                        h_flex()
-                            .gap_1()
-                            .p_2()
-                            .child(menu_button("menu-up", "designer.move_up", cx, |this, cx| {
-                                this.move_menu_selection(true, cx)
-                            }))
-                            .child(menu_button(
-                                "menu-down",
-                                "designer.move_down",
-                                cx,
-                                |this, cx| this.move_menu_selection(false, cx),
+                        resizable_panel()
+                            .size(px(inspector_width))
+                            // Below this its fields fold in on themselves; beyond it
+                            // there are no menu rows left to edit.
+                            .size_range(px(220.)..px(560.))
+                            .child(fillable(
+                                v_flex()
+                                    .size_full()
+                                    .border_l_1()
+                                    .border_color(theme::border())
+                                    .bg(theme::panel_bg())
+                                    .child(self.render_menu_inspector(cx))
+                                    .child(section_title("designer.add"))
+                                    .child(
+                                        v_flex()
+                                            .gap_1()
+                                            .p_2()
+                                            .child(menu_button(
+                                                "menu-add",
+                                                "designer.menu",
+                                                cx,
+                                                |this, cx| this.add_menu(cx),
+                                            ))
+                                            .child(menu_button(
+                                                "item-add",
+                                                "designer.entry",
+                                                cx,
+                                                |this, cx| this.add_menu_item(false, cx),
+                                            ))
+                                            .child(menu_button(
+                                                "sep-add",
+                                                "designer.separator",
+                                                cx,
+                                                |this, cx| this.add_menu_item(true, cx),
+                                            ))
+                                            .child(menu_button(
+                                                "submenu-add",
+                                                "designer.submenu",
+                                                cx,
+                                                |this, cx| this.add_submenu(cx),
+                                            ))
+                                            .child(menu_button(
+                                                "menu-del",
+                                                "designer.delete",
+                                                cx,
+                                                |this, cx| this.remove_menu_selection(cx),
+                                            )),
+                                    )
+                                    .child(section_title("designer.order"))
+                                    .child(
+                                        h_flex()
+                                            .gap_1()
+                                            .p_2()
+                                            .child(menu_button(
+                                                "menu-up",
+                                                "designer.move_up",
+                                                cx,
+                                                |this, cx| this.move_menu_selection(true, cx),
+                                            ))
+                                            .child(menu_button(
+                                                "menu-down",
+                                                "designer.move_down",
+                                                cx,
+                                                |this, cx| this.move_menu_selection(false, cx),
+                                            )),
+                                    ),
                             )),
                     ),
             )
             .into_any_element()
+    }
+
+    /// The width the menu editor's inspector should take, and where the width
+    /// the handle left is picked back up.
+    ///
+    /// Kept in memory only, like the other splits: writing a file on every
+    /// frame of a drag would be absurd, and `settings::flush` puts it away at
+    /// quit.
+    fn menu_inspector_width(&self, cx: &mut Context<Self>) -> f32 {
+        if let Some(largeur) = self.menu_inspector_split.read(cx).sizes().last().copied() {
+            let largeur = f32::from(largeur);
+            if largeur > 0. {
+                crate::settings::stage_state(cx, |state| {
+                    state.menu_inspector_width = Some(largeur);
+                });
+                return largeur;
+            }
+        }
+        crate::settings::state(cx).menu_inspector_width.unwrap_or(280.)
     }
 
     /// The fields of the selected menu or entry.
@@ -274,6 +353,13 @@ pub(super) fn menu_row(
         .hover(|this| this.bg(theme::hover_bg()))
         .child(label)
         .on_click(cx.listener(move |this, _, _, cx| this.select_menu(target, cx)))
+        // The menu acts on the selection, so the right click has to move it
+        // before the menu is built — which it does, the menu being deferred to
+        // the next frame. Same shape as the tree's rows.
+        .on_mouse_down(
+            gpui::MouseButton::Right,
+            cx.listener(move |this, _, _, cx| this.select_menu(target, cx)),
+        )
 }
 
 /// One button of the menu panel.

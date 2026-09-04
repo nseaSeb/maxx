@@ -32,6 +32,17 @@ fn binding_field(source: &str) -> Option<String> {
     is_identifier(name).then(|| name.to_string())
 }
 
+/// Whether this property can read the view's state instead of a literal.
+///
+/// A text field and a text method can: what goes in is a string, and
+/// `self.title.clone()` is one. The two targets that wrap the text in an
+/// expression of their own cannot — a keystroke is parsed, a list is an array —
+/// and the inspector asks this before drawing the toggle, or the button would
+/// be there and do nothing.
+pub fn bindable(prop: &Prop) -> bool {
+    matches!(prop.kind, Kind::Text) && matches!(prop.target, Target::BaseArg(_) | Target::Method(_))
+}
+
 /// Writes a text property as an expression reading the view's state, or back to
 /// a literal when `expression` is `None`.
 pub fn write_binding(node: &mut Node, prop: &Prop, expression: Option<&str>) {

@@ -6,8 +6,10 @@
 
 use gpui::prelude::*;
 use gpui::{AnyElement, Context, SharedString, div, px};
+use gpui_component::menu::ContextMenuExt as _;
 use gpui_component::scroll::Scrollbar;
 use gpui_component::{h_flex, v_flex};
+use rust_i18n::t;
 
 use crate::model::Path;
 use crate::theme;
@@ -23,7 +25,8 @@ mod palette;
 mod palette_editor;
 mod tree;
 
-pub(crate) use canvas::missing_image;
+pub use canvas::{icon_name, icon_named};
+pub(crate) use canvas::{missing_image, still_node};
 pub use palette::{label_matches, matches_query};
 
 impl Workspace {
@@ -135,6 +138,12 @@ impl Workspace {
         // Never dirty: the reader does not write.
         let read_tab = self.code().filter(|file| !file.of_view).map(|file| file.name());
 
+        // The editor's name is read here rather than inside the menu builder,
+        // which is `'static` and cannot hold the application. Changing the
+        // editor repaints every workspace, so the label follows on the next
+        // frame — the same arrangement as the project panel's.
+        let editor = crate::tools::editor_label(cx);
+
         div()
             .flex()
             .flex_row()
@@ -143,35 +152,84 @@ impl Workspace {
             .bg(theme::panel_bg())
             .border_b_1()
             .border_color(theme::border())
-            .children(tabs.into_iter().map(|(index, name, active, dirty)| {
-                h_flex()
-                    .id(SharedString::from(format!("tab-{index}")))
-                    .gap_1()
-                    .px_3()
-                    .cursor_pointer()
-                    .bg(if active { theme::bg() } else { theme::panel_bg() })
-                    .border_r_1()
-                    .border_color(theme::border())
-                    .text_xs()
-                    .text_color(if active { theme::text() } else { theme::text_muted() })
-                    .child(name)
-                    .when(dirty, |this| this.child("•"))
-                    .child(
-                        div()
-                            .id(SharedString::from(format!("tab-close-{index}")))
-                            .px_1()
-                            .rounded_sm()
-                            .hover(|this| this.bg(theme::hover_bg()))
-                            .child("×")
+            .child(
+                // The view tabs, and only them, under the menu. The reader's tab
+                // is a sibling outside it: none of these six entries means
+                // anything for a document that is not a view — it cannot be
+                // revealed among the views, and "close the others" has no others
+                // to name. A menu that opened over it would speak about some
+                // other tab, which is the trap `ContextMenuExt` sets by
+                // hard-coding the id of what it opens.
+                div()
+                    .flex()
+                    .flex_row()
+                    .children(tabs.into_iter().map(|(index, name, active, dirty)| {
+                        h_flex()
+                            .id(SharedString::from(format!("tab-{index}")))
+                            .gap_1()
+                            .px_3()
+                            .cursor_pointer()
+                            .bg(if active { theme::bg() } else { theme::panel_bg() })
+                            .border_r_1()
+                            .border_color(theme::border())
+                            .text_xs()
+                            .text_color(if active { theme::text() } else { theme::text_muted() })
+                            .child(name)
+                            .when(dirty, |this| this.child("•"))
+                            .child(
+                                div()
+                                    .id(SharedString::from(format!("tab-close-{index}")))
+                                    .px_1()
+                                    .rounded_sm()
+                                    .hover(|this| this.bg(theme::hover_bg()))
+                                    .child("×")
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        cx.stop_propagation();
+                                        this.close_view(index, cx);
+                                    })),
+                            )
                             .on_click(cx.listener(move |this, _, _, cx| {
-                                cx.stop_propagation();
-                                this.close_view(index, cx);
-                            })),
-                    )
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.activate_view(index, cx);
+                                this.activate_view(index, cx);
+                            }))
+                            // The menu speaks about the tab in front, so the right click
+                            // has to bring this one forward before the menu is built —
+                            // which it does, the menu being deferred to the next frame.
+                            // Activating also lights the file in the project panel,
+                            // which is what `Open in <editor>` reads.
+                            .on_mouse_down(
+                                gpui::MouseButton::Right,
+                                cx.listener(move |this, _, _, cx| this.activate_view(index, cx)),
+                            )
                     }))
-            }))
+                    .context_menu(move |menu, _window, _cx| {
+                        menu.menu(
+                            crate::tr("menu.close_view"),
+                            Box::new(crate::actions::CloseWindow),
+                        )
+                        .menu(
+                            crate::tr("menu.close_other_tabs"),
+                            Box::new(crate::actions::CloseOtherTabs),
+                        )
+                        .menu(
+                            crate::tr("menu.close_tabs_to_the_right"),
+                            Box::new(crate::actions::CloseTabsToTheRight),
+                        )
+                        .separator()
+                        .menu(
+                            crate::tr("menu.reveal_tab_in_project"),
+                            Box::new(crate::actions::RevealTabInProject),
+                        )
+                        .menu(
+                            crate::tr("menu.copy_tab_path"),
+                            Box::new(crate::actions::CopyTabPath),
+                        )
+                        .separator()
+                        .menu(
+                            t!("context.open_in", editor = editor).into_owned(),
+                            Box::new(crate::actions::OpenInZed),
+                        )
+                    }),
+            )
             .children(read_tab.map(|name| {
                 h_flex()
                     .id("tab-code")
@@ -227,27 +285,7 @@ impl Workspace {
                             // Below this the tree shows two rows; beyond it, it
                             // leaves the inspector nothing.
                             .size_range(px(80.)..px(560.))
-                            .child(fillable(
-                                div()
-                                    .relative()
-                                    .size_full()
-                                    .child(
-                                        div()
-                                            .id("side-structure")
-                                            .size_full()
-                                            .overflow_y_scroll()
-                                            .track_scroll(&self.tree_scroll)
-                                            .child(self.render_tree(cx)),
-                                    )
-                                    .child(
-                                        div()
-                                            .absolute()
-                                            .top_0()
-                                            .right_0()
-                                            .bottom_0()
-                                            .child(Scrollbar::vertical(&self.tree_scroll)),
-                                    ),
-                            )),
+                            .child(fillable(self.render_tree_pane(cx))),
                     )
                     .child(
                         resizable_panel().child(fillable(
@@ -311,6 +349,39 @@ impl Render for DragGhost {
             .text_xs()
             .child(self.label.clone())
     }
+}
+
+/// The menu the canvas and the structure tree both open on a right click.
+///
+/// One builder for the two panels, because both are asking about the same
+/// thing: the selected node. And one menu per panel rather than one per node —
+/// `ContextMenuExt::context_menu` hard-codes the element id of what it opens, so
+/// a menu per node would leave every node sharing one open state.
+///
+/// Nothing is greyed out from the selection: the menu is built from the builder
+/// of the frame it was painted with, so anything read here would be one right
+/// click behind. An entry that refuses says so afterwards, in the status bar,
+/// the way `DeleteFile` already does.
+pub(super) fn node_menu(
+    menu: gpui_component::menu::PopupMenu,
+    _window: &mut Window,
+    _cx: &mut Context<gpui_component::menu::PopupMenu>,
+) -> gpui_component::menu::PopupMenu {
+    menu.menu(crate::tr("menu.duplicate_node"), Box::new(crate::actions::DuplicateNode))
+        .menu(crate::tr("menu.copy_node"), Box::new(crate::actions::CopyNode))
+        .menu(crate::tr("menu.paste_node"), Box::new(crate::actions::PasteNode))
+        .separator()
+        .menu(crate::tr("menu.wrap_in_column"), Box::new(crate::actions::WrapInColumn))
+        .menu(crate::tr("menu.wrap_in_row"), Box::new(crate::actions::WrapInRow))
+        .menu(crate::tr("menu.unwrap"), Box::new(crate::actions::Unwrap))
+        .separator()
+        .menu(crate::tr("menu.move_node_up"), Box::new(crate::actions::MoveNodeUp))
+        .menu(crate::tr("menu.move_node_down"), Box::new(crate::actions::MoveNodeDown))
+        .separator()
+        .menu(crate::tr("menu.delete_node"), Box::new(crate::actions::DeleteNode))
+        .separator()
+        .menu(crate::tr("context.view_code"), Box::new(crate::actions::ViewCode))
+        .menu(crate::tr("menu.open_handler"), Box::new(crate::actions::OpenHandler))
 }
 
 /// Section header inside the right-hand panels.

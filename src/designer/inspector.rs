@@ -171,7 +171,14 @@ impl Workspace {
                 .calls
                 .iter()
                 .filter(|call| {
-                    call.name != crate::model::CHILD_SLOT && !registry::covers(spec, &call.name)
+                    // A hover closure maxx cannot read is owned by no property:
+                    // the six rows above refuse to touch it, so without this it
+                    // would be a call the file holds and the panel never shows —
+                    // which is the one thing this section exists to prevent.
+                    let unread_hover =
+                        call.name == "hover" && registry::hover_calls(node).is_none();
+                    call.name != crate::model::CHILD_SLOT
+                        && (unread_hover || !registry::covers(spec, &call.name))
                 })
                 // Filtered like everything else above it: searching `gap` and
                 // getting the one matching row followed by every hand-written
@@ -252,7 +259,13 @@ impl Workspace {
         prop: &'static Prop,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let current = registry::read(node, prop).unwrap_or_default();
+        // A property of the state field reads from the view's `new`, not from
+        // the node: nothing of it is written in the managed region.
+        let current = match prop.target {
+            registry::Target::Initializer(_) => self.initializer_value(prop),
+            _ => registry::read(node, prop),
+        }
+        .unwrap_or_default();
         let row = h_flex().items_center().gap_2().px_3().py_1().child(
             div()
                 .w(px(90.))
@@ -391,7 +404,13 @@ impl Workspace {
                         ),
                     Some(state) if matches!(prop.kind, Kind::Text) => row
                         .child(div().flex_1().child(Input::new(state).small()))
-                        .child(binding_toggle(spec, prop, false, cx)),
+                        // Not every text field can read a field of the view: a
+                        // keystroke and a list of labels are wrapped in an
+                        // expression of their own, so a binding has nowhere to
+                        // go and the button would sit there doing nothing.
+                        .children(
+                            registry::bindable(prop).then(|| binding_toggle(spec, prop, false, cx)),
+                        ),
                     Some(state) => row.child(div().flex_1().child(Input::new(state).small())),
                     // No input this frame: the sync runs at the top of `render`, so
                     // this only shows for a frame after a selection change.
@@ -680,6 +699,23 @@ pub(super) fn apply_placement<E: Styled>(element: E, calls: &[crate::model::Call
 /// A call that is not listed here is still carried by the model and written to
 /// the file; it simply has no effect on the preview.
 pub(super) fn apply<T: Styled>(mut element: T, calls: &[Call]) -> T {
+    // gpui's border starts out transparent, so a width alone draws nothing and
+    // the property reads as broken. The preview lends it maxx's own separator
+    // colour — but only where the developer has not chosen one, since the calls
+    // are applied in the order the file holds them and the lent colour would
+    // otherwise land on top of the chosen one.
+    //
+    // Read as "no colour the preview can *use*", not "no `border_color` call":
+    // a hand-written `.border_color(cx.theme().border)` is a call the preview
+    // cannot evaluate, so its arm leaves the element untouched. Counting it as
+    // a chosen colour withheld the tint as well, and the canvas then showed no
+    // border at all where the running application draws one — which reads as
+    // the border property being broken rather than as a colour maxx cannot
+    // resolve.
+    let tinted = !calls.iter().any(|call| {
+        call.name == "border_color"
+            && call.args.first().and_then(|arg| colour(&arg.to_source())).is_some()
+    });
     for call in calls {
         let argument = call.args.first().map(|arg| arg.to_source()).unwrap_or_default();
         element = match call.name.as_str() {
@@ -697,10 +733,37 @@ pub(super) fn apply<T: Styled>(mut element: T, calls: &[Call]) -> T {
             "p_4" => element.p_4(),
             "p_6" => element.p_6(),
             "p_8" => element.p_8(),
+            "m_0" => element.m_0(),
+            "m_1" => element.m_1(),
+            "m_2" => element.m_2(),
+            "m_3" => element.m_3(),
+            "m_4" => element.m_4(),
+            "m_6" => element.m_6(),
+            "m_8" => element.m_8(),
+            "mx_0" => element.mx_0(),
+            "mx_1" => element.mx_1(),
+            "mx_2" => element.mx_2(),
+            "mx_3" => element.mx_3(),
+            "mx_4" => element.mx_4(),
+            "mx_6" => element.mx_6(),
+            "mx_8" => element.mx_8(),
+            "my_0" => element.my_0(),
+            "my_1" => element.my_1(),
+            "my_2" => element.my_2(),
+            "my_3" => element.my_3(),
+            "my_4" => element.my_4(),
+            "my_6" => element.my_6(),
+            "my_8" => element.my_8(),
             "items_start" => element.items_start(),
             "items_center" => element.items_center(),
             "items_end" => element.items_end(),
+            "justify_start" => element.justify_start(),
+            "justify_center" => element.justify_center(),
+            "justify_end" => element.justify_end(),
+            "justify_between" => element.justify_between(),
+            "justify_around" => element.justify_around(),
             "flex_1" => element.flex_1(),
+            "flex_wrap" => element.flex_wrap(),
             // The shared properties, which the panel puts first and the board
             // used to ignore: a width typed in the inspector reached the file
             // and changed nothing on screen, which reads as a defect of the
@@ -711,6 +774,22 @@ pub(super) fn apply<T: Styled>(mut element: T, calls: &[Call]) -> T {
             },
             "h" => match pixels(&argument) {
                 Some(value) => element.h(px(value)),
+                None => element,
+            },
+            "min_w" => match pixels(&argument) {
+                Some(value) => element.min_w(px(value)),
+                None => element,
+            },
+            "max_w" => match pixels(&argument) {
+                Some(value) => element.max_w(px(value)),
+                None => element,
+            },
+            "min_h" => match pixels(&argument) {
+                Some(value) => element.min_h(px(value)),
+                None => element,
+            },
+            "max_h" => match pixels(&argument) {
+                Some(value) => element.max_h(px(value)),
                 None => element,
             },
             "w_full" => element.w_full(),
@@ -740,15 +819,49 @@ pub(super) fn apply<T: Styled>(mut element: T, calls: &[Call]) -> T {
                 "FontWeight::BOLD" => element.font_weight(gpui::FontWeight::BOLD),
                 _ => element.font_weight(gpui::FontWeight::NORMAL),
             },
+            "line_height" => match pixels(&argument) {
+                Some(value) => element.line_height(px(value)),
+                None => element,
+            },
+            "italic" => element.italic(),
+            "underline" => element.underline(),
+            "truncate" => element.truncate(),
+            "whitespace_nowrap" => element.whitespace_nowrap(),
             "rounded_none" => element.rounded_none(),
             "rounded_sm" => element.rounded_sm(),
             "rounded_md" => element.rounded_md(),
             "rounded_lg" => element.rounded_lg(),
             "rounded_full" => element.rounded_full(),
+            "border_0" => element.border_0(),
+            "border_1" => tint(element.border_1(), tinted),
+            "border_2" => tint(element.border_2(), tinted),
+            "border_4" => tint(element.border_4(), tinted),
+            "border_color" => match colour(&argument) {
+                Some(value) => element.border_color(value),
+                None => element,
+            },
+            "shadow_sm" => element.shadow_sm(),
+            "shadow_md" => element.shadow_md(),
+            "shadow_lg" => element.shadow_lg(),
+            "shadow_xl" => element.shadow_xl(),
+            "opacity" => match argument.trim_end_matches('.').parse::<f32>() {
+                Ok(value) => element.opacity(value),
+                Err(_) => element,
+            },
+            "overflow_hidden" => element.overflow_hidden(),
+            "cursor_pointer" => element.cursor_pointer(),
             _ => element,
         };
     }
     element
+}
+
+/// The separator colour, on a border the developer has not coloured himself.
+///
+/// Nothing is written to the file here: this is the canvas making a one-pixel
+/// border visible, which is the whole reason the property is worth having.
+fn tint<T: Styled>(element: T, lend: bool) -> T {
+    if lend { element.border_color(theme::border()) } else { element }
 }
 
 /// `px(40.)` read back as a number, for the preview.

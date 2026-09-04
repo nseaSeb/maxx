@@ -3,7 +3,7 @@
 
 use crate::model::{Arg, Base, Node};
 
-use super::catalogue::{COMMON, INTERACTIVE, TEXT_COMMON};
+use super::catalogue::{COMMON, HOVER, INTERACTIVE, TEXT_COMMON};
 use super::scrollbar::hold_for;
 use super::state::handler_name;
 use super::{Common, Kind, Prop, Spec, Target};
@@ -22,7 +22,13 @@ pub fn props(spec: &'static Spec) -> Vec<&'static Prop> {
         Common::Element => INTERACTIVE,
         _ => &[],
     };
-    spec.props.iter().chain(shared).chain(text).chain(element).collect()
+    // `hover` is a method of `InteractiveElement`, which only a gpui element
+    // has: the same gate the tooltip is behind, and for the same reason.
+    let hover: &[Prop] = match spec.common {
+        Common::Element => HOVER,
+        _ => &[],
+    };
+    spec.props.iter().chain(shared).chain(text).chain(element).chain(hover).collect()
 }
 
 /// Whether any property of `spec` owns the call named `name`.
@@ -47,6 +53,13 @@ pub fn covers(spec: &'static Spec, name: &str) -> bool {
         // maxx writes it, but it cannot prove it wrote *this* one, and hiding
         // a call it might then delete is how a hand-written line disappears.
         Target::Scrollbar => name == "track_scroll",
+        // An argument of the constructor, like the two above it.
+        Target::Keystroke(_) => false,
+        Target::Labels(method) => method == name,
+        // Not a call on the node at all: it lives in the view's `new`.
+        Target::Initializer(_) => false,
+        // The closure as a whole, whichever of its calls this property owns.
+        Target::Hover(_) => name == "hover",
     })
 }
 
@@ -84,6 +97,45 @@ pub fn editable(node: &Node, prop: &Prop) -> bool {
             },
             Base::Opaque(_) => false,
         },
+        // A path on a call rather than on the constructor — an avatar's
+        // source. The same three shapes as the base argument above: maxx's own
+        // string, the older `PathBuf::from`, or nothing yet.
+        (Target::Method(name), Kind::Path) => match node.call(name).and_then(|c| c.args.first()) {
+            None | Some(Arg::Str(_)) => !node.is_opaque(),
+            Some(Arg::Verbatim(source)) => path_value(source).is_some(),
+            Some(_) => false,
+        },
+        // Only the expression maxx writes. Anything else is the developer's —
+        // `Kbd::new(self.shortcut.clone())` — and the first keystroke in the
+        // field would replace it with a literal that means something else.
+        (Target::Keystroke(index), _) => match &node.base {
+            Base::Known { args, .. } => match args.get(index) {
+                None => true,
+                Some(Arg::Verbatim(source)) => keystroke_text(source).is_some(),
+                Some(_) => false,
+            },
+            Base::Opaque(_) => false,
+        },
+        // And the same for a list: `.children(self.crumbs.clone())` is left
+        // alone rather than overwritten with an array of literals.
+        (Target::Labels(name), _) => match node.call(name).and_then(|c| c.args.first()) {
+            None => !node.is_opaque(),
+            Some(Arg::Verbatim(source)) => label_texts(source).is_some(),
+            Some(_) => false,
+        },
+        // Only a closure maxx can read back — one parameter, and a plain chain
+        // of calls on it. A closure of the developer's own is shown and left
+        // alone, exactly like a tooltip they built themselves.
+        (Target::Hover(_), _) => match node.call("hover") {
+            Some(call) => {
+                call.args.first().is_some_and(|arg| hover_chain(&arg.to_source()).is_some())
+            }
+            None => !node.is_opaque(),
+        },
+        // Whether the initializer is one maxx may rewrite is a question about
+        // the view's source, not about the node — the workspace holds both and
+        // answers it there, by asking `Init::read` for a value.
+        (Target::Initializer(_), _) => !node.is_opaque(),
         (Target::Method(name), Kind::Handler) => match node.call(name) {
             Some(call) => {
                 call.args.first().is_some_and(|arg| handler_name(&arg.to_source()).is_some())
@@ -92,6 +144,27 @@ pub fn editable(node: &Node, prop: &Prop) -> bool {
         },
         _ => !node.is_opaque(),
     }
+}
+
+/// The property holding the words a component says out loud.
+///
+/// What a double click on the canvas types into. It cannot be "the first
+/// `Kind::Text` property": a button's first one is `prop.id`, and typing a
+/// label into the element's own name is the opposite of the gesture. Which is
+/// which is already written down — [`super::GROUPS`] files `prop.id` under
+/// `Group::Action`, "the element's own name, which is what a handler and a
+/// tooltip hang on", and everything a component shows under `Group::Text` — so
+/// the question is asked of that table rather than of the property's spelling.
+///
+/// The component's own properties only, never the shared ones: `prop.tooltip`
+/// is text every element accepts, and a column has nothing to say on the
+/// canvas.
+pub fn spoken_text(node: &Node) -> Option<&'static Prop> {
+    super::of(node)?.props.iter().find(|prop| {
+        matches!(prop.kind, Kind::Text)
+            && super::group_of(prop) == super::Group::Text
+            && editable(node, prop)
+    })
 }
 
 /// Reads the current value of a property, as text for the inspector.
@@ -121,10 +194,30 @@ pub fn read(node: &Node, prop: &Prop) -> Option<String> {
                 _ => color_value(&source),
             }
         }
+        // The older `PathBuf::from` spelling reads back here too, so an avatar
+        // written by hand shows its file rather than the expression around it.
+        Target::Method(name) if matches!(prop.kind, Kind::Path) => {
+            node.call(name).and_then(|call| call.args.first()).map(|arg| match arg {
+                Arg::Str(value) => value.clone(),
+                Arg::Verbatim(source) => path_value(source).unwrap_or_else(|| source.clone()),
+                other => other.to_source(),
+            })
+        }
         Target::Variant(name, _) => {
             node.call(name).and_then(|call| call.args.first()).map(|arg| arg.to_source())
         }
         Target::Scrollbar => Some(node.call("track_scroll").is_some().to_string()),
+        Target::Keystroke(index) => {
+            let source = match &node.base {
+                Base::Known { args, .. } => args.get(index)?.to_source(),
+                Base::Opaque(_) => return None,
+            };
+            Some(keystroke_text(&source).unwrap_or(source))
+        }
+        Target::Labels(name) => {
+            let source = node.call(name)?.args.first()?.to_source();
+            Some(label_texts(&source).map(|items| items.join(", ")).unwrap_or(source))
+        }
         Target::Tooltip => {
             let source = node.call("tooltip")?.args.first()?.to_source();
             Some(tooltip_text(&source).unwrap_or(source))
@@ -151,6 +244,14 @@ pub fn read(node: &Node, prop: &Prop) -> Option<String> {
         }
         Target::Family(names) => {
             names.iter().find(|name| node.call(name).is_some()).map(|name| (*name).to_string())
+        }
+        // The node holds nothing of it; the workspace reads the initializer.
+        Target::Initializer(_) => None,
+        // The closure's own chain, read through the very property its ordinary
+        // twin is read through.
+        Target::Hover(inner) => {
+            let (_, chain) = hover_calls(node)?;
+            read(&chain, &Prop { label: prop.label, target: *inner, kind: prop.kind })
         }
     }
 }
@@ -191,6 +292,19 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
             } else {
                 args.push(arg);
             }
+        }
+        // The same guards as the base argument: only maxx's own writing is
+        // replaced, and only by a path that stays inside the project.
+        Target::Method(name) if matches!(prop.kind, Kind::Path) => {
+            if !editable(node, prop) || leaves_the_project(value) {
+                return;
+            }
+            if value.trim().is_empty() {
+                node.remove_call(name);
+                return;
+            }
+            let arg = path_arg(node.call(name).and_then(|call| call.args.first()), value);
+            node.set_call(name, arg);
         }
         Target::Method(name) if matches!(prop.kind, Kind::Number) => {
             if value.trim().is_empty() {
@@ -285,6 +399,35 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
                 )),
             );
         }
+        // No empty case, and no writing of what gpui cannot read: the argument
+        // is what the constructor takes, and a keystroke it refuses would make
+        // the generated application draw an empty key.
+        Target::Keystroke(index) => {
+            if !editable(node, prop) || !crate::menufile::is_keystroke(value.trim()) {
+                return;
+            }
+            let Base::Known { args, .. } = &mut node.base else {
+                return;
+            };
+            let arg = keystroke_arg(value.trim());
+            if index < args.len() {
+                args[index] = arg;
+            } else {
+                args.push(arg);
+            }
+        }
+        Target::Labels(name) => {
+            if !editable(node, prop) {
+                return;
+            }
+            // An empty field removes the call rather than writing `[]`: a
+            // breadcrumb with no items is what a fresh `Breadcrumb::new()` is,
+            // and the two should read the same in the file.
+            match labels_arg(value) {
+                Some(arg) => node.set_call(name, arg),
+                None => node.remove_call(name),
+            }
+        }
         Target::Flag(name) => node.set_flag(name, value == "true"),
         Target::Scrollable(name) => {
             let hold = hold_for(name);
@@ -328,6 +471,26 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
                 node.set_flag(value, true);
             }
         }
+        // Nothing on the node: the value belongs to the state field, and
+        // `Workspace::edit_initializer` is what carries it into `new`.
+        Target::Initializer(_) => {}
+        Target::Hover(inner) => {
+            if !editable(node, prop) {
+                return;
+            }
+            // The developer's own parameter name is kept: `|s|` stays `|s|`.
+            let (name, mut chain) =
+                hover_calls(node).unwrap_or_else(|| ("this".to_string(), Node::known("div")));
+            write(&mut chain, &Prop { label: prop.label, target: *inner, kind: prop.kind }, value);
+            match chain_source(&chain) {
+                // An empty chain would write `.hover(|this| this)`, which is a
+                // call that says nothing and cannot be told from a leftover.
+                None => node.remove_call("hover"),
+                Some(calls) => {
+                    node.set_call("hover", Arg::Verbatim(format!("|{name}| {name}{calls}")))
+                }
+            }
+        }
     }
 }
 
@@ -337,6 +500,25 @@ pub fn write(node: &mut Node, prop: &Prop, value: &str) {
 /// behaviour for the file, and the wrong one for the person typing.
 pub fn validate(prop: &Prop, value: &str) -> Option<&'static str> {
     let value = value.trim();
+    // Asked of the target and not of the kind, because the kind is `Text`: the
+    // field takes a shortcut and the file takes an expression around it.
+    // Empty is refused like anything else gpui cannot read, and for the same
+    // reason as the initializer below: there is no empty shape. `Kbd::new`
+    // takes its keystroke in the constructor, so a component without one does
+    // not compile. Letting the field pass silently was worse than an error —
+    // `write` refused it further down, so clearing the box reported success,
+    // changed nothing, and put the old shortcut back on the next rebuild.
+    if let Target::Keystroke(_) = prop.target {
+        return (!crate::menufile::is_keystroke(value)).then_some("error.keystroke");
+    }
+    // A property of the initializer with no empty shape: a dropdown holding
+    // nothing is not something maxx writes, and the field should say so rather
+    // than swallow the keystroke that emptied it.
+    if let Target::Initializer(init) = prop.target
+        && init.off.is_none()
+    {
+        return value.is_empty().then_some("error.items_empty");
+    }
     match prop.kind {
         Kind::Number if !value.is_empty() && pixel_literal(value).is_none() => Some("error.length"),
         Kind::Ratio if !value.is_empty() && float_literal(value).is_none() => Some("error.number"),
@@ -372,6 +554,156 @@ pub fn tooltip_text(source: &str) -> Option<String> {
     // And it has to be the closure maxx writes, not something of the
     // developer's that merely holds a `Tooltip::new`.
     after.starts_with(").build(window, cx)").then_some(text)
+}
+
+/// The shortcut of a keystroke expression, when it is one maxx wrote.
+///
+/// Anything else — a field of the view, a `Keystroke` built by hand — is left
+/// as it is written and shown that way, exactly like a tooltip closure.
+pub fn keystroke_text(source: &str) -> Option<String> {
+    let rest = source.strip_prefix("Keystroke::parse(\"")?;
+    let (text, after) = crate::model::read_literal(rest)?;
+    after.starts_with(").unwrap_or_default()").then_some(text)
+}
+
+/// The labels of an array of string literals, when it is one maxx wrote.
+///
+/// `["Home", "Files"]` reads back as the two names. `None` for anything else,
+/// which is what tells [`editable`] to leave the call alone.
+pub fn label_texts(source: &str) -> Option<Vec<String>> {
+    let mut rest = source.strip_prefix('[')?.trim_start();
+    let mut items: Vec<String> = Vec::new();
+    while !rest.starts_with(']') {
+        if !items.is_empty() {
+            rest = rest.strip_prefix(',')?.trim_start();
+            // A trailing comma, which `rustfmt` writes on a broken line.
+            if rest.starts_with(']') {
+                break;
+            }
+        }
+        rest = rest.strip_prefix('"')?;
+        let (text, after) = crate::model::read_literal(rest)?;
+        items.push(text);
+        rest = after.trim_start();
+    }
+    rest.strip_prefix(']')?.is_empty().then_some(items)
+}
+
+/// `cmd-k` becomes the expression `Kbd::new` takes.
+pub(super) fn keystroke_arg(value: &str) -> Arg {
+    Arg::Verbatim(format!(
+        "Keystroke::parse(\"{}\").unwrap_or_default()",
+        crate::model::escape(value)
+    ))
+}
+
+/// `Home, Files` becomes `["Home", "Files"]` — or nothing, for an empty list.
+///
+/// The comma is the separator, so a label holding one cannot be written from
+/// the inspector; it still reads back, because the array is read literal by
+/// literal rather than split on commas.
+pub(super) fn labels_arg(value: &str) -> Option<Arg> {
+    let items: Vec<String> = value
+        .split(',')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(|item| format!("\"{}\"", crate::model::escape(item)))
+        .collect();
+    (!items.is_empty()).then(|| Arg::Verbatim(format!("[{}]", items.join(", "))))
+}
+
+/// The hover closure of a node, as a parameter name and a chain of calls.
+///
+/// `None` for a node with no hover, and for a closure maxx cannot read: one
+/// taking anything but a single parameter, or whose body is not that parameter
+/// followed by calls. The rule the tooltip already follows — what maxx wrote it
+/// rewrites, what someone else wrote it shows and leaves.
+pub fn hover_calls(node: &Node) -> Option<(String, Node)> {
+    hover_chain(&node.call("hover")?.args.first()?.to_source())
+}
+
+/// The same, read off the closure's own text.
+///
+/// The chain is handed to the ordinary parser by standing a `div()` where the
+/// parameter was: a chain of style calls is a chain of style calls, and reusing
+/// the reader is what keeps a hover background spelt the way a background is.
+fn hover_chain(source: &str) -> Option<(String, Node)> {
+    let rest = source.trim().strip_prefix('|')?;
+    let (name, body) = rest.split_once('|')?;
+    let name = name.trim();
+    if !is_identifier(name) {
+        return None;
+    }
+    // `rustfmt` wraps a closure body that no longer fits on one line in a
+    // block: `|s| { s.bg(..).rounded_md() }`. That is the same closure, and a
+    // developer who ran `cargo fmt` has not edited anything — read without the
+    // braces, the six rows would go quiet after their first save.
+    let body = body.trim();
+    let body = match body.strip_prefix('{').and_then(|rest| rest.trim_end().strip_suffix('}')) {
+        Some(inner) => inner.trim(),
+        None => body,
+    };
+    let chain = body.strip_prefix(name)?;
+    // `|this| thistle.bg(..)` is not a chain on `this`.
+    if !chain.is_empty() && !chain.starts_with('.') {
+        return None;
+    }
+    let node = crate::parser::parse_expr(&format!("div(){chain}")).ok()?;
+    (node.base.path() == Some("div") && node.children.is_empty())
+        .then_some((name.to_string(), node))
+}
+
+/// A node's calls, written back as the chain they were read from.
+///
+/// `None` for a node with none, which is what tells the caller to take the
+/// whole closure away rather than write an empty one.
+fn chain_source(node: &Node) -> Option<String> {
+    let mut out = String::new();
+    for call in &node.calls {
+        let args: Vec<String> = call.args.iter().map(|arg| arg.to_source()).collect();
+        out.push_str(&format!(".{}({})", call.name, args.join(", ")));
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+/// The texts of a run of `SharedString::from("…")`, when it is one maxx wrote.
+///
+/// The spelling a `SearchableVec<SharedString>` takes, which is what a dropdown
+/// is built from — and the reason this is not [`label_texts`]: an array of bare
+/// literals does not compile there. `None` for anything else, which is what
+/// leaves a list the developer filled from their own data alone.
+pub(super) fn shared_strings(source: &str) -> Option<Vec<String>> {
+    let mut rest = source.trim();
+    let mut items: Vec<String> = Vec::new();
+    while !rest.is_empty() {
+        if !items.is_empty() {
+            rest = rest.strip_prefix(',')?.trim_start();
+            // A trailing comma, which `rustfmt` writes on a broken line.
+            if rest.is_empty() {
+                break;
+            }
+        }
+        rest = rest.strip_prefix("SharedString::from(\"")?;
+        let (text, after) = crate::model::read_literal(rest)?;
+        items.push(text);
+        rest = after.strip_prefix(')')?.trim_start();
+    }
+    Some(items)
+}
+
+/// `First, Second` becomes the entries a `SearchableVec` is built from.
+///
+/// `None` for an empty list, and that is what stops a dropdown from being
+/// written with no entries and a selected index of nought — a `Some(IndexPath)`
+/// pointing into nothing.
+pub(super) fn shared_strings_arg(value: &str) -> Option<String> {
+    let items: Vec<String> = value
+        .split(',')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(|item| format!("SharedString::from(\"{}\")", crate::model::escape(item)))
+        .collect();
+    (!items.is_empty()).then(|| items.join(",\n                        "))
 }
 
 /// `120` becomes `px(120.)`, `12.5` becomes `px(12.5)`.

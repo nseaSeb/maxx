@@ -46,6 +46,73 @@ impl Project {
     }
 }
 
+/// The tree of a project's entry view, read from the project's own files.
+///
+/// Nothing here is an error, and that is the decision: this is what draws a
+/// card on the welcome screen, where a project that has been moved, a
+/// `maxx.toml` naming no view, and a file maxx cannot parse all deserve the
+/// same answer — an empty frame. A message about a project nobody has opened
+/// would be a message about nothing the reader did.
+///
+/// Bounded to the entry view on purpose: it is the one view a project always
+/// has a name for, and the one its window opens on.
+pub fn entry_tree(root: &Path) -> Option<crate::model::Node> {
+    let module = crate::projectfile::entry(root)?;
+    let path = root.join("src").join("ui").join(format!("{module}.rs"));
+    crate::view::View::load(&path).ok().map(|view| view.root)
+}
+
+/// How many directories above the binary are looked at, its own included.
+///
+/// Three is exactly `target/debug/maxx` back to the root of the checkout, and
+/// stopping there is the point: left to climb, the search would reach the
+/// directory the checkout sits in, and open somebody else's `demo/`.
+const DEMO_LEVELS: usize = 3;
+
+/// The repository's demo, when this build can reach it.
+///
+/// `demo/` is versioned beside maxx's own sources, so a checkout has it and a
+/// `cargo install` has not — hence an `Option`, and a button drawn only when it
+/// answers. Looked for relative to the running binary rather than compiled in:
+/// `CARGO_MANIFEST_DIR` names the machine maxx was *built* on, which the
+/// machine it runs on need not be.
+pub fn demo_beside(executable: &Path) -> Option<PathBuf> {
+    let mut directory = executable.parent()?;
+    for _ in 0..DEMO_LEVELS {
+        let candidate = directory.join("demo");
+        // `maxx.toml` and not the directory: a folder called `demo` holding
+        // anything else is not a project, and opening it would give an empty
+        // window with nothing to explain it.
+        //
+        // And the holder has to be maxx's own checkout. The level count alone
+        // is calibrated on `target/debug/maxx`; from `~/.cargo/bin/maxx` the
+        // same three steps land on the home directory, where somebody's
+        // unrelated `~/demo` would have been opened as *the* demo — the very
+        // mistake the bound above says it prevents.
+        if candidate.join("maxx.toml").is_file() && is_maxx_checkout(directory) {
+            return Some(candidate);
+        }
+        directory = directory.parent()?;
+    }
+    None
+}
+
+/// Whether `directory` is the root of maxx's own sources.
+///
+/// Read from the manifest rather than from the directory's name, which is
+/// whatever the person who cloned it typed.
+fn is_maxx_checkout(directory: &Path) -> bool {
+    let Ok(manifest) = std::fs::read_to_string(directory.join("Cargo.toml")) else {
+        return false;
+    };
+    manifest.lines().any(|line| line.trim() == "name = \"maxx\"")
+}
+
+/// The same, for the binary that is running.
+pub fn demo() -> Option<PathBuf> {
+    demo_beside(&std::env::current_exe().ok()?)
+}
+
 /// A single row of the project panel.
 #[derive(Clone)]
 pub struct Entry {

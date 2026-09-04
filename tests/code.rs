@@ -1,9 +1,25 @@
 //! The code reader: what can go wrong is in the extension table and in the two
 //! refusals, not in the rendering.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use maxx::workspace::{CodeFile, language_for};
+
+/// A directory of this run's own, under `MAXX_SCRATCH` when it is set.
+///
+/// The fixed names these tests used to write under `temp_dir()` collided
+/// whenever two `cargo test` runs overlapped — a second checkout, a CI job
+/// beside a local run — and the failure landed on whichever test read a file
+/// the other had just removed. The pid keeps two runs apart even when the
+/// variable is unset; the variable is what the rest of the suite already
+/// honours.
+fn scratch(name: &str) -> PathBuf {
+    let root =
+        std::env::var_os("MAXX_SCRATCH").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    let directory = root.join(format!("maxx-code-{}-{name}", std::process::id()));
+    std::fs::create_dir_all(&directory).expect("the test directory must be created");
+    directory
+}
 
 #[test]
 fn every_extension_names_its_grammar() {
@@ -41,7 +57,7 @@ fn a_file_of_the_repository_reads() {
 fn a_binary_file_is_refused() {
     // The refusal has to come from the UTF-8 decoding, not from a list of
     // extensions to keep up to date — this file has one maxx never heard of.
-    let path = std::env::temp_dir().join("maxx_reader_binary.dat");
+    let path = scratch("binary").join("reader.dat");
     std::fs::write(&path, [0xff_u8, 0xfe, 0x00, 0x01]).unwrap();
 
     let Err(error) = CodeFile::load(&path) else {
@@ -101,9 +117,7 @@ fn the_code_shown_is_the_one_save_would_write() {
     // The guarantee behind the canvas / code toggle: `render_source` and `save`
     // are the same text, because the second calls the first. The day one of them
     // gains a step the other does not have, this test falls.
-    let directory = std::env::temp_dir().join("maxx-test-reader");
-    std::fs::create_dir_all(&directory).expect("the test directory must be created");
-    let path = directory.join("home.rs");
+    let path = scratch("reader").join("home.rs");
     std::fs::write(&path, file_holding("v_flex().gap_2()")).expect("the file must be written");
 
     let Ok(mut view) = maxx::view::View::load(&path) else {
@@ -118,5 +132,9 @@ fn the_code_shown_is_the_one_save_would_write() {
     view.save().expect("the save must succeed");
     assert_eq!(std::fs::read_to_string(&path).unwrap(), shown);
 
-    std::fs::remove_dir_all(&directory).ok();
+    // Its own directory, so removing it takes nothing from a run happening
+    // beside this one — which is exactly what the shared name used to do.
+    if let Some(directory) = path.parent() {
+        std::fs::remove_dir_all(directory).ok();
+    }
 }

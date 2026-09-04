@@ -22,10 +22,15 @@
 /// also why the pages are fixed at creation — adding one afterwards is four
 /// lines the compiler names one by one.
 pub fn shell_rs(pages: &[(&str, &str, &str)]) -> String {
-    let imports: String = pages
+    // Sorted, because `rustfmt` sorts a run of `use` lines: written in page
+    // order, a shell whose first page is not the first alphabetically comes back
+    // reordered on the developer's first save.
+    let mut import_lines: Vec<String> = pages
         .iter()
         .map(|(module, type_name, _)| format!("use crate::ui::{module}::{type_name};\n"))
         .collect();
+    import_lines.sort();
+    let imports: String = import_lines.concat();
 
     let variants: String =
         pages.iter().map(|(_, type_name, _)| format!("    {type_name},\n")).collect();
@@ -235,6 +240,544 @@ impl Render for SettingsScreen {
     .to_string()
 }
 
+/// A page a shape writes whole: a view, with the fields its tree binds.
+///
+/// The pages of a shape are views and not screens like the one above: what sits
+/// between the markers stays maxx's, so the shape opens in the designer and
+/// keeps being drawn there. What is written around the region is what maxx
+/// never touches again — the struct, `new`, and the methods the tree names.
+///
+/// The fields are declared right here, which is the second of the two ways a
+/// binding gets one: `view::render_source` writes them at a save, for a tree
+/// drawn in the designer, and a file written straight to disk never goes
+/// through a save. `fields` is, per entry: the name, the type, and the
+/// expression `new` builds it with.
+pub fn page_rs(
+    type_name: &str,
+    doc: &str,
+    gpui_items: &[&str],
+    imports: &[&str],
+    fields: &[(&str, &str, &str)],
+    methods: &str,
+    body: &str,
+) -> String {
+    // One `use gpui::{…}` and not two: `rustfmt` sorts the items of a group and
+    // the groups themselves, so a second line would come back reordered on the
+    // developer's first save — and a shape a formatter rewrites is a shape that
+    // shows up in a diff nobody wrote.
+    let mut items: Vec<&str> = vec!["Context", "Window"];
+    items.extend_from_slice(gpui_items);
+    items.sort_unstable();
+    items.dedup();
+    let gpui = items.join(", ");
+
+    let declared: String =
+        fields.iter().map(|(name, ty, _)| format!("    {name}: {ty},\n")).collect();
+    let initialized: String = fields
+        .iter()
+        .map(|(name, _, initial)| format!("            {name}: {initial},\n"))
+        .collect();
+    // An empty struct is written `{}` on one line, and a short literal on one
+    // line too: that is what `rustfmt` does with them — `struct_lit_width` is
+    // eighteen characters of body — and a shape a formatter rewrites is a shape
+    // that shows up in the developer's first diff.
+    let struct_body =
+        if fields.is_empty() { "{}".to_string() } else { format!("{{\n{declared}}}") };
+    let inline: String = fields
+        .iter()
+        .map(|(name, _, initial)| format!("{name}: {initial}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let literal = if fields.is_empty() {
+        "Self {}".to_string()
+    } else if inline.len() <= 18 {
+        format!("Self {{ {inline} }}")
+    } else {
+        format!("Self {{\n{initialized}        }}")
+    };
+
+    // The parameters are named after what is used, not after what is passed: an
+    // unused `window` is a warning in a project built with the usual lints, and
+    // maxx must not be the one who wrote it.
+    let initials: String =
+        fields.iter().map(|(_, _, initial)| *initial).collect::<Vec<_>>().join(" ");
+    let new_window = if initials.contains("window") { "window" } else { "_window" };
+    let new_cx = if initials.contains("cx") { "cx" } else { "_cx" };
+    let render_cx = if body.contains("cx.") { "cx" } else { "_cx" };
+
+    let indented: String = body
+        .lines()
+        .map(|line| if line.is_empty() { "\n".into() } else { format!("        {line}\n") })
+        .collect();
+    let imports: String = imports.iter().map(|line| format!("{line}\n")).collect();
+    let methods = if methods.is_empty() { String::new() } else { format!("\n{methods}") };
+
+    format!(
+        "//! {doc}\n\
+         //!\n\
+         //! A view maxx draws: the tree between the markers is maxx's, and\n\
+         //! everything around it is yours.\n\
+         \n\
+         use gpui::{{{gpui}, prelude::*}};\n\
+         {imports}\
+         \n\
+         pub struct {type_name} {struct_body}\n\
+         \n\
+         impl {type_name} {{\n\
+         \x20   pub fn new({new_window}: &mut Window, {new_cx}: &mut Context<Self>) -> Self {{\n\
+         \x20       {literal}\n\
+         \x20   }}\n\
+         {methods}\
+         }}\n\
+         \n\
+         impl Render for {type_name} {{\n\
+         \x20   fn render(&mut self, _window: &mut Window, {render_cx}: &mut Context<Self>) -> impl IntoElement {{\n\
+         \x20       // maxx:begin\n\
+         {indented}\
+         \x20       // maxx:end\n\
+         \x20   }}\n\
+         }}\n"
+    )
+}
+
+/// How the table below holds a page: a function, so the text is built only when
+/// a project asks for it.
+pub type PageSource = fn() -> String;
+
+/// The pages the shapes bring with them, by the module each is written to.
+///
+/// One table read from both sides: `create_project` writes these files into a
+/// project, and `build.rs` writes the same text into `OUT_DIR` where
+/// `examples/shapes.rs` compiles it. A page that compiles nowhere else is a
+/// project that stops building on a line maxx wrote.
+///
+/// Nothing here reaches for a module of the project — no `crate::settings`, no
+/// `crate::theme` — so a page is compiled on `gpui` and `gpui-component` alone,
+/// and a shape can hand it out without dragging a module behind it.
+pub const SHAPE_PAGES: &[(&str, PageSource)] = &[
+    ("items", items_rs),
+    ("form", form_rs),
+    ("dashboard", dashboard_rs),
+    ("wizard", wizard_rs),
+    ("home", utility_rs),
+    ("editor", editor_rs),
+];
+
+/// A list on the left, the detail of what is selected on the right.
+fn items_rs() -> String {
+    page_rs(
+        "Items",
+        "A list, and the detail of the row that is selected.",
+        &[],
+        &[
+            "use gpui_component::button::{Button, ButtonVariants};",
+            "use gpui_component::label::Label;",
+            "use gpui_component::{Selectable, h_flex, v_flex};",
+        ],
+        &[("selected", "usize", "0")],
+        r#"    /// The rows the list shows, written here rather than fetched: where the
+    /// data comes from is yours to decide, and a shape that pretended to know
+    /// would be in the way.
+    const ITEMS: &[(&str, &str)] = &[
+        ("First item", "What this one is about."),
+        ("Second item", "And what that one is about."),
+        ("Third item", "The panel on the right follows this."),
+    ];
+
+    /// The selection, which is the only thing the two panels share.
+    fn select(&mut self, index: usize, cx: &mut Context<Self>) {
+        self.selected = index;
+        cx.notify();
+    }
+
+    fn title(&self) -> &'static str {
+        Self::ITEMS[self.selected].0
+    }
+
+    fn detail(&self) -> &'static str {
+        Self::ITEMS[self.selected].1
+    }
+"#,
+        r#"h_flex()
+    .id("items")
+    .size_full()
+    .child(
+        v_flex()
+            .w_64()
+            .h_full()
+            .gap_1()
+            .p_2()
+            .child(
+                Button::new("item-0")
+                    .label("First item")
+                    .ghost()
+                    .selected(self.selected == 0)
+                    .on_click(cx.listener(|this, _, _window, cx| this.select(0, cx))),
+            )
+            .child(
+                Button::new("item-1")
+                    .label("Second item")
+                    .ghost()
+                    .selected(self.selected == 1)
+                    .on_click(cx.listener(|this, _, _window, cx| this.select(1, cx))),
+            )
+            .child(
+                Button::new("item-2")
+                    .label("Third item")
+                    .ghost()
+                    .selected(self.selected == 2)
+                    .on_click(cx.listener(|this, _, _window, cx| this.select(2, cx))),
+            ),
+    )
+    .child(
+        v_flex()
+            .flex_1()
+            .gap_2()
+            .p_4()
+            .child(Label::new(self.title()).text_xl())
+            .child(Label::new(self.detail())),
+    )"#,
+    )
+}
+
+/// Fields that are really typed into, and a Save button that reads them.
+fn form_rs() -> String {
+    page_rs(
+        "Form",
+        "A form: fields bound to state, and a button that reads them.",
+        &["ClickEvent", "Entity", "SharedString"],
+        &[
+            "use gpui_component::button::{Button, ButtonVariants};",
+            "use gpui_component::input::{Input, InputState};",
+            "use gpui_component::label::Label;",
+            "use gpui_component::{h_flex, v_flex};",
+        ],
+        &[
+            (
+                "name",
+                "Entity<InputState>",
+                "cx.new(|cx| InputState::new(window, cx).placeholder(\"Ada Lovelace\"))",
+            ),
+            (
+                "email",
+                "Entity<InputState>",
+                "cx.new(|cx| InputState::new(window, cx).placeholder(\"ada@example.com\"))",
+            ),
+            ("saved", "SharedString", "SharedString::default()"),
+        ],
+        r#"    /// Written by maxx; what becomes of the values is yours.
+    ///
+    /// The two fields are read through `cx` rather than mirrored into the
+    /// struct on every keystroke: the input state is the truth, and a copy
+    /// kept beside it is a copy that goes stale.
+    fn on_save(&mut self, _event: &ClickEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        let name = self.name.read(cx).value();
+        let email = self.email.read(cx).value();
+        self.saved = format!("Saved {name} <{email}>").into();
+        cx.notify();
+    }
+"#,
+        r#"v_flex()
+    .id("form")
+    .size_full()
+    .gap_4()
+    .p_4()
+    .child(Label::new("New contact").text_xl())
+    .child(
+        v_flex()
+            .gap_1()
+            .child(Label::new("Name"))
+            .child(Input::new(&self.name)),
+    )
+    .child(
+        v_flex()
+            .gap_1()
+            .child(Label::new("Email"))
+            .child(Input::new(&self.email)),
+    )
+    .child(
+        h_flex().gap_2().justify_end().child(
+            Button::new("save")
+                .label("Save")
+                .primary()
+                .on_click(cx.listener(Self::on_save)),
+        ),
+    )
+    .child(Label::new(self.saved.clone()).text_xs())"#,
+    )
+}
+
+/// A header, a grid of cards, and the numbers they carry.
+fn dashboard_rs() -> String {
+    page_rs(
+        "Dashboard",
+        "A dashboard: a header, and a grid of cards carrying numbers.",
+        &[],
+        &[
+            "use gpui_component::group_box::GroupBox;",
+            "use gpui_component::label::Label;",
+            "use gpui_component::{h_flex, v_flex};",
+        ],
+        &[],
+        "",
+        r#"v_flex()
+    .id("dashboard")
+    .size_full()
+    .gap_4()
+    .p_4()
+    .child(
+        h_flex()
+            .items_center()
+            .justify_between()
+            .child(Label::new("Overview").text_xl())
+            .child(Label::new("Last 30 days").text_xs()),
+    )
+    .child(
+        h_flex()
+            .gap_4()
+            .child(
+                GroupBox::new()
+                    .title("Revenue")
+                    .flex_1()
+                    .child(Label::new("12,480").text_xl()),
+            )
+            .child(
+                GroupBox::new()
+                    .title("Orders")
+                    .flex_1()
+                    .child(Label::new("318").text_xl()),
+            )
+            .child(
+                GroupBox::new()
+                    .title("Customers")
+                    .flex_1()
+                    .child(Label::new("1,204").text_xl()),
+            ),
+    )
+    .child(
+        h_flex()
+            .gap_4()
+            .child(
+                GroupBox::new()
+                    .title("Refunds")
+                    .flex_1()
+                    .child(Label::new("12").text_xl()),
+            )
+            .child(
+                GroupBox::new()
+                    .title("Open tickets")
+                    .flex_1()
+                    .child(Label::new("7").text_xl()),
+            )
+            .child(
+                GroupBox::new()
+                    .title("Uptime")
+                    .flex_1()
+                    .child(Label::new("99.9%").text_xl()),
+            ),
+    )"#,
+    )
+}
+
+/// Steps, a bar that says where you are, and the two buttons that move.
+fn wizard_rs() -> String {
+    page_rs(
+        "Wizard",
+        "A wizard: steps, an indicator, and the two buttons that move between them.",
+        &["ClickEvent"],
+        &[
+            "use gpui_component::button::{Button, ButtonVariants};",
+            "use gpui_component::label::Label;",
+            "use gpui_component::progress::Progress;",
+            "use gpui_component::{Disableable, h_flex, v_flex};",
+        ],
+        &[("step", "usize", "0")],
+        r#"    /// The steps, in order. Adding one is a line here and nothing else.
+    const STEPS: &[(&str, &str)] = &[
+        ("Welcome", "What this assistant is about to do."),
+        ("Details", "What it needs from the person using it."),
+        ("Done", "What happened, and what to do next."),
+    ];
+
+    fn back(&mut self, _event: &ClickEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        self.step = self.step.saturating_sub(1);
+        cx.notify();
+    }
+
+    fn forward(&mut self, _event: &ClickEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        self.step = (self.step + 1).min(Self::STEPS.len() - 1);
+        cx.notify();
+    }
+
+    fn title(&self) -> &'static str {
+        Self::STEPS[self.step].0
+    }
+
+    fn hint(&self) -> &'static str {
+        Self::STEPS[self.step].1
+    }
+
+    fn counter(&self) -> String {
+        format!("Step {} of {}", self.step + 1, Self::STEPS.len())
+    }
+
+    /// How far along, as the bar wants it: a percentage.
+    fn progress(&self) -> f32 {
+        (self.step + 1) as f32 * 100. / Self::STEPS.len() as f32
+    }
+"#,
+        r#"v_flex()
+    .id("wizard")
+    .size_full()
+    .gap_4()
+    .p_4()
+    .child(Label::new(self.counter()).text_xs())
+    .child(Progress::new().value(self.progress()))
+    .child(Label::new(self.title()).text_xl())
+    .child(Label::new(self.hint()))
+    .child(
+        h_flex()
+            .gap_2()
+            .justify_end()
+            .child(
+                Button::new("back")
+                    .label("Previous")
+                    .disabled(self.step == 0)
+                    .on_click(cx.listener(Self::back)),
+            )
+            .child(
+                Button::new("next")
+                    .label("Next")
+                    .primary()
+                    .disabled(self.step + 1 == Self::STEPS.len())
+                    .on_click(cx.listener(Self::forward)),
+            ),
+    )"#,
+    )
+}
+
+/// One window, one job. The whole application, and it is called `home`.
+fn utility_rs() -> String {
+    page_rs(
+        "Home",
+        "A tool in one window: something to type in, something that acts on it.",
+        &["ClickEvent", "Entity", "SharedString"],
+        &[
+            "use gpui_component::button::{Button, ButtonVariants};",
+            "use gpui_component::input::{Input, InputState};",
+            "use gpui_component::label::Label;",
+            "use gpui_component::{h_flex, v_flex};",
+        ],
+        &[
+            (
+                "entry",
+                "Entity<InputState>",
+                "cx.new(|cx| InputState::new(window, cx).placeholder(\"Type something\"))",
+            ),
+            ("answer", "SharedString", "SharedString::default()"),
+        ],
+        r#"    /// What the tool does, which is the one thing to replace.
+    fn run(&mut self, _event: &ClickEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        let value = self.entry.read(cx).value();
+        self.answer = format!("{} characters", value.chars().count()).into();
+        cx.notify();
+    }
+"#,
+        r#"v_flex()
+    .id("home")
+    .size_full()
+    .gap_3()
+    .p_4()
+    .child(Label::new("Count the characters").text_lg())
+    .child(Input::new(&self.entry))
+    .child(
+        h_flex().gap_2().justify_end().child(
+            Button::new("run")
+                .label("Run")
+                .primary()
+                .on_click(cx.listener(Self::run)),
+        ),
+    )
+    .child(Label::new(self.answer.clone()).text_xs())"#,
+    )
+}
+
+/// Tabs above, text in the middle, a status bar below.
+fn editor_rs() -> String {
+    page_rs(
+        "Editor",
+        "An editor: a strip of tabs, a multi-line text area, and a status bar.",
+        &["Entity"],
+        &[
+            "use gpui_component::input::{Input, InputState};",
+            "use gpui_component::label::Label;",
+            "use gpui_component::tab::TabBar;",
+            "use gpui_component::{h_flex, v_flex};",
+        ],
+        &[
+            ("tab", "usize", "0"),
+            (
+                "content",
+                "Entity<InputState>",
+                "cx.new(|cx| InputState::new(window, cx).multi_line(true))",
+            ),
+        ],
+        r#"    /// The names the status bar reads back.
+    ///
+    /// The strip itself carries its labels in the tree, where maxx can change
+    /// them: a `Tab` is a type and not an element, so the bar is one node and
+    /// its labels are its own arguments. Renaming a tab is therefore two edits
+    /// — the label above, and the line here.
+    const TABS: &[&str] = &["Draft", "Notes", "Scratch"];
+
+    /// Switching tabs leaves the text where it is: one buffer is what a shape
+    /// can honestly offer, and three buffers is a decision about the document
+    /// model that belongs to whoever writes the application.
+    fn show(&mut self, tab: usize, cx: &mut Context<Self>) {
+        self.tab = tab;
+        cx.notify();
+    }
+
+    fn name(&self) -> &'static str {
+        Self::TABS[self.tab]
+    }
+
+    fn length(&self, cx: &Context<Self>) -> String {
+        let value = self.content.read(cx).value();
+        format!("{} characters", value.chars().count())
+    }
+"#,
+        r#"v_flex()
+    .id("editor")
+    .size_full()
+    .child(
+        TabBar::new("editor-tabs")
+            .selected_index(self.tab)
+            .child("Draft")
+            .child("Notes")
+            .child("Scratch")
+            .on_click(
+                cx.listener(|this, index: &usize, _window, cx| this.show(*index, cx)),
+            ),
+    )
+    .child(
+        v_flex()
+            .flex_1()
+            .p_2()
+            .child(Input::new(&self.content).h_full()),
+    )
+    .child(
+        h_flex()
+            .items_center()
+            .justify_between()
+            .px_2()
+            .py_1()
+            .child(Label::new(self.name()).text_xs())
+            .child(Label::new(self.length(cx)).text_xs()),
+    )"#,
+    )
+}
+
 /// The boxes maxx can write into a handler, by name.
 ///
 /// Per entry: the name the interface uses, the `use` lines the body needs, and
@@ -273,7 +816,7 @@ pub const BOXES: &[(&str, &[&str], &str)] = &[
 /// The sub-tree templates the palette drops in one gesture.
 ///
 /// Per entry: the identifier the palette uses, the `use` lines the expression
-/// needs, and the expression itself —
+/// needs, the fields a view holding it declares, and the expression itself —
 /// ordinary Rust, which `parser::parse_expr` reads into a tree exactly as it
 /// reads the clipboard. No new machinery: a template is a piece of Rust in a
 /// table, the way a component is. Written in `codegen`'s own spelling, which a
@@ -283,14 +826,19 @@ pub const BOXES: &[(&str, &[&str], &str)] = &[
 /// `registry`, with the interface's other strings: this file is included
 /// verbatim by `build.rs` and holds only what a project gets.
 ///
-/// All three are stateless on purpose. A template carrying `&self.field` would
-/// name a field the view may not have, and the paste path rebinds those only
-/// against fields that already exist — a form with real inputs is a template
-/// that has to declare state first, which is a different feature.
-pub const SUBTREES: &[(&str, &[&str], &str)] = &[
+/// A template may bind state — `&self.field` — and carry handlers. What a drop
+/// owes it is worked out where it already is for a pasted copy:
+/// `registry::rebind_state_fields` moves the binding off a name the view
+/// already uses, and `view::ensure_state_field` declares whatever binding
+/// survives, at the save, along with `ensure_handler` for the methods named.
+/// The third column is not that declaration but the build check's: the fields
+/// are written fully qualified so that compiling the table owes no `use` line
+/// of its own.
+pub const SUBTREES: &[(&str, &[&str], &[&str], &str)] = &[
     (
         "card",
         &["use gpui_component::label::Label;", "use gpui_component::v_flex;"],
+        &[],
         "v_flex()\n\
          \x20   .gap_2()\n\
          \x20   .p_4()\n\
@@ -302,6 +850,7 @@ pub const SUBTREES: &[(&str, &[&str], &str)] = &[
     (
         "toolbar",
         &["use gpui_component::button::{Button, ButtonVariants};", "use gpui_component::h_flex;"],
+        &[],
         "h_flex()\n\
          \x20   .gap_2()\n\
          \x20   .items_center()\n\
@@ -315,9 +864,97 @@ pub const SUBTREES: &[(&str, &[&str], &str)] = &[
             "use gpui_component::label::Label;",
             "use gpui_component::v_flex;",
         ],
+        &[],
         "GroupBox::new()\n\
          \x20   .title(\"Section\")\n\
          \x20   .child(v_flex().gap_2().child(Label::new(\"First\")).child(Label::new(\"Second\")))",
+    ),
+    // The one that had to wait for a template to be allowed state: a label over
+    // a real input, with the line under it that says what to type. Bound to
+    // `field`, which is the name a dropped input takes too — so a second drop
+    // is renamed rather than mirrored, by the same rule.
+    (
+        "form_field",
+        &[
+            "use gpui_component::input::Input;",
+            "use gpui_component::label::Label;",
+            "use gpui_component::v_flex;",
+        ],
+        &["field: gpui::Entity<gpui_component::input::InputState>"],
+        "v_flex()\n\
+         \x20   .gap_1()\n\
+         \x20   .child(Label::new(\"Label\"))\n\
+         \x20   .child(Input::new(&self.field))\n\
+         \x20   .child(Label::new(\"Help text\").text_xs())",
+    ),
+    (
+        "page_header",
+        &[
+            "use gpui_component::button::{Button, ButtonVariants};",
+            "use gpui_component::h_flex;",
+            "use gpui_component::label::Label;",
+        ],
+        &[],
+        "h_flex()\n\
+         \x20   .gap_2()\n\
+         \x20   .items_center()\n\
+         \x20   .justify_between()\n\
+         \x20   .child(Label::new(\"Page title\").text_xl())\n\
+         \x20   .child(h_flex().gap_2().child(Button::new(\"action\").label(\"Action\").primary()))",
+    ),
+    (
+        "status_bar",
+        &["use gpui_component::h_flex;", "use gpui_component::label::Label;"],
+        &[],
+        "h_flex()\n\
+         \x20   .gap_2()\n\
+         \x20   .items_center()\n\
+         \x20   .justify_between()\n\
+         \x20   .px_2()\n\
+         \x20   .py_1()\n\
+         \x20   .border_1()\n\
+         \x20   .child(Label::new(\"Ready\").text_xs())\n\
+         \x20   .child(Label::new(\"Ln 1, Col 1\").text_xs())",
+    ),
+    // Made of catalogue entries and not of the `EmptyState` the component
+    // library carries: what a template drops has to be a tree maxx can take
+    // apart, and a brick is one node whose inside is a file.
+    (
+        "empty_state",
+        &[
+            "use gpui_component::button::{Button, ButtonVariants};",
+            "use gpui_component::label::Label;",
+            "use gpui_component::v_flex;",
+            "use gpui_component::{Icon, IconName};",
+        ],
+        &[],
+        "v_flex()\n\
+         \x20   .gap_2()\n\
+         \x20   .p_8()\n\
+         \x20   .items_center()\n\
+         \x20   .justify_center()\n\
+         \x20   .child(Icon::new(IconName::Folder))\n\
+         \x20   .child(Label::new(\"Nothing here yet\"))\n\
+         \x20   .child(Button::new(\"create\").label(\"Create one\").primary())",
+    ),
+    (
+        "confirm_row",
+        &["use gpui_component::button::{Button, ButtonVariants};", "use gpui_component::h_flex;"],
+        &[],
+        "h_flex()\n\
+         \x20   .gap_2()\n\
+         \x20   .justify_end()\n\
+         \x20   .child(\n\
+         \x20       Button::new(\"cancel\")\n\
+         \x20           .label(\"Cancel\")\n\
+         \x20           .on_click(cx.listener(Self::on_cancel)),\n\
+         \x20   )\n\
+         \x20   .child(\n\
+         \x20       Button::new(\"ok\")\n\
+         \x20           .label(\"OK\")\n\
+         \x20           .primary()\n\
+         \x20           .on_click(cx.listener(Self::on_ok)),\n\
+         \x20   )",
     ),
 ];
 

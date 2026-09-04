@@ -261,11 +261,15 @@ fn style_properties_reach_the_generated_file() {
 fn an_uncatalogued_call_is_reported_as_such() {
     let mut node = maxx::registry::instantiate("button").unwrap();
     let spec = maxx::registry::of(&node).unwrap();
-    node.calls.push(maxx::model::Call::bare("shadow_lg"));
+    // A real gpui call the catalogue offers no row for. It used to be
+    // `shadow_lg`, which the box properties have since taken over — the shape
+    // of the test is unchanged, only the example had to move.
+    node.calls.push(maxx::model::Call::bare("font_family"));
 
     assert!(maxx::registry::covers(spec, "label"));
     assert!(maxx::registry::covers(spec, "w"), "the common styles count");
-    assert!(!maxx::registry::covers(spec, "shadow_lg"));
+    assert!(maxx::registry::covers(spec, "shadow_lg"), "and the box properties now count too");
+    assert!(!maxx::registry::covers(spec, "font_family"));
 }
 
 #[test]
@@ -1116,7 +1120,7 @@ fn an_image_is_brought_into_the_project() {
     let root = scratch("maxx_assets");
     scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
-    let outside = std::env::temp_dir().join("maxx_outside_logo.png");
+    let outside = scratch_file("maxx_outside_logo.png");
     std::fs::write(&outside, b"first").unwrap();
 
     let written = scaffold::import_asset(&root, &outside).expect("the image must be imported");
@@ -1159,7 +1163,7 @@ fn a_file_that_is_not_an_image_is_refused() {
     let root = scratch("maxx_assets_refused");
     scaffold::create_project(&root, "trial", Template::Empty).expect("the project must be created");
 
-    let outside = std::env::temp_dir().join("maxx_not_an_image.txt");
+    let outside = scratch_file("maxx_not_an_image.txt");
     std::fs::write(&outside, b"hello").unwrap();
 
     assert!(scaffold::import_asset(&root, &outside).is_err());
@@ -1662,4 +1666,20 @@ fn adding_the_library_again_records_what_is_there() {
         !module.holds(&installed),
         "the record must describe their file, not maxx's canonical text"
     );
+}
+
+/// A directory of this run's own, under `MAXX_SCRATCH` when it is set.
+///
+/// Fixed names under `temp_dir()` collide whenever two `cargo test` runs
+/// overlap — a second checkout, a CI job beside a local run — and the failure
+/// then lands on whichever test read a file the other had just removed. The
+/// pid separates two runs even when the variable is unset. Repeated per file
+/// because each integration test is a crate of its own.
+fn scratch_file(name: &str) -> std::path::PathBuf {
+    let root = std::env::var_os("MAXX_SCRATCH")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    let directory = root.join(format!("maxx-{}-{}", "scaffold-outside", std::process::id()));
+    std::fs::create_dir_all(&directory).expect("the test directory must be created");
+    directory.join(name)
 }

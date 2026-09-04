@@ -5,24 +5,39 @@ about.licence:
 about.title:
   en: "About maxx"
   fr: "À propos de maxx"
+component.avatar:
+  en: "Avatar"
+  fr: "Avatar"
 component.alert:
   en: "Alert"
   fr: "Alerte"
 component.badge:
   en: "Badge"
   fr: "Pastille de compte"
+component.breadcrumb:
+  en: "Breadcrumb"
+  fr: "Fil d'Ariane"
 component.button:
   en: "Button"
   fr: "Bouton"
+component.calendar:
+  en: "Calendar"
+  fr: "Calendrier"
 component.checkbox:
   en: "Checkbox"
   fr: "Case à cocher"
+component.clipboard:
+  en: "Copy button"
+  fr: "Bouton copier"
 component.color_picker:
   en: "Colour picker"
   fr: "Sélecteur de couleur"
 component.column:
   en: "Column"
   fr: "Colonne"
+component.date_picker:
+  en: "Date picker"
+  fr: "Sélecteur de date"
 component.divider:
   en: "Divider"
   fr: "Séparateur"
@@ -38,12 +53,21 @@ component.icon:
 component.input:
   en: "Text field"
   fr: "Champ texte"
+component.kbd:
+  en: "Key"
+  fr: "Touche"
 component.label:
   en: "Label"
   fr: "Étiquette"
 component.link:
   en: "Link"
   fr: "Lien"
+component.number_input:
+  en: "Number field"
+  fr: "Champ numérique"
+component.otp_input:
+  en: "Code field"
+  fr: "Champ de code"
 component.progress:
   en: "Progress bar"
   fr: "Barre de progression"
@@ -71,9 +95,15 @@ component.spacer:
 component.spinner:
   en: "Spinner"
   fr: "Rouet"
+component.svg:
+  en: "Drawing"
+  fr: "Dessin"
 component.switch:
   en: "Switch"
   fr: "Interrupteur"
+component.tab_bar:
+  en: "Tab bar"
+  fr: "Barre d'onglets"
 component.tag:
   en: "Tag"
   fr: "Pastille"
@@ -104,12 +134,21 @@ designer.on:
 designer.off:
   en: "Off"
   fr: "Désactivé"
+error.items_empty:
+  en: "A dropdown needs at least one entry."
+  fr: "Une liste déroulante veut au moins une entrée."
+group.hover:
+  en: "On hover"
+  fr: "Au survol"
 group.layout:
   en: "Layout"
   fr: "Mise en page"
 group.spacing:
   en: "Spacing"
   fr: "Espacement"
+group.box:
+  en: "Box"
+  fr: "Boîte"
 group.appearance:
   en: "Appearance"
   fr: "Apparence"
@@ -248,6 +287,9 @@ error.file_too_large:
 error.identifier:
   en: "letters, digits and “_” only, and never a leading digit"
   fr: "lettres, chiffres et « _ » seulement, et pas de chiffre en tête"
+error.keystroke:
+  en: "a shortcut is written like “cmd-k” or “ctrl-shift-p”"
+  fr: "un raccourci s'écrit « cmd-k » ou « ctrl-shift-p »"
 error.length:
   en: "a length is a number of pixels, for example 120"
   fr: "une longueur est un nombre de pixels, par exemple 120"
@@ -323,6 +365,12 @@ menu.add_menu_bar:
 menu.add_separator:
   en: "Add a separator"
   fr: "Ajouter un séparateur"
+menu.add_submenu:
+  en: "Add a submenu"
+  fr: "Ajouter un sous-menu"
+menu.delete_menu_entry:
+  en: "Delete the entry"
+  fr: "Supprimer l'entrée"
 menu.add_assets:
   en: "The images"
   fr: "Les images"
@@ -356,6 +404,15 @@ menu.close_project:
 menu.close_view:
   en: "Close the view"
   fr: "Fermer la vue"
+menu.close_other_tabs:
+  en: "Close the other tabs"
+  fr: "Fermer les autres onglets"
+menu.close_tabs_to_the_right:
+  en: "Close the tabs to the right"
+  fr: "Fermer les onglets à droite"
+menu.copy_tab_path:
+  en: "Copy the path"
+  fr: "Copier le chemin"
 menu.copy:
   en: "Copy"
   fr: "Copier"
@@ -374,6 +431,15 @@ menu.delete_node:
 menu.duplicate_node:
   en: "Duplicate the node"
   fr: "Dupliquer le nœud"
+menu.unwrap:
+  en: "Unwrap"
+  fr: "Désenvelopper"
+menu.wrap_in_column:
+  en: "Wrap in a column"
+  fr: "Envelopper dans une colonne"
+menu.wrap_in_row:
+  en: "Wrap in a row"
+  fr: "Envelopper dans une ligne"
 menu.edit:
   en: "Edit"
   fr: "Édition"
@@ -404,6 +470,21 @@ menu.minimize:
 menu.move_down:
   en: "Move down"
   fr: "Descendre"
+menu.move_node_down:
+  en: "Move the node down"
+  fr: "Descendre le nœud"
+menu.move_node_up:
+  en: "Move the node up"
+  fr: "Monter le nœud"
+menu.insert_after:
+  en: "Insert after the selection"
+  fr: "Insérer après la sélection"
+menu.insert_before:
+  en: "Insert before the selection"
+  fr: "Insérer avant la sélection"
+menu.insert_into:
+  en: "Insert into the selection"
+  fr: "Insérer dans la sélection"
 menu.move_up:
   en: "Move up"
   fr: "Monter"
@@ -428,6 +509,9 @@ menu.no_recent:
 menu.open_file_in:
   en: "Open the file in %{editor}"
   fr: "Ouvrir le fichier dans %{editor}"
+menu.open_handler:
+  en: "Go to the handler"
+  fr: "Aller au gestionnaire"
 menu.open_folder:
   en: "Open folder…"
   fr: "Ouvrir un dossier…"
@@ -485,6 +569,9 @@ menu.remove_menu_bar:
 menu.reveal:
   en: "Reveal in the Finder"
   fr: "Révéler dans le Finder"
+menu.reveal_tab_in_project:
+  en: "Reveal in the project panel"
+  fr: "Révéler dans le panneau de projet"
 menu.run:
   en: "Run"
   fr: "Exécution"
@@ -512,15 +599,33 @@ menu.status_bar:
 menu.stop:
   en: "Stop"
   fr: "Arrêter"
+menu.template_dashboard:
+  en: "Dashboard"
+  fr: "Tableau de bord"
+menu.template_editor:
+  en: "Editor"
+  fr: "Éditeur"
 menu.template_empty:
   en: "Empty"
   fr: "Vide"
+menu.template_form:
+  en: "Form"
+  fr: "Formulaire"
+menu.template_list_detail:
+  en: "List and detail"
+  fr: "Liste et détail"
 menu.template_settings:
   en: "With settings"
   fr: "Avec des réglages"
 menu.template_sidebar:
   en: "Sidebar and content"
   fr: "Barre latérale et contenu"
+menu.template_utility:
+  en: "Utility"
+  fr: "Utilitaire"
+menu.template_wizard:
+  en: "Wizard"
+  fr: "Assistant"
 menu.theme:
   en: "Light or dark"
   fr: "Clair ou sombre"
@@ -584,6 +689,9 @@ message.field_added:
 message.handler_unwritten:
   en: "“%{name}” is not written yet — ⌘S adds it to the file"
   fr: "« %{name} » n'est pas encore écrite — ⌘S l'ajoute au fichier"
+message.initializer_is_yours:
+  en: "That line of new() is yours: maxx leaves it alone."
+  fr: "Cette ligne de new() est la vôtre : maxx n'y touche pas."
 message.menu_bar_added:
   en: "menu bar added to the project and wired into main.rs"
   fr: "barre de menus ajoutée au projet et câblée dans main.rs"
@@ -620,6 +728,18 @@ message.no_menu_bar:
 message.no_previous_view:
   en: "no file to go back to"
   fr: "aucun fichier où revenir"
+message.no_open_view:
+  en: "no view is open"
+  fr: "aucune vue n'est ouverte"
+message.no_other_tab:
+  en: "this is the only tab"
+  fr: "c'est le seul onglet"
+message.no_tab_to_the_right:
+  en: "no tab to the right of this one"
+  fr: "aucun onglet à droite de celui-ci"
+message.path_copied:
+  en: "path copied"
+  fr: "chemin copié"
 message.files_capped:
   en: "only the first %{count} files of the project are listed"
   fr: "seuls les %{count} premiers fichiers du projet sont listés"
@@ -629,9 +749,18 @@ message.no_project:
 message.no_state_field:
   en: "no state field — add one under “State”"
   fr: "aucun champ d'état — ajoutez-en un dans « État »"
+message.node_at_bottom:
+  en: "the node is already the last of its container"
+  fr: "le nœud est déjà le dernier de son conteneur"
+message.node_at_top:
+  en: "the node is already the first of its container"
+  fr: "le nœud est déjà le premier de son conteneur"
 message.node_copied:
   en: "node copied"
   fr: "nœud copié"
+message.node_takes_no_child:
+  en: "this node takes no child — select a column or a row"
+  fr: "ce nœud n'accepte pas d'enfant — sélectionnez une colonne ou une ligne"
 message.node_into_itself:
   en: "a node cannot be dropped into itself"
   fr: "un nœud ne peut pas être déposé dans lui-même"
@@ -644,6 +773,21 @@ message.reloaded_outside:
 message.root_not_duplicated:
   en: "the root is not duplicated"
   fr: "la racine ne se duplique pas"
+message.root_not_moved:
+  en: "the root has no sibling to move among"
+  fr: "la racine n'a pas de frère parmi lesquels se déplacer"
+message.root_not_unwrapped:
+  en: "the root is not unwrapped"
+  fr: "la racine ne se désenveloppe pas"
+message.root_not_wrapped:
+  en: "the root is not wrapped"
+  fr: "la racine ne s'enveloppe pas"
+message.unwrap_needs_one_child:
+  en: "only a container holding exactly one node is unwrapped"
+  fr: "seul un conteneur tenant exactement un nœud se désenveloppe"
+message.scrollbar_is_one_piece:
+  en: "the scrollbar and its box are one piece — use the Scrollbar property"
+  fr: "la barre et sa boîte sont d'un seul tenant — passez par la propriété Barre visible"
 message.root_takes_no_child:
   en: "the root takes no child — select a column or a row"
   fr: "la racine n'accepte pas d'enfant — sélectionnez une colonne ou une ligne"
@@ -662,6 +806,9 @@ message.palette_saved:
 message.components_added:
   en: "The components are in src/components — yours from here"
   fr: "Les composants sont dans src/components — ils sont à vous"
+message.select_component_first:
+  en: "right-click a component of the palette first"
+  fr: "faites d'abord un clic droit sur un composant de la palette"
 message.select_entry_first:
   en: "select an item in the explorer first"
   fr: "sélectionnez d'abord un élément dans l'explorateur"
@@ -758,6 +905,36 @@ designer.templates:
 message.template_unreadable:
   en: "maxx cannot read its own %{name} template — that is a defect in maxx"
   fr: "maxx n'arrive pas à lire son propre modèle %{name} — c'est un défaut de maxx"
+prop.groups:
+  en: "Groups"
+  fr: "Groupes"
+prop.hover_background:
+  en: "Background"
+  fr: "Fond"
+prop.hover_border_color:
+  en: "Border colour"
+  fr: "Couleur de bordure"
+prop.hover_opacity:
+  en: "Opacity"
+  fr: "Opacité"
+prop.hover_rounded:
+  en: "Corners"
+  fr: "Coins"
+prop.hover_shadow:
+  en: "Shadow"
+  fr: "Ombre"
+prop.hover_text_color:
+  en: "Text colour"
+  fr: "Couleur du texte"
+prop.months:
+  en: "Months"
+  fr: "Mois"
+prop.multi_line:
+  en: "Multi-line"
+  fr: "Multiligne"
+prop.placeholder:
+  en: "Placeholder"
+  fr: "Texte indicatif"
 template.card:
   en: "Card"
   fr: "Carte"
@@ -767,6 +944,21 @@ template.section:
 template.toolbar:
   en: "Toolbar"
   fr: "Barre d'outils"
+template.form_field:
+  en: "Form field"
+  fr: "Champ de formulaire"
+template.page_header:
+  en: "Page header"
+  fr: "En-tête de page"
+template.status_bar:
+  en: "Status bar"
+  fr: "Barre d'état"
+template.empty_state:
+  en: "Empty state"
+  fr: "Liste vide"
+template.confirm_row:
+  en: "Cancel / OK row"
+  fr: "Rangée Annuler / OK"
 designer.rename:
   en: "Rename"
   fr: "Renommer"
@@ -986,9 +1178,21 @@ prop.axis:
 prop.background:
   en: "Background"
   fr: "Fond"
+prop.border:
+  en: "Border"
+  fr: "Bordure"
+prop.border_color:
+  en: "Border colour"
+  fr: "Couleur de bordure"
 prop.bound_field:
   en: "Bound field"
   fr: "Champ lié"
+prop.clip:
+  en: "Clip content"
+  fr: "Rogner le contenu"
+prop.cursor:
+  en: "Hand cursor"
+  fr: "Curseur main"
 prop.count:
   en: "Count"
   fr: "Nombre"
@@ -1013,9 +1217,66 @@ prop.height:
 prop.href:
   en: "Address"
   fr: "Adresse"
+prop.italic:
+  en: "Italic"
+  fr: "Italique"
+prop.items:
+  en: "Items"
+  fr: "Éléments"
+prop.justify:
+  en: "Distribution"
+  fr: "Répartition"
+prop.line_height:
+  en: "Line height"
+  fr: "Interligne"
+prop.margin:
+  en: "Margin"
+  fr: "Marge"
+prop.margin_x:
+  en: "Horizontal margin"
+  fr: "Marge horizontale"
+prop.margin_y:
+  en: "Vertical margin"
+  fr: "Marge verticale"
+prop.max_height:
+  en: "Max height"
+  fr: "Hauteur max"
+prop.max_width:
+  en: "Max width"
+  fr: "Largeur max"
+prop.min_height:
+  en: "Min height"
+  fr: "Hauteur min"
+prop.min_width:
+  en: "Min width"
+  fr: "Largeur min"
+prop.name:
+  en: "Name"
+  fr: "Nom"
+prop.nowrap:
+  en: "No wrap"
+  fr: "Sans retour à la ligne"
+prop.opacity:
+  en: "Opacity"
+  fr: "Opacité"
+prop.shadow:
+  en: "Shadow"
+  fr: "Ombre"
+prop.truncate:
+  en: "Truncate"
+  fr: "Tronquer"
+prop.underline:
+  en: "Underline"
+  fr: "Souligné"
+prop.wrap:
+  en: "Wrap"
+  fr: "Retour à la ligne"
 prop.id:
   en: "Identifier"
   fr: "Identifiant"
+prop.keystroke:
+  en: "Shortcut"
+  fr: "Raccourci"
 prop.label:
   en: "Label"
   fr: "Libellé"
@@ -1157,6 +1418,9 @@ tools.the_editor:
 welcome.hint:
   en: "Open a folder to begin."
   fr: "Ouvrez un dossier pour commencer."
+welcome.open_demo:
+  en: "Open the demo"
+  fr: "Ouvrir la démo"
 welcome.open_folder:
   en: "Open a folder…"
   fr: "Ouvrir un dossier…"

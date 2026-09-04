@@ -4,6 +4,7 @@
 pub mod about;
 pub mod actions;
 pub mod bricks;
+pub mod cli;
 pub mod codegen;
 pub mod designer;
 pub mod menu_model;
@@ -103,7 +104,12 @@ fn sys_locale() -> String {
 
 /// Boots the application: actions, keymap, menus, first window.
 pub fn run() {
-    Application::new().run(|cx: &mut App| {
+    // Before gpui, because `maxx new`, `--help` and `--version` answer on the
+    // terminal and end there: a script, a CI job and a machine with no display
+    // can all write a project without anything trying to open a window.
+    let path = cli::dispatch(std::env::args().skip(1));
+
+    Application::new().run(move |cx: &mut App| {
         // Without this the menu bar stays behind whatever was frontmost when
         // the app was launched from a terminal.
         gpui_component::init(cx);
@@ -127,8 +133,6 @@ pub fn run() {
         cx.set_menus(menus::app_menus(cx));
 
         // `maxx <path>` opens a project straight away, the way `zed <path>` does.
-        let path =
-            std::env::args().nth(1).map(std::path::PathBuf::from).filter(|path| path.is_dir());
         workspace::open_workspace_window(path, cx);
     });
 }

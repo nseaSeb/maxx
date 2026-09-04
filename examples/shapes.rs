@@ -127,6 +127,15 @@ mod components {
     include!(concat!(env!("OUT_DIR"), "/components.rs"));
 }
 
+/// The pages the shapes bring with them, compiled where they are written.
+///
+/// A page owes nothing to the project it lands in — no `crate::settings`, no
+/// `crate::theme` — so it compiles here on `gpui` and `gpui-component` alone,
+/// with no stand-in to keep in step.
+mod pages {
+    include!(concat!(env!("OUT_DIR"), "/pages.rs"));
+}
+
 /// The sub-tree templates the palette drops, compiled where they are written.
 mod subtrees {
     use gpui::prelude::*;

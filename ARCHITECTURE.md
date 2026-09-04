@@ -63,6 +63,7 @@ parseur servent à garantir.
 | `preferences.rs` | l'écran de réglages |
 | `about.rs` | la fenêtre À propos |
 | `settings.rs` | ce que maxx retient d'un lancement à l'autre |
+| `cli.rs` | la ligne de commande, lue avant gpui : `new`, `--help`, `--version` |
 | `actions.rs` | les actions, leurs gestionnaires, le clavier |
 | `menus.rs` | la barre de menus de maxx |
 | `tools.rs` | le catalogue des éditeurs et des terminaux, leur détection |
@@ -142,8 +143,28 @@ deux fonctions, et pourquoi les actions du workspace passent par
 Une troisième, propre à l'inspecteur : **taper du texte n'incrémente pas
 `revision` et ne pose pas de point d'annulation**, parce que `revision` est ce
 qui déclenche la reconstruction des `InputState` — la bumper à chaque frappe
-recréerait le champ sous le curseur. Le prix assumé est que les éditions de
-texte échappent à `⌘Z`.
+recréerait le champ sous le curseur.
+
+Le pas se prend donc **à la sortie du champ**, quand ce qui a été tapé est déjà
+dans l'arbre — chaque frappe l'y écrit — et que plus rien n'attend sous le
+curseur : une visite dans un champ fait un `⌘Z`, pas une frappe. Le champ qui
+prend le focus retient l'arbre d'avant ; le perdre, `⏎`, changer de sélection ou
+`⌘S` transforme cet arbre en pas.
+
+Deux choses tiennent cette promesse. La session porte **l'identité du champ qui
+l'a ouverte** : gpui livre un unique événement de focus à tous ses auditeurs,
+dans l'ordre où ils se sont inscrits, donc remonter l'inspecteur fait parler le
+`Focus` du champ d'arrivée avant le `Blur` du champ quitté — une session anonyme
+serait fermée par la mauvaise moitié, et la saisie ne laisserait aucun pas. Et
+poser le pas **adopte la clé de `sync_prop_inputs`** : `revision` avance, pour
+que le panneau de code rattrape, mais les champs tiennent déjà ce que l'arbre
+tient, alors rien n'est reconstruit sous un curseur qui vient peut-être
+d'arriver dans le champ suivant.
+
+`checkpoint` prend ce pas avant le sien, pour la même raison qu'il existe : une
+commande atteint le workspace avec un champ qui tient encore le curseur, et la
+frappe poussée après coup se retrouverait *au-dessus* de la commande — un `⌘Z`
+défaisant les deux, le suivant rendant le mot.
 
 ## Les réglages
 
@@ -267,8 +288,14 @@ Deux workflows, deux rôles. `ci.yml` donne un signal rapide et fréquent ;
 `release.yml` est le portail de publication : il part sur un tag `v*`, passe la
 matrice entière, construit en release — ce que la CI ordinaire ne fait jamais,
 et une optimisation révèle ce qu'un build de debug tolère —, vérifie ce qui
-partirait dans un paquet crates.io, et attache les binaires des trois systèmes
-à la version. Un tag reste le pire endroit pour *découvrir* une casse, le
+partirait dans un paquet crates.io, puis ouvre la version sur GitHub avec la
+section du CHANGELOG pour corps. Il n'y attache aucun binaire, et c'est
+délibéré : un exécutable est une distribution au sens des licences — Apache-2.0
+pour gpui, MPL-2.0 pour option-ext — avec les mentions qui doivent voyager avec
+lui, quand publier la source n'en demande aucune et que `cargo install` suffit à
+qui tient une chaîne d'outils. `scripts/bundle-macos.sh`, qui assemble un
+`maxx.app` autour d'un binaire construit, ne relève donc d'aucun workflow : il
+s'exécute à la main. Un tag reste le pire endroit pour *découvrir* une casse, le
 commit étant déjà celui qu'on voulait publier : ce portail double le filet
 hebdomadaire au moment où l'erreur coûte le plus cher, il ne le remplace pas.
 

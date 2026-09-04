@@ -3,13 +3,107 @@
 
 use super::*;
 
+// For `InputState::focus_handle`: `⏎` in the tree hands the caret to the
+// inspector's box, and the handle is what `Window::focus` takes.
+use gpui::Focusable as _;
+
 impl Workspace {
     /// Selects a node of the tree being designed.
+    ///
+    /// A selection that moves ends the text edit in progress: the field about
+    /// to be rebuilt for another node is the one holding the session, and a
+    /// snapshot outliving it would be pushed against a tree it no longer
+    /// describes.
     pub fn select(&mut self, path: NodePath, cx: &mut Context<Self>) {
+        self.close_text_edit(cx);
+        // The box on the canvas belongs to the node it stands over. Left open,
+        // it would go on writing into `view.selected` — which is about to be
+        // some other node.
+        self.canvas_edit = None;
         if let Some(view) = self.view_mut() {
             view.selected = path;
             cx.notify();
         }
+    }
+
+    /// Moves the selection to the previous or next row of the structure tree.
+    ///
+    /// The order is the tree's own — depth first, a parent before its children —
+    /// because that is the order the rows are painted in, and the arrow keys
+    /// have to agree with what the eye sees. Nothing folds in the tree yet, so
+    /// every node is a visible row and there is no hidden one to skip.
+    ///
+    /// Both ends stop rather than wrap: a cursor that leaps from the last row to
+    /// the first is a cursor you then have to go looking for.
+    pub fn step_selection(&mut self, forward: bool, cx: &mut Context<Self>) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        let mut rows: Vec<NodePath> = Vec::new();
+        view.root.walk(&mut |path, _| rows.push(path.to_vec()));
+        let Some(current) = rows.iter().position(|path| *path == view.selected) else {
+            return;
+        };
+        let Some(next) = (if forward { current.checked_add(1) } else { current.checked_sub(1) })
+        else {
+            return;
+        };
+        let Some(path) = rows.get(next).cloned() else {
+            return;
+        };
+        self.select(path, cx);
+    }
+
+    /// Moves the selection to the parent of the selected node, or to its first
+    /// child.
+    ///
+    /// `←` and `→` fold and unfold a row in most trees; this one has nothing to
+    /// fold — every node is always shown — so the two keys walk the depth
+    /// instead, which is the other thing a hand reaches for them to do.
+    pub fn step_depth(&mut self, inward: bool, cx: &mut Context<Self>) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        let mut path = view.selected.clone();
+        if inward {
+            let Some(node) = view.root.at(&path) else {
+                return;
+            };
+            if node.children.is_empty() {
+                return;
+            }
+            path.push(0);
+        } else if path.pop().is_none() {
+            return;
+        }
+        self.select(path, cx);
+    }
+
+    /// Puts the caret in the inspector's text box for the selected node.
+    ///
+    /// `⏎` on a row is "let me type the label", and the box that answers is the
+    /// one the inspector already built for the first Text property of the
+    /// component. A node with no text — a divider, a column — does nothing,
+    /// rather than moving the focus somewhere the key never promised.
+    pub fn focus_prop_text(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // The property the component *says*, not the first one that happens to
+        // be text: a button's first is `prop.id`, so `⏎` renamed the element —
+        // taking the tooltip and the handler hung on that id with it — and left
+        // the label untouched. `spoken_text` is the same question the canvas's
+        // double-click asks, answered from the table of groups.
+        let Some(node) = self.view().map(|view| view.selected().clone()) else {
+            return;
+        };
+        let Some(wanted) = crate::registry::spoken_text(&node) else {
+            return;
+        };
+        let Some((_, state)) =
+            self.prop_inputs.iter().find(|(prop, _)| std::ptr::eq(*prop, wanted))
+        else {
+            return;
+        };
+        window.focus(&state.read(cx).focus_handle(cx));
+        cx.notify();
     }
 
     /// The fields of the view able to back the selected component.
@@ -118,11 +212,13 @@ impl Workspace {
                         // onto the stack at all: the first ⌘Z undid whatever came
                         // before and took the typing with it, in one go.
                         InputEvent::Focus => {
-                            this.edit_snapshot =
-                                this.view().map(|view| (view.path.clone(), view.root.clone()));
+                            this.begin_text_edit(state.entity_id(), TextSurface::Inspector, cx)
                         }
-                        InputEvent::Blur | InputEvent::PressEnter { .. } => {
-                            this.close_text_edit(cx)
+                        InputEvent::Blur => this.close_text_edit_of(state.entity_id(), cx),
+                        // `⏎` keeps the caret where it is, so it opens the next
+                        // session as it closes this one — like the save does.
+                        InputEvent::PressEnter { .. } => {
+                            this.begin_text_edit(state.entity_id(), TextSurface::Inspector, cx)
                         }
                     })
                     .detach();
@@ -132,18 +228,7 @@ impl Workspace {
             return;
         };
 
-        // How many pixels the picture really has, which is what makes a width
-        // thinkable: 400 and 4000 ask for different numbers, and the field says
-        // neither. Read here rather than in `render`, which runs on every
-        // frame — the guard above is what keeps it to one read per selection.
-        self.image_size = None;
-        if spec.id == "image"
-            && let Some(root) = self.project().map(|project| project.root.clone())
-            && let Some(prop) = spec.props.first()
-            && let Some(value) = crate::registry::read(&node, prop).filter(|v| !v.is_empty())
-        {
-            self.image_size = image::image_dimensions(root.join(value)).ok();
-        }
+        self.sync_image_size();
 
         for prop in crate::registry::props(spec) {
             if !matches!(
@@ -160,7 +245,12 @@ impl Workspace {
             {
                 continue;
             }
-            let value = crate::registry::read(&node, prop).unwrap_or_default();
+            let value = match prop.target {
+                // The node holds nothing of this one; `new` does.
+                crate::registry::Target::Initializer(_) => self.initializer_value(prop),
+                _ => crate::registry::read(&node, prop),
+            }
+            .unwrap_or_default();
             let state = cx.new(|cx| InputState::new(window, cx).default_value(value));
             cx.subscribe(&state, move |this, state, event: &InputEvent, cx| match event {
                 InputEvent::Change => {
@@ -171,11 +261,14 @@ impl Workspace {
                 // through the revision counter, rebuild the field under the
                 // caret. One per visit to the field is the right grain.
                 InputEvent::Focus => {
-                    this.edit_snapshot =
-                        this.view().map(|view| (view.path.clone(), view.root.clone()));
+                    this.begin_text_edit(state.entity_id(), TextSurface::Inspector, cx)
                 }
-                InputEvent::Blur => this.close_text_edit(cx),
-                InputEvent::PressEnter { .. } => this.close_text_edit(cx),
+                InputEvent::Blur => this.close_text_edit_of(state.entity_id(), cx),
+                // `⏎` keeps the caret where it is, so it opens the next session
+                // as it closes this one — like the save does.
+                InputEvent::PressEnter { .. } => {
+                    this.begin_text_edit(state.entity_id(), TextSurface::Inspector, cx)
+                }
             })
             .detach();
             self.prop_inputs.push((prop, state));
@@ -354,23 +447,262 @@ impl Workspace {
         self.state_type
     }
 
-    /// Closes an inspector text edit, turning it into a single undo step.
-    pub(super) fn close_text_edit(&mut self, cx: &mut Context<Self>) {
-        let Some((path, before)) = self.edit_snapshot.take() else {
+    /// How many pixels the selected picture really has.
+    ///
+    /// Which is what makes a width thinkable: 400 and 4000 ask for different
+    /// numbers, and the field says neither. Read here rather than in `render`,
+    /// which runs on every frame — once per selection, and once more when a
+    /// text edit closes, since the path may be exactly what was typed.
+    fn sync_image_size(&mut self) {
+        self.image_size = None;
+        let Some(node) = self.view().map(|view| view.selected().clone()) else {
             return;
         };
-        let Some(view) = self.view_mut() else {
+        let Some(spec) = crate::registry::of(&node) else {
             return;
+        };
+        // Asked of the property and not of the entry's name: the avatar carries
+        // a picture too, and an identifier here would have left it without its
+        // pixel count for no reason a reader could find.
+        if let Some(root) = self.project().map(|project| project.root.clone())
+            && let Some(prop) = spec.props.iter().find(|prop| matches!(prop.kind, Kind::Path))
+            && let Some(value) = crate::registry::read(&node, prop).filter(|v| !v.is_empty())
+            // A drawing has no pixels to count: an SVG is a description, and
+            // `image_dimensions` answers with an unsupported-format error
+            // rather than a size. Nothing would be shown either way — the read
+            // is fallible and its failure is already the empty case — but
+            // asking first says why, and stops a future decoder from quietly
+            // reporting the raster size of a file that has none.
+            && !value.to_ascii_lowercase().ends_with(".svg")
+        {
+            self.image_size = image::image_dimensions(root.join(value)).ok();
+        }
+    }
+
+    /// The field the selected component is bound to, when it has one.
+    fn bound_field(&self) -> Option<String> {
+        let view = self.view()?;
+        let node = view.root.at(&view.selected)?;
+        crate::registry::of(node)?.state?;
+        let crate::model::Base::Known { args, .. } = &node.base else {
+            return None;
+        };
+        args.first()?.to_source().strip_prefix("&self.").map(str::to_string)
+    }
+
+    /// What a property living in the state field's initializer currently holds.
+    ///
+    /// `None` when the line in `new` is not one maxx wrote: the same rule the
+    /// handlers follow — what the developer has changed is theirs, and the
+    /// inspector shows it rather than offering to overwrite it.
+    pub(crate) fn initializer_value(&self, prop: &'static crate::registry::Prop) -> Option<String> {
+        let crate::registry::Target::Initializer(init) = prop.target else {
+            return None;
+        };
+        let field = self.bound_field()?;
+        let source = self.view()?.state_initializer(&field)?;
+        init.read(prop.kind, &source)
+    }
+
+    /// Writes such a property back into `new`.
+    ///
+    /// No checkpoint: the undo stack holds trees, and this line is not in the
+    /// tree. Saying it plainly rather than taking one that would restore
+    /// nothing — the same place `add_state_field` already stands.
+    pub(super) fn edit_initializer(
+        &mut self,
+        prop: &'static crate::registry::Prop,
+        value: &str,
+        cx: &mut Context<Self>,
+    ) {
+        let crate::registry::Target::Initializer(init) = prop.target else {
+            return;
+        };
+        // Only what maxx itself wrote is replaced: reading it back is the proof.
+        if self.initializer_value(prop).is_none() {
+            self.message = Some(crate::tr("message.initializer_is_yours"));
+            cx.notify();
+            return;
+        }
+        let Some(field) = self.bound_field() else {
+            return;
+        };
+        // Said here and not in `edit_prop_text`, which hands this one over
+        // before it gets to `validate`: a keystroke swallowed with no word is
+        // exactly the silence `validate` exists to break.
+        self.message = crate::registry::validate(prop, value).map(crate::tr);
+        let Some(text) = init.write(prop.kind, value) else {
+            cx.notify();
+            return;
+        };
+        if let Some(view) = self.view_mut() {
+            view.set_state_initializer(&field, &text);
+        }
+        cx.notify();
+    }
+
+    /// Opens a box over a node of the canvas, on the words it says out loud.
+    ///
+    /// The whole point is that the words are typed where they are read, so the
+    /// box is the inspector's box moved onto the board: the same `Input`, the
+    /// same subscription, and above all the same session — [`Self::begin_text_edit`]
+    /// keyed on the field's own [`EntityId`]. A second mechanism beside that one
+    /// would be a second grain of undo for the same act of typing.
+    ///
+    /// Built here and not in a `sync_…` pass, unlike every other field of the
+    /// window: this one exists only while it is open, and a field rebuilt once
+    /// per frame is a caret dropped once per frame.
+    ///
+    /// Answers whether it opened, so the double click can fall back to what it
+    /// meant before on a node with nothing to say.
+    pub fn edit_text_on_canvas(
+        &mut self,
+        path: NodePath,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some(node) = self.view().and_then(|view| view.root.at(&path)).cloned() else {
+            return false;
+        };
+        let Some(prop) = registry::spoken_text(&node) else {
+            return false;
+        };
+        let value = registry::read(&node, prop).unwrap_or_default();
+        let state = cx.new(|cx| InputState::new(window, cx).default_value(value));
+        cx.subscribe(&state, move |this, state, event: &InputEvent, cx| match event {
+            InputEvent::Change => {
+                let value = state.read(cx).value().to_string();
+                this.edit_prop_text(prop, &value, cx);
+            }
+            InputEvent::Focus => this.begin_text_edit(state.entity_id(), TextSurface::Canvas, cx),
+            // The two ways out, and both take the box away with the step: what
+            // was typed is already in the tree, the caret having put it there.
+            // `Escape` is not among them — gpui-component lets it bubble
+            // without emitting anything, so nothing here could hear it.
+            InputEvent::Blur | InputEvent::PressEnter { .. } => {
+                this.close_text_edit_of(state.entity_id(), cx);
+                this.canvas_edit = None;
+                cx.notify();
+            }
+        })
+        .detach();
+
+        let focus = state.read(cx).focus_handle(cx);
+        window.focus(&focus);
+        // Preselected, so the first keystroke replaces the old words — which is
+        // what a double click on a label promises. On the next frame because an
+        // action travels the dispatch tree of the frame that was *drawn*, and
+        // the box is not in that one yet.
+        window.on_next_frame(move |window, cx| {
+            focus.dispatch_action(&gpui_component::input::SelectAll, window, cx);
+        });
+        self.canvas_edit = Some((path, prop, state));
+        cx.notify();
+        true
+    }
+
+    /// The box open over the canvas, for the board that draws it.
+    pub(crate) fn canvas_edit(&self) -> Option<(&[usize], &Entity<InputState>)> {
+        self.canvas_edit.as_ref().map(|(path, _, state)| (path.as_slice(), state))
+    }
+
+    /// Opens a text edit on `field`, closing whatever session was open.
+    ///
+    /// Closing here and not only on blur is what holds the grain in both
+    /// directions: gpui hands one focus event to every listener in subscription
+    /// order, so a caret moving *up* the inspector reaches this before the
+    /// field it left says a word.
+    pub(super) fn begin_text_edit(
+        &mut self,
+        field: EntityId,
+        surface: TextSurface,
+        cx: &mut Context<Self>,
+    ) {
+        self.close_text_edit(cx);
+        self.edit_snapshot =
+            self.view().map(|view| (field, surface, view.path.clone(), view.root.clone()));
+    }
+
+    /// Closes the text edit `field` opened, and only that one.
+    ///
+    /// A blur arriving after the next field has already claimed the session
+    /// must leave it alone, or the word about to be typed there would be
+    /// written with nothing to take it back.
+    pub(super) fn close_text_edit_of(&mut self, field: EntityId, cx: &mut Context<Self>) {
+        if self.edit_snapshot.as_ref().is_some_and(|(owner, ..)| *owner == field) {
+            self.close_text_edit(cx);
+        }
+    }
+
+    /// Ends the text edit at a save and opens the next one on the same field.
+    ///
+    /// `⌘S` is an exit like the others — what was typed before it is one step —
+    /// but the caret has not moved, so the field keeps a session for what
+    /// follows instead of typing on into nothing.
+    pub(super) fn split_text_edit(&mut self, cx: &mut Context<Self>) {
+        let Some((field, surface)) =
+            self.edit_snapshot.as_ref().map(|(field, surface, ..)| (*field, *surface))
+        else {
+            return;
+        };
+        self.begin_text_edit(field, surface, cx);
+    }
+
+    /// Closes an inspector text edit, turning it into a single undo step.
+    pub(super) fn close_text_edit(&mut self, cx: &mut Context<Self>) {
+        if self.take_text_step() {
+            cx.notify();
+        }
+    }
+
+    /// Records the text edit in progress as a step, and says whether it made
+    /// one.
+    ///
+    /// The half of [`Workspace::close_text_edit`] that asks for no context, so
+    /// that `checkpoint` — which has none — can take the step before its own.
+    /// A structural command can reach the workspace with a field still holding
+    /// the caret: `⌘D` travels through a focused input, and a click in a menu
+    /// blurs nothing. Pushed afterwards, the typing would sit *on top of* the
+    /// command's snapshot, and one `⌘Z` would undo both while the next put the
+    /// text back.
+    pub(super) fn take_text_step(&mut self) -> bool {
+        let Some((_, surface, path, before)) = self.edit_snapshot.take() else {
+            return false;
+        };
+        // Which box was typing decides whether the panel is already up to
+        // date. The claim below — "the fields hold what the tree holds" — is
+        // true of the inspector's own boxes and of no other: the canvas box
+        // shares this session mechanism but is a different entity, so adopting
+        // the key after a double-click edit left the inspector showing the old
+        // label, and one more character typed there wrote it back over what
+        // the canvas had just said.
+        let ours = matches!(surface, TextSurface::Inspector);
+        let Some(view) = self.view_mut() else {
+            return false;
         };
         // The tab may have changed, or the view may have been reloaded, since
         // the field took the focus; that snapshot belongs to neither.
         if view.path != path || view.root == before {
-            return;
+            return false;
         }
         view.past.push(before);
         view.future.clear();
         self.revision += 1;
-        cx.notify();
+        // The bump above is for the code panel, which is keyed on the revision;
+        // the inspector's fields already hold what the tree holds, the caret
+        // having put it there. So the new key is adopted rather than left for
+        // `sync_prop_inputs` to answer — otherwise the next frame rebuilds the
+        // box the caret has just moved into, which is the one thing the whole
+        // mechanism exists to avoid.
+        //
+        // Only for a box of the inspector's own, though: when the writing came
+        // from elsewhere the panel has nothing showing the new value, and the
+        // key is left for the next frame to answer.
+        if ours {
+            self.synced = self.view().map(|view| (self.revision, view.selected.clone()));
+        }
+        self.sync_image_size();
+        true
     }
 
     /// Moves a text input to the next field of the view able to back it.
@@ -411,6 +743,12 @@ impl Workspace {
         value: &str,
         cx: &mut Context<Self>,
     ) {
+        // The same detour as `edit_prop`: a list of entries is typed into a
+        // text field, and what it feeds is the constructor in `new`.
+        if matches!(prop.target, crate::registry::Target::Initializer(_)) {
+            self.edit_initializer(prop, value, cx);
+            return;
+        }
         let Some(view) = self.view_mut() else {
             return;
         };
@@ -435,8 +773,8 @@ impl Workspace {
         }
         // The pixel size on screen belongs to the path that was there: keeping
         // it beside a path being typed would put a true number next to a wrong
-        // file. Cleared here, read again when the edit closes — which bumps the
-        // revision, and that is what `sync_prop_inputs` waits for.
+        // file. Cleared here, and read again by the edit closing, which is why
+        // that read is a step of its own rather than the rebuild's.
         if matches!(prop.kind, Kind::Path) {
             self.image_size = None;
         }
@@ -550,6 +888,11 @@ impl Workspace {
         // whole tree can give.
         if matches!(prop.target, registry::Target::Scrollbar) {
             self.toggle_scrollbar(value == "true", cx);
+            return;
+        }
+        // Not a call on the node but an argument in the view's `new`.
+        if matches!(prop.target, registry::Target::Initializer(_)) {
+            self.edit_initializer(prop, value, cx);
             return;
         }
         if view.root.at(&selected).is_some() {

@@ -16,14 +16,15 @@ mod views;
 
 pub use chrome::fillable;
 pub use code::{CodeFile, language_for};
+pub use edits::Insert;
 pub use explorer::{protected_entry, top_level_module, unregister_view, view_module};
 
 use rust_i18n::t;
 
 use gpui::prelude::*;
 use gpui::{
-    AnyElement, App, Bounds, Context, Entity, Global, SharedString, TitlebarOptions, WeakEntity,
-    Window, WindowBounds, WindowId, WindowOptions, div, point, px, size, uniform_list,
+    AnyElement, App, Bounds, Context, Entity, EntityId, Global, SharedString, TitlebarOptions,
+    WeakEntity, Window, WindowBounds, WindowId, WindowOptions, div, point, px, size, uniform_list,
 };
 use gpui::{ScrollHandle, ScrollStrategy, Task, UniformListScrollHandle};
 use gpui_component::Root;
@@ -170,6 +171,10 @@ pub struct Workspace {
     pub(crate) side_split: Entity<ResizableState>,
     /// Where the split between the canvas and the inspector sits.
     pub(crate) inspector_split: Entity<ResizableState>,
+    /// Where the split between the window and the output panel sits.
+    pub(crate) output_split: Entity<ResizableState>,
+    /// Where the menu editor parts: the rows on the left, its inspector right.
+    pub(crate) menu_inspector_split: Entity<ResizableState>,
     /// Text boxes of the menu panel.
     menu_inputs: Vec<(MenuField, Entity<InputState>)>,
     /// Selection the menu boxes were built for.
@@ -260,6 +265,14 @@ pub struct Workspace {
     state_name_input: Option<Entity<InputState>>,
     /// Search box of the component palette.
     palette_filter: Option<Entity<InputState>>,
+    /// The catalogue row the palette's context menu is about.
+    ///
+    /// A selection of its own, and the palette had none until the menu needed
+    /// one: `ContextMenuExt::context_menu` hard-codes the id of what it opens,
+    /// so the menu belongs to the list and not to a row, and the right click
+    /// has to leave behind which row it was on. Held rather than passed,
+    /// because the entries are actions and an action carries no pointer.
+    palette_target: Option<&'static str>,
     /// Search box of the inspector.
     ///
     /// Its own, and not the palette's: they filter different lists and are on
@@ -304,9 +317,27 @@ pub struct Workspace {
     command_index: usize,
     /// Index into `view::STATE_TYPES` for the field about to be added.
     state_type: usize,
-    /// The tree as it was when the focused inspector field was entered, and
-    /// the view it belongs to.
-    edit_snapshot: Option<(PathBuf, Node)>,
+    /// The tree as it was when the focused inspector field was entered, the
+    /// view it belongs to, and which field opened it.
+    ///
+    /// The field is named because gpui hands one focus event to every listener
+    /// in subscription order: moving the caret *up* the inspector reaches the
+    /// new field's `Focus` before the old one's `Blur`, and a session that
+    /// could not tell whose it is would be closed by the wrong half.
+    edit_snapshot: Option<(EntityId, TextSurface, PathBuf, Node)>,
+    /// The box open over a node of the canvas: which node, which property it
+    /// writes, and the field itself.
+    ///
+    /// Built when the double click opens it rather than once per frame like the
+    /// inspector's, and kept until it closes: it exists only while someone is
+    /// typing in it, and rebuilding it is exactly what must never happen.
+    canvas_edit: Option<(NodePath, &'static registry::Prop, Entity<InputState>)>,
+    /// Whether the handle being pulled has already taken its undo step.
+    ///
+    /// A drag writes a size on every frame and has to leave a single step, so
+    /// the checkpoint is taken at the first movement and not again until the
+    /// next handle is taken hold of.
+    resized: bool,
     /// Views changed both on disk and in the designer, awaiting a decision.
     conflicts: HashSet<PathBuf>,
     /// Projects where the assets module could not be added on its own.
@@ -321,6 +352,13 @@ pub struct Workspace {
     pub(crate) side_scroll: ScrollHandle,
     /// The structure pane's own scroll, now that it is a pane of its own.
     pub(crate) tree_scroll: ScrollHandle,
+    /// The focus of the structure pane, which is what makes its keymap its own.
+    ///
+    /// A key context alone binds nothing: gpui dispatches a keystroke along the
+    /// path of the *focused* element, so `↑` means "previous node" only while
+    /// the tree holds the focus — and it goes on meaning nothing anywhere else.
+    /// Clicking a row is what takes it.
+    pub(crate) tree_focus: gpui::FocusHandle,
     /// The component palette's own scroll, now that it lives on the left.
     pub(crate) palette_scroll: ScrollHandle,
     /// The natural size of the selected image, when there is one.
@@ -333,6 +371,39 @@ pub struct Workspace {
     pub(crate) canvas_scroll: ScrollHandle,
     /// Scroll position of the output panel.
     pub(crate) output_scroll: UniformListScrollHandle,
+    /// The recent projects as the welcome screen draws them.
+    ///
+    /// Read once, when the list changes, and never where they are painted: a
+    /// thumbnail read at render time would be ten files opened and parsed sixty
+    /// times a second, for a screen that never moves.
+    pub(crate) recent_cards: Vec<RecentCard>,
+    /// The list those cards were built for, so they are built once.
+    ///
+    /// Dropped while a project is open, which is the other half of the rule: the
+    /// recent list does not change when someone edits the very view a card was
+    /// read from, so coming back to the welcome screen has to read it again.
+    recent_synced: Option<Vec<PathBuf>>,
+    /// The repository's demo, when this build can reach it.
+    ///
+    /// Asked once per window rather than once per frame: it walks the disk
+    /// upwards from the running binary, and the answer cannot change while maxx
+    /// is running.
+    pub(crate) demo: Option<PathBuf>,
+}
+
+/// One recent project, as the welcome screen needs it.
+pub struct RecentCard {
+    /// Where the project is.
+    pub root: PathBuf,
+    /// The tree of its entry view, when it could be read.
+    ///
+    /// `None` covers a project that has been moved, one whose `maxx.toml` names
+    /// no view, and one whose view does not parse: the card shows an empty frame
+    /// for all three, because none of them is anything the reader did.
+    pub tree: Option<Node>,
+    /// The colours of that project, so a thumbnail is painted the way the
+    /// project's own window will be — the board does exactly the same.
+    pub preview: crate::preview::Preview,
 }
 
 /// What the middle of the window shows, and it shows exactly one of these.
@@ -358,6 +429,23 @@ pub enum Center {
     Code,
     /// maxx's own settings.
     Preferences,
+}
+
+/// Which box a text edit is being typed into.
+///
+/// Carried by the session rather than worked out from `prop_inputs`, because
+/// the answer decides whether the inspector is already up to date when the
+/// session closes — and the caller is the one that knows. Inferring it from a
+/// collection would also be untestable without a window, since an `InputState`
+/// needs one and the tests stand entities in for the fields.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TextSurface {
+    /// A field of the inspector panel. Closing one leaves the panel showing
+    /// what the tree holds, so the sync key is adopted and nothing rebuilds.
+    Inspector,
+    /// The box opened over a node on the canvas. The inspector has nothing
+    /// showing the new value, so it must rebuild on the next frame.
+    Canvas,
 }
 
 impl Workspace {
@@ -470,6 +558,8 @@ impl Workspace {
             left_split: cx.new(|_| ResizableState::default()),
             side_split: cx.new(|_| ResizableState::default()),
             inspector_split: cx.new(|_| ResizableState::default()),
+            output_split: cx.new(|_| ResizableState::default()),
+            menu_inspector_split: cx.new(|_| ResizableState::default()),
             menu_inputs: Vec::new(),
             menu_synced: None,
             views: Vec::new(),
@@ -502,6 +592,7 @@ impl Workspace {
             rename_input: None,
             state_name_input: None,
             palette_filter: None,
+            palette_target: None,
             prop_filter: None,
             command_input: None,
             commands: Vec::new(),
@@ -510,15 +601,21 @@ impl Workspace {
             command_index: 0,
             state_type: 0,
             edit_snapshot: None,
+            canvas_edit: None,
+            resized: false,
             conflicts: HashSet::new(),
             assets_refused: HashSet::new(),
             was_active: false,
             side_scroll: ScrollHandle::new(),
             tree_scroll: ScrollHandle::new(),
+            tree_focus: cx.focus_handle(),
             palette_scroll: ScrollHandle::new(),
             canvas_scroll: ScrollHandle::new(),
             image_size: None,
             output_scroll: UniformListScrollHandle::new(),
+            recent_cards: Vec::new(),
+            recent_synced: None,
+            demo: crate::project::demo(),
         };
         workspace.refresh_entries();
         // Same reason as the notice above: a project handed straight to a fresh
