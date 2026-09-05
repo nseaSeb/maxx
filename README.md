@@ -1,5 +1,10 @@
 # <img src="assets/icon-1024.png" alt="" width="40" align="top"> maxx
 
+[![CI](https://github.com/nseaSeb/maxx/actions/workflows/ci.yml/badge.svg)](https://github.com/nseaSeb/maxx/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/maxx.svg)](https://crates.io/crates/maxx)
+[![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-b7410e.svg)](#requirements)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+
 A visual workshop that builds [GPUI](https://gpui.rs) views and writes them out
 as real Rust source.
 
@@ -11,6 +16,46 @@ project.
 ![The demo project open in maxx: a button is searched for in the component catalogue and dropped into the view, and the structure tree and the inspector fill in with it](docs/maxx-demo.gif)
 
 ![The same view at rest: the file explorer on the left, the view itself in the middle, and on the right the structure of what it holds above every property of the selected node](docs/maxx.png)
+
+## In four commands
+
+```sh
+cargo install maxx                 # several minutes: gpui is some 750 crates
+maxx new hello --shape sidebar     # a whole project, and it says where it is
+cd hello && cargo run              # slow once more, then cached for every project
+maxx .                             # …and now design it
+```
+
+Two long builds and no third: `gpui` and `gpui-component` are some 750 crates,
+and maxx pays for them once for itself and once for your first project. Every
+project maxx writes afterwards shares that second cache — see [Building
+generated projects](#building-generated-projects). What `hello` runs is its own
+binary: maxx is not among its dependencies, and never becomes one.
+
+On Linux, install the development packages before the first line —
+[Requirements](#requirements) has the `apt` command; without them the build
+stops on missing C headers rather than on Rust, which is the confusing way
+round. On macOS, Xcode is enough.
+
+## What is on this page
+
+- [The principle](#the-principle) — why the `.rs` file is the truth, and what
+  that guarantees about the file you already have.
+- [Installing](#installing) and [Usage](#usage) — the window, and the command
+  line that opens none.
+- [The demo](#the-demo) — an ordinary project, committed here, which maxx reads
+  back and the tests measure themselves against.
+- [Requirements](#requirements) — per system, and what CI proves and does not.
+- [View state](#view-state) and [What you add to a
+  project](#what-you-add-to-a-project) — binding a property to a field, and the
+  modules maxx copies into your source and then leaves you.
+- [Your own components](#your-own-components) — the third day of a project, when
+  maxx's own catalogue stops being the interesting one.
+- [Files changed outside maxx](#files-changed-outside-maxx) and [what you write
+  inside the region](#what-you-write-inside-the-region) — the two halves of
+  sharing one file with your editor.
+- [Layout](#layout) — the module map, and the way into
+  [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## maxx uses Zed, and recommends it
 
@@ -224,8 +269,17 @@ feature the build fails on a missing `metal` tool. Generated projects carry the
 same feature, for the same reason.
 
 **Linux**: the development packages gpui expects — Vulkan, Wayland, X11,
-fontconfig, ALSA. The exact list is in
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+fontconfig, ALSA. On Debian and Ubuntu:
+
+```sh
+sudo apt-get install -y libasound2-dev libfontconfig-dev libwayland-dev \
+    libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libvulkan-dev \
+    pkg-config cmake clang
+```
+
+That is the line [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs, so
+it is the one that is actually tested. Other distributions carry
+the same libraries under names of their own.
 
 **Windows**: the MSVC toolchain.
 
@@ -496,8 +550,9 @@ How it all fits together, and why: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 What is known and deferred is in [`BACKLOG.md`](BACKLOG.md), and where it is all
 going, in which order, in [`ROADMAP.md`](ROADMAP.md).
 
-Those three, and the interface strings, are still in French; the code, its
-comments and its tests are in English.
+Those three are still in French. The code, its comments, its tests and the
+interface are in English — see [Language](#language) for what the window
+speaks and how it is changed.
 
 ## Your palette, in every project you start
 

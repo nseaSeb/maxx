@@ -6,6 +6,12 @@ license = "MIT"
 description = "A visual workshop that builds GPUI views and writes them out as real Rust source"
 repository = "https://github.com/nseaSeb/maxx"
 readme = "README.md"
+# Pointed away from docs.rs on purpose. The crate carries a `src/lib.rs`, so
+# docs.rs tries to build it, and fails: the gpui tree wants Vulkan, Wayland,
+# X11 and fontconfig headers its sandbox does not have. Without this key the
+# crates.io page links a build that is red, which is the first thing a reader
+# sees there — and maxx is an application, so there is no API to browse anyway.
+documentation = "https://github.com/nseaSeb/maxx#readme"
 keywords = ["gpui", "gui", "designer", "codegen"]
 categories = ["development-tools", "gui"]
 # The `&& let` chains (actions.rs, workspace.rs) need 1.88; edition 2024 alone
