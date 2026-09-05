@@ -1,560 +1,543 @@
 # Architecture
 
-Ce document dit comment maxx est fait et pourquoi. Le `README.md` dit ce qu'il
-fait ; le `BACKLOG.md` dit ce qui manque. Les trois se lisent dans cet ordre.
+This document says how maxx is made, and why. `README.md` says what it does;
+`BACKLOG.md` says what is missing. The three are read in that order.
 
-La documentation fine — le contrat d'une fonction, le piège d'un appel — vit
-dans les en-têtes de module et les commentaires du code, où elle vieillit avec
-lui. `cargo doc --open` la rend lisible.
+The fine documentation — the contract of a function, the trap in a call — lives
+in the module headers and the comments of the code, where it ages along with it.
+`cargo doc --open` makes it readable.
 
-## La règle qui commande tout le reste
+## The rule that commands everything else
 
-**Le fichier `.rs` est la vérité.** maxx n'a pas de format d'écran, pas de base
-de données de projet, aucune représentation qui survivrait à un `git clone`
-autrement que sous forme de Rust. Tout ce qui suit découle de là.
+**The `.rs` file is the truth.** maxx has no screen format, no project database,
+no representation that would survive a `git clone` other than as Rust.
+Everything below follows from that.
 
-Conséquence directe : maxx doit savoir *lire* ce qu'il n'a pas écrit, et
-*réécrire* sans abîmer ce qu'il ne comprend pas. C'est ce que le modèle et le
-parseur servent à garantir.
+The direct consequence: maxx has to be able to *read* what it did not write, and
+to *rewrite* without damaging what it does not understand. That is what the
+model and the parser exist to guarantee.
 
-## Le tour des modules
+## The tour of the modules
 
-| Module | Rôle |
+| Module | Role |
 |---|---|
-| `model.rs` | l'arbre : une base, une liste ordonnée d'appels, des arguments, des nœuds opaques |
-| `parser.rs` | texte Rust vers modèle ; repérage des marqueurs, découpe textuelle |
-| `codegen.rs` | modèle vers texte Rust |
-| `registry.rs` | les types du catalogue, la recherche par identifiant, l'instanciation |
-| `registry/catalogue.rs` | le catalogue lui-même — le seul endroit à étendre pour ajouter un composant |
-| `registry/props.rs` | ce que l'inspecteur montre, lit et a le droit d'écrire |
-| `registry/state.rs` | les champs d'état, les gestionnaires, ce qu'une copie fait renommer |
-| `registry/ids.rs` | les identifiants d'élément que gpui réclame |
-| `registry/scrollbar.rs` | la boîte qui défile et sa barre : une chose au canvas, deux en source |
-| `view.rs` | une vue ouverte : chargement, enregistrement, insertion de champs d'état |
-| `menu_model.rs` | l'équivalent du modèle, pour une barre de menus |
-| `menufile.rs` | l'équivalent de `view.rs`, pour `src/menus.rs` |
-| `scaffold.rs` | la création d'un projet et ses trois formes |
-| `scaffold/views.rs` | créer une vue, la renommer, désigner celle qui ouvre la fenêtre |
-| `scaffold/modules.rs` | les modules copiés : versions, empreintes, mise à jour |
-| `scaffold/{system,settings,theme,assets,window}.rs` | un module copié et son gabarit |
-| `scaffold/components.rs` | la bibliothèque de briques copiée dans `src/components/` |
-| `scaffold/menubar.rs` | la barre de menus écrite dans le projet |
-| `scaffold/templates.rs` | les coquilles, compilées par `examples/shapes.rs` |
-| `project.rs` | l'arborescence de fichiers montrée dans l'explorateur |
-| `workspace.rs` | la fenêtre : l'état, l'ouverture et la fermeture d'un projet |
-| `workspace/views.rs` | les onglets, la lecture et l'écriture d'une vue |
-| `workspace/inspector.rs` | la sélection, les propriétés, les champs d'état, la saisie |
-| `workspace/edits.rs` | déposer, dupliquer, coller, supprimer, et les points de reprise |
-| `workspace/handlers.rs` | le gestionnaire d'un composant : ouvert, écrit, atteint dans l'éditeur |
-| `workspace/explorer.rs` | l'arbre de fichiers, sa sélection, ses suppressions |
-| `workspace/code.rs` | le lecteur de code : n'importe quel fichier texte, en lecture seule |
-| `workspace/menus.rs` | l'éditeur de barre de menus |
-| `workspace/chrome.rs` | la coque : titre, écran d'accueil, barre d'état, `Render` |
-| `workspace/process.rs` | `cargo run` et le panneau de sortie |
-| `workspace/modules.rs` | les modules copiés dans le projet |
-| `workspace/palette_file.rs` | les couleurs du projet, lues et écrites depuis l'écran |
-| `themefile.rs` | `src/theme.rs` d'un projet : ses rôles, et la rustine qui en change un |
-| `designer.rs` | ce qui tient les panneaux ensemble : onglets, bande latérale, fantôme de glisser |
-| `designer/canvas.rs` | la vue telle qu'elle sera dessinée |
-| `designer/tree.rs` | la structure, et l'endroit où un nœud déposé atterrit |
-| `designer/inspector.rs` | les propriétés, et ce que la saisie réécrit dans l'arbre |
-| `designer/menus.rs` | l'éditeur de barre de menus |
-| `designer/palette.rs` | les composants offerts, et la recherche qui en trouve un |
-| `preferences.rs` | l'écran de réglages |
-| `about.rs` | la fenêtre À propos |
-| `settings.rs` | ce que maxx retient d'un lancement à l'autre |
-| `cli.rs` | la ligne de commande, lue avant gpui : `new`, `--help`, `--version` |
-| `actions.rs` | les actions, leurs gestionnaires, le clavier |
-| `menus.rs` | la barre de menus de maxx |
-| `tools.rs` | le catalogue des éditeurs et des terminaux, leur détection |
-| `run.rs` | tout ce qui suppose un système : `cargo`, terminal, éditeur, corbeille |
-| `watch.rs` | la veille du projet sur le disque : ce qui réveille la fenêtre |
-| `theme.rs` | la palette, en deux modes |
-| `palette.rs` | la palette ⌘K : la barre de menus, aplatie |
-| `locales/app.yml` | les traductions, une entrée par clé |
+| `model.rs` | the tree: a base, an ordered list of calls, arguments, opaque nodes |
+| `parser.rs` | Rust text to model; finding the markers, splicing the text |
+| `codegen.rs` | model to Rust text |
+| `registry.rs` | the catalogue's types, lookup by identifier, instantiation |
+| `registry/catalogue.rs` | the catalogue itself — the only place to extend to add a component |
+| `registry/props.rs` | what the inspector shows, reads, and is allowed to write |
+| `registry/state.rs` | state fields, handlers, what a copy has to rename |
+| `registry/ids.rs` | the element identifiers gpui asks for |
+| `registry/scrollbar.rs` | the scrolling box and its bar: one thing on the canvas, two in the source |
+| `view.rs` | one open view: loading, saving, inserting state fields |
+| `menu_model.rs` | the equivalent of the model, for a menu bar |
+| `menufile.rs` | the equivalent of `view.rs`, for `src/menus.rs` |
+| `scaffold.rs` | creating a project, and its three shapes |
+| `scaffold/views.rs` | creating a view, renaming it, naming the one the window opens on |
+| `scaffold/modules.rs` | the copied modules: versions, fingerprints, updates |
+| `scaffold/{system,settings,theme,assets,window}.rs` | one copied module and its template |
+| `scaffold/components.rs` | the component library copied into `src/components/` |
+| `scaffold/menubar.rs` | the menu bar written into the project |
+| `scaffold/templates.rs` | the shells, compiled by `examples/shapes.rs` |
+| `project.rs` | the file tree shown in the project panel |
+| `workspace.rs` | the window: the state, opening and closing a project |
+| `workspace/views.rs` | the tabs, reading and writing a view |
+| `workspace/inspector.rs` | the selection, the properties, the state fields, typing |
+| `workspace/edits.rs` | dropping, duplicating, pasting, deleting, and the checkpoints |
+| `workspace/handlers.rs` | a component's handler: opened, written, reached in your editor |
+| `workspace/explorer.rs` | the file tree, its selection, its deletions |
+| `workspace/code.rs` | the code reader: any text file, read-only |
+| `workspace/menus.rs` | the menu bar editor |
+| `workspace/chrome.rs` | the shell: title, welcome screen, status bar, `Render` |
+| `workspace/process.rs` | `cargo run` and the output panel |
+| `workspace/modules.rs` | the modules copied into the project |
+| `workspace/palette_file.rs` | the project's colours, read and written from the screen |
+| `themefile.rs` | a project's `src/theme.rs`: its roles, and the patch that changes one |
+| `designer.rs` | what holds the panels together: tabs, side strip, drag ghost |
+| `designer/canvas.rs` | the view as it will be drawn |
+| `designer/tree.rs` | the structure, and where a dropped node lands |
+| `designer/inspector.rs` | the properties, and what typing rewrites in the tree |
+| `designer/menus.rs` | the menu bar editor |
+| `designer/palette.rs` | the components on offer, and the search that finds one |
+| `preferences.rs` | the settings screen |
+| `about.rs` | the About window |
+| `settings.rs` | what maxx remembers from one launch to the next |
+| `cli.rs` | the command line, read before gpui: `new`, `--help`, `--version` |
+| `actions.rs` | the actions, their handlers, the keyboard |
+| `menus.rs` | maxx's own menu bar |
+| `tools.rs` | the catalogue of editors and terminals, and their detection |
+| `run.rs` | everything that assumes a system: `cargo`, terminal, editor, trash |
+| `watch.rs` | watching the project on disk: what wakes the window |
+| `theme.rs` | the palette, in two modes |
+| `palette.rs` | the ⌘K palette: the menu bar, flattened |
+| `locales/app.yml` | the translations, one entry per key |
 
-## Le cycle d'une vue
+## The life cycle of a view
 
 ```
 src/ui/home.rs
    │  view::View::load
    ▼
-repérage des marqueurs // maxx:begin / // maxx:end      (parser, balayage textuel)
+the // maxx:begin / // maxx:end markers are found   (parser, textual scan)
    │
    ▼
-syn parse la seule expression comprise entre eux
+syn parses the single expression between them
    │
    ▼
-model::Node  ── base + appels ordonnés + enfants
-   │                        ▲
-   │  édition dans le designer
-   ▼                        │
-codegen rend l'expression   │
-   │                        │
-   ▼                        │
-parser::splice réécrit uniquement la plage d'octets entre les marqueurs
+model::Node  ── base + ordered calls + children
+   │                          ▲
+   │  edited in the designer  │
+   ▼                          │
+codegen renders the expression│
+   │                          │
+   ▼                          │
+parser::splice rewrites only the byte range between the markers
    │
    ▼
 src/ui/home.rs
 ```
 
-Trois choses à retenir de ce cycle.
-
-**`syn` ne voit jamais le fichier entier**, parce qu'il perd les commentaires.
-La zone gérée est trouvée par balayage textuel, et l'enregistrement ne touche
-que cette plage d'octets. Imports, `impl`, méthodes, mise en forme, commentaires
-hors zone : intacts par construction, pas par précaution.
-
-**Ce que maxx ne comprend pas est porté, pas perdu.** Une méthode inconnue
-devient une donnée réécrite telle quelle ; une expression qui n'est pas une
-chaîne de builders — un `if`, un `match`, un composant maison — devient un nœud
-opaque, affiché mais jamais réécrit.
-
-**Le texte opaque est stocké désindenté.** `parser::splice` réindente chaque
-ligne du bloc qu'il écrit : stocker une tranche avec son indentation de fichier
-lui ferait gagner un niveau à chaque enregistrement, sans borne.
-
-La barre de menus suit exactement le même cycle, avec `menu_model` et
-`menufile` à la place de `model` et `view`. Elle a son propre modèle parce que
-`vec![Menu { name, items }]` est un littéral de structure : le parseur de nœuds
-le dégraderait en un unique blob opaque.
-
-## L'état d'une fenêtre
-
-`Workspace` est la vue racine logique de chaque fenêtre. Il tient le projet,
-les vues ouvertes, la sélection de l'explorateur, et le *mode* du panneau
-central — designer, éditeur de menus, ou préférences.
-
-Deux contraintes de gpui qui expliquent des choses qui auraient l'air tordues
-sans elles.
-
-**La racine réelle de la fenêtre est `gpui_component::Root`**, pas `Workspace` :
-plusieurs composants remontent jusqu'à elle et interrompent le processus si
-elle manque. Le workspace n'est donc pas atteignable en dégradant la poignée de
-fenêtre ; il est inscrit dans une table globale `WindowId -> WeakEntity<Workspace>`.
-
-**Un gestionnaire d'action tourne à l'intérieur de la mise à jour d'une
-fenêtre.** Ouvrir, activer ou mettre à jour une fenêtre depuis là échoue en
-silence — sans erreur, sans panique. Tout ce qui touche une fenêtre depuis
-`cx.on_action` passe par `cx.defer` : c'est pourquoi `about::open` est scindé en
-deux fonctions, et pourquoi les actions du workspace passent par
-`workspace::defer_active`.
-
-Une troisième, propre à l'inspecteur : **taper du texte n'incrémente pas
-`revision` et ne pose pas de point d'annulation**, parce que `revision` est ce
-qui déclenche la reconstruction des `InputState` — la bumper à chaque frappe
-recréerait le champ sous le curseur.
-
-Le pas se prend donc **à la sortie du champ**, quand ce qui a été tapé est déjà
-dans l'arbre — chaque frappe l'y écrit — et que plus rien n'attend sous le
-curseur : une visite dans un champ fait un `⌘Z`, pas une frappe. Le champ qui
-prend le focus retient l'arbre d'avant ; le perdre, `⏎`, changer de sélection ou
-`⌘S` transforme cet arbre en pas.
-
-Deux choses tiennent cette promesse. La session porte **l'identité du champ qui
-l'a ouverte** : gpui livre un unique événement de focus à tous ses auditeurs,
-dans l'ordre où ils se sont inscrits, donc remonter l'inspecteur fait parler le
-`Focus` du champ d'arrivée avant le `Blur` du champ quitté — une session anonyme
-serait fermée par la mauvaise moitié, et la saisie ne laisserait aucun pas. Et
-poser le pas **adopte la clé de `sync_prop_inputs`** : `revision` avance, pour
-que le panneau de code rattrape, mais les champs tiennent déjà ce que l'arbre
-tient, alors rien n'est reconstruit sous un curseur qui vient peut-être
-d'arriver dans le champ suivant.
-
-`checkpoint` prend ce pas avant le sien, pour la même raison qu'il existe : une
-commande atteint le workspace avec un champ qui tient encore le curseur, et la
-frappe poussée après coup se retrouverait *au-dessus* de la commande — un `⌘Z`
-défaisant les deux, le suivant rendant le mot.
-
-## Les réglages
-
-Deux fichiers, comme Zed les sépare, parce que ce ne sont pas deux fois la même
-chose.
-
-`settings.json` est à l'utilisateur. Il s'édite à la main autant que par maxx,
-donc **maxx n'y réécrit que la clé qu'il change** : `walk` parcourt les membres
-de l'objet et `splice_key` remplace la seule tranche d'octets de la valeur,
-exactement comme `parser::splice` le fait dans un `.rs`. Commentaires et mise en
-forme survivent.
-
-Ce parcours doit connaître les commentaires, pas seulement les chaînes et
-l'imbrication, et ce n'est pas un raffinement : une recherche textuelle de la
-clé la trouve dans un commentaire qui la cite, et un guillemet impair dans un
-commentaire laisse un balayage naïf « dans une chaîne » jusqu'à la fin du
-fichier — accolade fermante comprise. Une clé absente est ajoutée juste après
-l'accolade ouvrante et non avant la fermante : la dernière chose d'un objet est
-souvent un commentaire, et une virgule ajoutée là se retrouve commentée. Un fichier
-absent est écrit avec tous ses défauts et une ligne d'explication par clé —
-c'est cette partie-là des réglages de Zed qui vaut d'être copiée, avant toute
-question de format.
-
-`state.json` est à la machine : projets récents, géométrie de la fenêtre.
-Personne ne l'édite, il est réécrit en entier.
-
-Le format est du JSON à commentaires, lu par `serde_json_lenient` — le crate
-avec lequel Zed lit les siens, déjà dans l'arbre via gpui. Le JSON strict ne
-sait pas porter un commentaire, et un fichier de réglages qu'on ne peut pas
-annoter est un fichier dont il faut tenir la documentation ailleurs. Un schéma
-JSON est écrit à côté, dérivé de la structure par `schemars`, pour que l'éditeur
-complète et signale les fautes de frappe.
-
-Les réglages sont chargés une fois au démarrage dans un `Global`, et c'est la
-**seule** source : le workspace ne garde pas de copie de l'état des panneaux, il
-lit au rendu. C'est ce qui empêche l'écran de préférences, la barre de menus et
-la fenêtre de diverger — et c'est nécessaire, le `SettingField` de
-gpui-component lisant et écrivant l'application sans passer par la vue.
-
-Trois voies d'écriture, volontairement distinctes :
-
-- `update_prefs` change une préférence et rustine le fichier de l'utilisateur.
-- `update_state` change l'état machine et le réécrit.
-- `stage_state` change en mémoire seulement, `flush` écrit à l'extinction. Pour
-  ce qui bouge en continu : la géométrie de la fenêtre, où un fichier par image
-  serait absurde. Corollaire assumé : un `kill -9` perd la géométrie.
-
-Le principe de lecture : un fichier absent, partiel ou abîmé n'est jamais pire
-que pas de fichier. `serde(default)` fait retomber une clé manquante sur son
-défaut plutôt que d'échouer la lecture entière, et un fichier illisible est
-signalé puis laissé intact — l'écraser perdrait ce que l'utilisateur était en
-train d'y écrire.
-
-Le `settings.toml` de la version précédente est repris une fois au démarrage,
-scindé en deux, puis renommé `settings.toml.repris` — pas supprimé : une
-migration qui mange des données est une migration que personne ne croit.
-
-## Ouvrir un projet : deux chemins, pas un
-
-`workspace::open_folder` ne rejoint `set_project` que lorsqu'il réutilise une
-fenêtre déjà ouverte et vide. Sinon — et c'est aussi le cas de `maxx <chemin>`
-en ligne de commande — il passe par `open_workspace_window`, qui construit
-`Workspace::new` sans jamais toucher `set_project`.
-
-Tout effet de bord attaché à « ouvrir un projet » doit donc être câblé aux deux
-endroits. C'est exactement ce qui a fait que les projets récents ne
-s'enregistraient pas au premier essai.
-
-## Éditeur et terminal
-
-`tools.rs` tient une table, pas une heuristique, et c'est le point : ouvrir un
-fichier *à une ligne* s'écrit différemment chez chacun — `zed fichier:12`,
-`code -g fichier:12`, `nvim +12 fichier`, `idea --line 12 fichier` — et il n'y a
-pas de majorité à suivre. Confondre deux de ces formes n'échoue pas franchement :
-`code fichier:12` ouvre un fichier nommé « fichier:12 ».
-
-Le piège qui ne se voit pas au moment de choisir : `hx`, `nvim` et `vim` ne sont
-pas des applications mais des programmes qui ont besoin d'un terminal autour
-d'eux. Les deux réglages ne sont donc pas indépendants, et tous les terminaux ne
-savent pas recevoir une commande — celui de macOS n'y donne accès que par
-AppleScript, qui réclame une permission d'automatisation au milieu d'un clic.
-
-`auto`, le défaut, prend le premier installé du catalogue ; pour l'éditeur,
-`$VISUAL` et `$EDITOR` passent avant, parce que qui les a réglés a déjà dit ce
-qu'il voulait. La détection cherche la commande sur le `PATH` et, sur macOS, le
-paquet dans `/Applications`.
-
-## Le système, et rien d'autre
-
-Tout ce qui suppose une plateforme est dans `run.rs`, et nulle part ailleurs :
-`cargo`, le terminal, l'éditeur, la corbeille, le cache, la façon de tuer
-l'arbre de processus lancé. `settings.rs` connaît en plus les conventions de
-répertoire de configuration, et `tools.rs` celles de détection.
-
-Ce qui diffère vraiment, système par système :
-
-- **Le cache et la configuration.** `XDG_*` quand l'utilisateur les a réglés,
-  `LOCALAPPDATA` et `APPDATA` sur Windows, `Library/Caches` et
-  `Library/Application Support` sur macOS, `.cache` et `.config` ailleurs.
-- **La corbeille.** `~/.Trash` sur macOS ; sur Linux la spécification
-  freedesktop, `$XDG_DATA_HOME/Trash/files` plus un `.trashinfo` sans lequel le
-  bureau ne sait pas d'où le fichier venait et ne peut pas le restaurer ; sur
-  Windows une corbeille propre à maxx, parce que la vraie ne s'atteint que par
-  l'API du shell — ce qui coûterait une dépendance et un bloc `unsafe` pour un
-  geste qui doit rester simple. maxx le dit plutôt que de faire semblant.
-- **Tuer ce qui a été lancé.** `cargo` lance lui-même l'application : signaler
-  `cargo` seul laisserait la fenêtre ouverte. Sur unix l'enfant reçoit son
-  propre groupe de processus, que `kill -TERM -pid` atteint en entier ; Windows
-  n'a pas cette notion et `taskkill /T` fait le geste équivalent.
-- **Le repli par paquet d'application.** `open -a` est un outil macOS et un
-  `.app` une notion macOS : ailleurs, la commande sur le `PATH` est la seule
-  voie, et son absence est la raison pour laquelle rien ne s'est produit.
-
-Ce que la CI en matrice prouve : que ça compile et que la suite passe sur les
-trois. C'est ce qui empêche une ligne comme `std::os::unix::process::CommandExt`
-de se réintroduire sans qu'on le voie. Ce qu'elle ne prouve pas : que
-l'interface est utilisable, aucun test n'ouvrant de fenêtre. maxx n'a été
-essayé à la main que sur macOS.
-
-Deux workflows, deux rôles. `ci.yml` donne un signal rapide et fréquent ;
-`release.yml` est le portail de publication : il part sur un tag `v*`, passe la
-matrice entière, construit en release — ce que la CI ordinaire ne fait jamais,
-et une optimisation révèle ce qu'un build de debug tolère —, vérifie ce qui
-partirait dans un paquet crates.io, puis ouvre la version sur GitHub avec la
-section du CHANGELOG pour corps. Il n'y attache aucun binaire, et c'est
-délibéré : un exécutable est une distribution au sens des licences — Apache-2.0
-pour gpui, MPL-2.0 pour option-ext — avec les mentions qui doivent voyager avec
-lui, quand publier la source n'en demande aucune et que `cargo install` suffit à
-qui tient une chaîne d'outils. `scripts/bundle-macos.sh`, qui assemble un
-`maxx.app` autour d'un binaire construit, ne relève donc d'aucun workflow : il
-s'exécute à la main. Un tag reste le pire endroit pour *découvrir* une casse, le
-commit étant déjà celui qu'on voulait publier : ce portail double le filet
-hebdomadaire au moment où l'erreur coûte le plus cher, il ne le remplace pas.
-
-Ce que le premier run Windows a appris, chiffres à l'appui : `cargo check`
-18 min, `clippy` 16 s derrière lui, `cargo test` **37 min**. Les deux premiers
-s'arrêtent aux métadonnées ; seul `cargo test` produit du code machine et lie
-les binaires. Retirer le `check` séparé ne gagne donc presque rien — le coût
-est ailleurs, et il se réduit autrement : un profil `ci` qui compile les
-dépendances en O0 au lieu de O2, sans informations de débogage, et une
-exclusion Defender sur les runners Windows, où l'antivirus inspecte chacun des
-dizaines de milliers de fichiers que rustc écrit.
-
-Il n'y a pas d'équivalent local pour Windows : Docker sur un Mac lance des
-conteneurs Linux, un conteneur Windows exigeant un hôte Windows.
-`scripts/verify-linux.sh` rejoue la branche Linux, et c'est tout ce qu'on
-peut rejouer.
-
-Sur un dépôt public, les runners standard sont gratuits et illimités : les
-trois systèmes tournent à chaque poussée. Tant que le dépôt était privé, ce
-n'était pas tenable — les minutes y sont comptées avec des multiplicateurs, ×1
-sur Linux, ×2 sur Windows, ×10 sur macOS, si bien qu'un seul run complet à
-froid coûtait près de 400 minutes facturées sur un quota mensuel de 2 000. Si
-le dépôt redevenait privé, il faudrait remettre le dosage que l'historique
-garde.
-
-## Ce que maxx ajoute à un projet
-
-Six choses s'ajoutent à un projet existant, par insertion textuelle et jamais
-par réécriture depuis le gabarit : une vue, la barre de menus, le module
-système, les réglages, les images, la fenêtre. Les réglages et la fenêtre
-tirent le module système avec eux et déclarent deux crates dans le
-`Cargo.toml` du projet — insérées dans la section des dépendances, pas à la fin
-du fichier, pour qu'un bloc `[profile]` reste après elles. Le projet peut être
-antérieur à maxx et faire autre chose au démarrage — il doit le garder.
-
-Les images et la fenêtre sont les deux premiers modules que `main.rs` **appelle**
-et pas seulement déclare : `.with_assets(assets::Assets)` sur
-`Application::new()`, `window::bounds(bounds)` et `window::remember(&window, cx)`
-autour de l'ouverture. D'où la forme du câblage — une reliaison qui masque
-plutôt qu'un argument, une instruction plutôt qu'un appel imbriqué : chaque
-ligne écrite doit être une ligne dont le retrait laisse un fichier qui compile,
-parce que supprimer le module retire la ligne. Le module des images porte en
-plus un `build.rs`, qui n'est pas suivi dans `maxx.toml` : le contrat entre les
-deux — `assets.rs` dans `OUT_DIR`, le symbole `ASSETS` — est écrit dans
-l'en-tête de chacun.
-
-Le module système mérite sa règle : il ne contient que ce qui diffère d'un
-système à l'autre **et** que gpui ne fournit pas déjà. Le presse-papier,
-`open_url`, `reveal_path`, `open_with_system`, les sélecteurs de fichiers sont
-dans gpui ; les enrober ajouterait une couche à maintenir pour rien. Reste où
-vont les fichiers d'une application et ce que « supprimer » veut dire — ce que
-toute application de bureau finit par écrire, et que personne ne veut écrire
-une troisième fois.
-
-Symétrie nécessaire : supprimer `src/<module>.rs` depuis l'explorateur retire
-sa ligne `mod` de `main.rs`, et avec elle le câblage que le module s'était
-donné — la table `scaffold::modules::WIRING` dit, par module, les instructions entières
-à retirer et les fragments à ôter de la ligne qui les porte. Sans quoi
-supprimer un fichier casse la compilation, ce qui est l'inverse du but.
-
-**Une copie est une dette**, et il faut la nommer : le module système et les
-réglages reprennent du code que maxx a écrit pour lui-même. Un défaut trouvé
-d'un côté doit être porté de l'autre. C'est déjà arrivé — la fiche
-`.trashinfo`, non conforme dans les deux à la fois.
-
-`maxx.toml`, versionné à la racine du projet, rend cette dette rattrapable. Il
-note quel module a été copié, dans quelle version, et l'empreinte qu'il avait
-en sortant. maxx sait alors quels projets portent une version qu'il a depuis
-corrigée, et l'empreinte lui dit si le développeur y a touché : **un fichier
-modifié n'est jamais remplacé**, il est signalé. C'est une troisième voie entre
-l'extraction d'un crate — qui casserait la promesse « un projet généré ne doit
-rien à maxx » — et la génération du gabarit depuis le code de maxx.
-
-Le même fichier porte **le projet lui-même**, et pas seulement ce qu'il a
-emprunté : la vue sur laquelle sa fenêtre s'ouvre, et la ligne cargo qui le
-lance — profil, features, arguments passés à l'application. Les deux étaient
-écrits dans la pierre : la vue d'entrée dans `main.rs`, le lancement en `cargo
-run` nu. Un projet qui voulait `--release`, une feature ou un autre premier
-écran n'avait nulle part où le dire. Chaque clé est facultative, et un projet
-qui n'en pose aucune se comporte exactement comme avant.
-
-Déplacer la vue d'entrée écrit à deux endroits qui doivent s'accorder :
-`src/main.rs`, qui ouvre réellement la fenêtre, et `maxx.toml`, où maxx la
-relit. Le code d'abord — un `maxx.toml` qui annonce une entrée que le code
-n'ouvre pas serait pire que pas d'enregistrement du tout. Et c'est le site de
-construction qui fait foi, pas la ligne `use` : un `main.rs` peut importer
-plusieurs vues, une seule est confiée à `Root`.
-
-**Les commentaires de la zone gérée sont dans le modèle.** `syn` les jette —
-ce ne sont pas des jetons —, et `codegen` réécrit la zone depuis le modèle :
-tout ce que le modèle ne porte pas est effacé au premier enregistrement. Le
-lecteur balaie donc le texte de la zone avant de le donner à `syn`, en sautant
-chaînes, chaînes brutes et littéraux de caractère, puis attribue chaque
-commentaire à **ce qui le suit** — le parcours de la chaîne se fait dans
-l'ordre du fichier, et une file de commentaires se vide à mesure. D'où trois
-places dans le modèle : au-dessus d'un appel (`Call::comments`), au-dessus d'un
-nœud (`Node::comments`, écrites par le parent qui connaît la colonne), et après
-le dernier appel (`Node::trailing`).
-
-Deux pièges que le mécanisme doit éviter et que les tests tiennent : un
-commentaire écrit **dans** un argument — une fermeture, un `match` gardé
-verbatim — est déjà dans le texte de cet argument, donc il est retiré de la
-file sans être gardé, sinon il serait écrit deux fois ; et une chaîne qui porte
-un commentaire n'est jamais rendue sur une seule ligne, un commentaire n'ayant
-nulle part où aller sur une ligne unique.
-
-**Deux appels ne vivent pas sur un élément ordinaire** : le défilement et
-l'infobulle. gpui ne les offre qu'à un élément *avec état*, c'est-à-dire une
-fois `id` posé — écrits dans l'autre ordre, ils ne compilent pas, dans le
-projet du développeur et sur une ligne que maxx a écrite. D'où leurs cibles à
-eux, `Target::Scrollable` et `Target::Tooltip`, qui posent l'`id` avant. Et
-d'où `Common::Element`, que seules la colonne, la ligne et l'espaceur portent :
-aucun composant de `gpui-component` n'est un élément gpui, donc l'infobulle
-posée sur tous serait un appel qui n'existe pas.
-
-**Ce que le catalogue importe** est conditionnel depuis qu'il écrit des
-variantes. Un appel comme `.primary()` ou `.disabled(…)` vient d'un trait, et
-un trait doit être en portée — mais l'importer dès qu'on voit le composant
-laisse un `use` inutilisé sur le bouton qui n'a pas de variante, donc un
-avertissement dans un projet que maxx vient d'écrire. `Spec::extra_imports`
-tient donc des paires « ces appels demandent cette ligne », et la condition est
-par composant : `outline` est une variante de bouton *et* un drapeau de
-pastille, si bien qu'une table d'appels commune importerait le trait du bouton
-dans un fichier qui n'a que des pastilles.
-
-**Les formes de projet** sont la troisième sorte de code que maxx écrit, après
-les vues qu'il dessine et les modules qu'il copie. `src/ui/shell.rs` — une
-barre latérale et la vue du moment — est du Rust ordinaire écrit une fois à la
-création : ni marqueurs `maxx:`, ni version, ni rattrapage. C'est voulu, et
-c'est la différence avec un module : une coquille est la forme du projet, que
-le développeur va faire sienne dès la première page ajoutée.
-
-Elles posaient un problème que les vues n'ont pas : rien ne les compilait.
-`src/scaffold/templates.rs` ne dépend de rien, si bien que `build.rs`
-l'inclut, appelle les mêmes fonctions que les projets reçoivent et écrit leur
-sortie dans `OUT_DIR` ; `examples/shapes.rs` l'y compile, contre une vue et un
-module de réglages réduits à leur surface. Un `clippy --all-targets` attrape
-donc une méthode que `gpui-component` n'a pas. Ce qu'il n'attrape pas — le
-câblage de `main.rs`, les crates déclarées, le module de réglages en entier —
-est dans `tests/project.rs::every_shape_compiles`, ignoré par défaut parce
-qu'il construit deux projets entiers.
-
-**L'empreinte ne peut pas être les octets seuls.** Un projet formaté par son
-développeur — `cargo fmt`, le geste le plus banal — n'est plus octet pour octet
-celui que maxx a écrit, alors qu'aucune ligne de code n'a bougé : la mise en
-page par défaut déplace dix lignes de `system.rs` et cinquante-six de
-`theme.rs`, et va jusqu'à écrire `else { return; }` là où le gabarit dit
-`else { return }`. maxx en concluait « modifié par le développeur » et
-s'arrêtait là, sans un mot. `maxx.toml` porte donc **deux** empreintes : les
-octets, et la forme — le même texte passé au `rustfmt` par défaut, la
-configuration du projet ignorée, parce que ce qu'il faut ici est un étalon fixe
-et non celui du moment. L'une ou l'autre suffit à reconnaître un fichier ; il
-faut que les deux échouent pour qu'il soit tenu pour édité.
-
-Le garde-fou qui fait tenir l'ensemble est dans `tests/modules.rs` : il retient
-l'empreinte de chaque gabarit à sa version courante. Modifier un gabarit fait
-échouer ce test, ce qui oblige à décider si la correction doit atteindre les
-projets déjà écrits. Sans lui, une version ne monterait jamais et le mécanisme
-serait décoratif.
-
-## Mettre en forme ce que maxx écrit
-
-Un réglage, éteint par défaut, passe `rustfmt` sur le fichier après chaque
-écriture. `rustfmt` et non `cargo fmt` : le second formate une caisse entière,
-le premier prend un fichier et trouve tout seul le `rustfmt.toml` du projet en
-remontant depuis lui — les conventions du développeur l'emportent sur celles de
-`codegen`.
-
-C'est aussi le seul endroit où maxx lance un processus et l'attend, à rebours
-de la règle posée ailleurs : il doit relire le fichier ensuite. Et cette
-relecture n'est pas facultative — maxx tient une copie du fichier et la compare
-au disque pour repérer ce qui a changé en dehors de lui. Laisser la copie
-derrière ferait croire à l'enregistrement suivant que quelqu'un a touché au
-fichier : maxx s'accusant lui-même.
-
-Pourquoi allumé par défaut, et c'est le point de conception : un éditeur Rust
-formate à l'enregistrement — c'est le défaut de Zed comme de rust-analyzer — et
-`codegen` n'écrit pas ce que rustfmt écrirait. Vérifié plutôt que supposé :
-rustfmt réécrit la zone gérée de la démo. Sans ce réglage, l'éditeur reformate
-ce que maxx a écrit, maxx le réécrit à sa façon à l'enregistrement suivant, et
-les deux se renvoient la balle avec un diff parasite à chaque tour. maxx
-applique donc lui-même ce que l'éditeur appliquerait de toute façon.
-
-Conséquence à énoncer honnêtement : **l'aller-retour de maxx est neutre à
-rustfmt près**, et c'est cette composition-là que `tests/demo.rs` vérifie. Le
-gabarit, lui, sort déjà au format de rustfmt — un projet fraîchement généré en
-ressort inchangé, ce qu'un test constate.
-
-Il reste que rustfmt met en forme le fichier entier, donc au-delà de la zone
-gérée. Sur un projet déjà passé au formateur cela ne change rien ailleurs ; sur
-un projet qui l'ignore, le réglage s'éteint.
-
-## Le raccourci d'une entrée
-
-Dans gpui, un raccourci n'est pas une propriété de l'entrée de menu : c'est une
-liste séparée, `key_bindings`, que la barre lit pour afficher l'accélérateur.
-Elle vit hors de la zone gérée, dans une fonction que le développeur édite aussi.
-
-Première tentative, écartée : écrire le raccourci sur le disque au moment où on
-le tape, puisque le modèle ne le portait pas. C'était faux sur quatre points à
-la fois — une écriture par touche, donc une pour chaque état intermédiaire de la
-frappe ; une écriture qui contournait la garde « fichier modifié en dehors de
-maxx » ; un raccourci écrit pour une action que `actions!` ne déclarait pas
-encore ; et un raccourci qui survivait à l'entrée renommée ou supprimée.
-
-Ce qui les règle tous : **le raccourci est dans le modèle**, lu à l'ouverture et
-posé sur l'entrée, écrit à `⌘S` avec le reste. Il voyage alors avec l'entrée
-qu'on renomme ou qu'on déplace, il part avec elle quand on la supprime, et il
-est écrit après `ensure_action`, jamais avant.
-
-Deux règles de bordure. Toutes les lignes qui lient une action sont retirées
-avant qu'une soit écrite, parce que gpui en accepte plusieurs pour une même
-action : n'en réécrire qu'une laisserait l'ancienne vivante. Et une liaison
-pour une action qui n'apparaît dans aucun menu appartient au développeur —
-l'enregistrement n'y touche pas.
-
-## La mise en forme du dépôt
-
-maxx passe à `rustfmt`, avec une seule dérogation : `use_small_heuristics =
-"Max"`, qui laisse une expression courte tenir sur sa ligne. C'est ce qui
-préserve les tables de `registry/catalogue.rs`, le fichier qu'on invite les autres à
-étendre — y lire une liste de styles à raison d'un mot par ligne serait une
-punition. Le reste est le rustfmt par défaut.
-
-La raison de s'y plier est la même que pour les projets générés : un éditeur
-Rust formate à l'enregistrement. Sans référence commune, le premier
-contributeur qui ouvre un fichier dans Zed le reformate en entier et son vrai
-changement se noie dedans. `cargo fmt --check` en CI clôt la question.
-
-La démo a son propre `rustfmt.toml`, vide, et n'est donc pas concernée : elle
-doit être mise en forme comme un projet généré ailleurs, au rustfmt par défaut.
-
-## La démo comme référence
-
-`demo/` est un projet complet, versionné, avec sa propre racine d'espace de
-travail — `cargo check` à la racine du dépôt ne le compile donc pas. Il est
-écrit dans la forme exacte que `codegen` produit, ce qui rend une propriété
-vérifiable : `tests/demo.rs` relit chaque vue, la réécrit, et exige le fichier
-identique à l'octet près. Tout écart est une perte.
-
-C'est aussi la seule référence de ce que maxx doit comprendre. Elle a remplacé
-un chemin absolu vers un dossier personnel, dans un test qui s'arrêtait sans
-échouer quand il manquait : chez quelqu'un d'autre, la couverture était nulle et
-silencieuse.
-
-## Où brancher quoi
-
-- **Un composant de plus** : `registry/catalogue.rs`, une entrée. Rien d'autre à toucher.
-  S'il a besoin d'une entité que la vue possède — un champ texte, une liste
-  déroulante — l'entrée porte en plus un `StateSpec` : le type du champ, ses
-  imports, et l'expression que `new` lui donne. C'est tout ce que `view::save`
-  a besoin de savoir pour déclarer le champ et l'initialiser, et la liste des
-  champs proposés dans l'inspecteur est filtrée sur ce type — proposer le champ
-  d'un champ texte à une liste déroulante serait proposer ce qui ne compile
-  pas.
-- **Un réglage de plus** : un champ dans `settings::Preferences` avec son
-  défaut, une ligne dans `documented_defaults`, puis un `SettingItem` dans
-  `preferences.rs`. Le champ lit et écrit les réglages, il ne copie rien.
-- **Une entrée de menu de plus** : une action dans `actions.rs`, son gestionnaire,
-  et la ligne dans `menus.rs`. Une action qui porte une donnée ne peut pas venir
-  de la macro `actions!` — voir `OpenRecent`.
-- **Un appel système de plus** : `run.rs`, et nulle part ailleurs.
+Three things to take from that cycle.
+
+**`syn` never sees the whole file**, because it loses the comments. The managed
+region is found by scanning the text, and saving touches that byte range alone.
+Imports, `impl`, methods, formatting, comments outside the region: untouched by
+construction, not by care.
+
+**What maxx does not understand is carried, not lost.** An unknown method
+becomes data written back verbatim; an expression that is not a builder chain —
+an `if`, a `match`, a component of your own — becomes an opaque node, shown but
+never rewritten.
+
+**Opaque text is stored dedented.** `parser::splice` re-indents every line of
+the block it writes: storing a slice with its file indentation would make it
+gain one level per save, without bound.
+
+The menu bar follows exactly the same cycle, with `menu_model` and `menufile` in
+place of `model` and `view`. It has a model of its own because
+`vec![Menu { name, items }]` is a struct literal: the node parser would degrade
+it into a single opaque blob.
+
+## The state of a window
+
+`Workspace` is the logical root view of each window. It holds the project, the
+open views, the project panel's selection, and the *mode* of the central panel —
+designer, menu editor, or preferences.
+
+Two gpui constraints, which explain things that would look contorted without
+them.
+
+**The window's real root is `gpui_component::Root`**, not `Workspace`: several
+components walk up to it and abort the process when it is missing. The workspace
+is therefore not reachable by downcasting the window handle; it is registered in
+a global `WindowId -> WeakEntity<Workspace>` table.
+
+**An action handler runs inside a window's own update.** Opening, activating or
+updating a window from there fails silently — no error, no panic. Anything that
+touches a window from `cx.on_action` goes through `cx.defer`: that is why
+`about::open` is split into two functions, and why the workspace's actions go
+through `workspace::defer_active`.
+
+A third, particular to the inspector: **typing does not bump `revision` and does
+not take an undo checkpoint**, because `revision` is what triggers the rebuild
+of the `InputState` entities — bumping it on every keystroke would recreate the
+field under the caret.
+
+The step is therefore taken **when the field is left**, once what was typed is
+already in the tree — every keystroke writes it there — and nothing is waiting
+under the caret any more: one visit to a field is one `⌘Z`, not one keystroke.
+The field taking focus holds on to the tree as it was; losing focus, `⏎`,
+changing the selection or `⌘S` turns that tree into a step.
+
+Two things keep that promise. The session carries **the identity of the field
+that opened it**: gpui delivers one focus event to all of its listeners, in the
+order they registered, so moving up the inspector makes the arriving field's
+`Focus` speak before the leaving field's `Blur` — an anonymous session would be
+closed by the wrong half, and typing would leave no step at all. And taking the
+step **adopts the key of `sync_prop_inputs`**: `revision` moves on, so that the
+code panel catches up, but the fields already hold what the tree holds, so
+nothing is rebuilt under a caret that may just have arrived in the next field.
+
+`checkpoint` takes that step before its own, for the very reason it exists: a
+command reaches the workspace while a field still holds the caret, and the
+keystrokes pushed afterwards would end up *above* the command — one `⌘Z` undoing
+both, the next giving the word back.
+
+## The settings
+
+Two files, the way Zed separates them, because they are not two of the same
+thing.
+
+`settings.json` belongs to the user. It is edited by hand as much as by maxx, so
+**maxx rewrites only the key it changes**: `walk` runs through the object's
+members and `splice_key` replaces the value's byte range alone, exactly as
+`parser::splice` does in a `.rs`. Comments and layout survive.
+
+That walk has to know about comments, not only about strings and nesting, and
+that is not a refinement: a textual search for the key finds it in a comment
+that quotes it, and an odd quotation mark inside a comment leaves a naive scan
+"inside a string" to the end of the file — closing brace included. A missing key
+is added just after the opening brace and not before the closing one: the last
+thing in an object is often a comment, and a comma added there ends up commented
+out. A missing file is written with all of its defaults and a line of
+explanation per key — that is the part of Zed's settings worth copying, before
+any question of format.
+
+`state.json` belongs to the machine: recent projects, window geometry. Nobody
+edits it, so it is rewritten whole.
+
+The format is JSON with comments, read by `serde_json_lenient` — the crate Zed
+reads its own with, already in the tree through gpui. Strict JSON cannot carry a
+comment, and a settings file you cannot annotate is one whose documentation has
+to be kept somewhere else. A JSON schema is written beside it, derived from the
+struct by `schemars`, so that the editor completes and flags typos.
+
+The settings are loaded once at startup into a `Global`, and that is the **only**
+source: the workspace keeps no copy of the panels' state, it reads at render
+time. That is what stops the preferences screen, the menu bar and the window
+from diverging — and it is necessary, gpui-component's `SettingField` reading
+and writing the application without going through the view.
+
+Three writing paths, deliberately distinct:
+
+- `update_prefs` changes a preference and patches the user's file.
+- `update_state` changes the machine state and rewrites it.
+- `stage_state` changes memory only, and `flush` writes at shutdown. For what
+  moves continuously: the window's geometry, where one file per frame would be
+  absurd. The accepted corollary: a `kill -9` loses the geometry.
+
+The reading principle: a missing, partial or damaged file is never worse than no
+file. `serde(default)` makes a missing key fall back to its default rather than
+failing the whole read, and an unreadable file is reported and then left intact
+— overwriting it would lose whatever the user was in the middle of writing.
+
+The previous version's `settings.toml` is taken over once at startup, split in
+two, then renamed `settings.toml.repris` — not deleted: a migration that eats
+data is a migration nobody believes.
+
+## Opening a project: two paths, not one
+
+`workspace::open_folder` only reaches `set_project` when it reuses a window that
+is already open and empty. Otherwise — and this is also the case for
+`maxx <path>` on the command line — it goes through `open_workspace_window`,
+which builds `Workspace::new` without ever touching `set_project`.
+
+Any side effect attached to "a project is being opened" therefore has to be
+wired in both places. That is exactly what made recent projects fail to be
+recorded on the first attempt.
+
+## Editor and terminal
+
+`tools.rs` holds a table, not a heuristic, and that is the point: opening a file
+*at a line* is spelled differently by each of them — `zed file:12`,
+`code -g file:12`, `nvim +12 file`, `idea --line 12 file` — and there is no
+majority to follow. Confusing two of those forms does not fail outright:
+`code file:12` opens a file named "file:12".
+
+The trap that is invisible at the moment of choosing: `hx`, `nvim` and `vim` are
+not applications but programs that need a terminal around them. The two settings
+are therefore not independent, and not every terminal can be handed a command —
+the macOS one gives access to it only through AppleScript, which asks for an
+automation permission in the middle of a click.
+
+`auto`, the default, takes the first one installed from the catalogue; for the
+editor, `$VISUAL` and `$EDITOR` come first, because whoever set them has already
+said what they want. Detection looks for the command on the `PATH` and, on
+macOS, for the bundle in `/Applications`.
+
+## The system, and nothing else
+
+Everything that assumes a platform is in `run.rs`, and nowhere else: `cargo`,
+the terminal, the editor, the trash, the cache, the way the launched process
+tree is killed. `settings.rs` additionally knows the configuration directory
+conventions, and `tools.rs` the detection ones.
+
+What genuinely differs, system by system:
+
+- **The cache and the configuration.** `XDG_*` when the user has set them,
+  `LOCALAPPDATA` and `APPDATA` on Windows, `Library/Caches` and
+  `Library/Application Support` on macOS, `.cache` and `.config` elsewhere.
+- **The trash.** `~/.Trash` on macOS; on Linux the freedesktop specification,
+  `$XDG_DATA_HOME/Trash/files` plus a `.trashinfo` without which the desktop
+  does not know where the file came from and cannot restore it; on Windows a
+  trash of maxx's own, because the real one is reachable only through the shell
+  API — which would cost a dependency and an `unsafe` block for a gesture that
+  has to stay simple. maxx says so rather than pretending.
+- **Killing what was launched.** `cargo` launches the application itself:
+  signalling `cargo` alone would leave the window open. On unix the child gets a
+  process group of its own, which `kill -TERM -pid` reaches whole; Windows has
+  no such notion and `taskkill /T` makes the equivalent gesture.
+- **The application-bundle fallback.** `open -a` is a macOS tool and a `.app` a
+  macOS notion: elsewhere, the command on the `PATH` is the only way in, and its
+  absence is the reason nothing happened.
+
+What the CI matrix proves: that it compiles and that the suite passes on all
+three. That is what stops a line such as
+`std::os::unix::process::CommandExt` from finding its way back in unseen. What
+it does not prove: that the interface is usable, since no test opens a window.
+maxx has only ever been tried by hand on macOS.
+
+Two workflows, two roles. `ci.yml` gives a fast, frequent signal; `release.yml`
+is the release gate: it starts on a `v*` tag, runs the whole matrix, builds in
+release — which the ordinary CI never does, and an optimisation reveals what a
+debug build tolerates — checks what would go into a crates.io package, then
+opens the release on GitHub with the CHANGELOG's section for its body. It
+attaches no binary, and that is deliberate: an executable is a distribution in
+the sense the licences mean — Apache-2.0 for gpui, MPL-2.0 for option-ext — with
+the notices that have to travel with it, when publishing the source asks for
+none and `cargo install` is enough for anyone holding a toolchain.
+`scripts/bundle-macos.sh`, which assembles a `maxx.app` around a built binary,
+is therefore part of no workflow: it is run by hand. A tag remains the worst
+place to *discover* a breakage, the commit being already the one you meant to
+publish: this gate doubles the weekly net at the moment the mistake costs most,
+it does not replace it.
+
+What the first Windows run taught, with figures: `cargo check` 18 min, `clippy`
+16 s behind it, `cargo test` **37 min**. The first two stop at the metadata;
+only `cargo test` produces machine code and links the binaries. Dropping the
+separate `check` therefore gains almost nothing — the cost is elsewhere, and it
+comes down another way: a `ci` profile that compiles the dependencies at O0
+instead of O2, with no debug information, and a Defender exclusion on the
+Windows runners, where the antivirus inspects every one of the tens of thousands
+of files rustc writes.
+
+There is no local equivalent for Windows: Docker on a Mac runs Linux containers,
+a Windows container demanding a Windows host. `scripts/verify-linux.sh` replays
+the Linux branch, and that is all that can be replayed.
+
+On a public repository the standard runners are free and unlimited: all three
+systems run on every push. While the repository was private that was not
+sustainable — minutes there are counted with multipliers, ×1 on Linux, ×2 on
+Windows, ×10 on macOS, so that a single cold full run cost close to 400 billed
+minutes out of a monthly allowance of 2,000. Were the repository to become
+private again, the rationing the history keeps would have to come back.
+
+## What maxx adds to a project
+
+Six things are added to an existing project, by textual insertion and never by
+rewriting from the template: a view, the menu bar, the system module, the
+settings, the images, the window. The settings and the window pull the system
+module along with them and declare two crates in the project's `Cargo.toml` —
+inserted into the dependencies section, not at the end of the file, so that a
+`[profile]` block stays after them. The project may predate maxx and do
+something else at startup — it has to keep it.
+
+The images and the window are the first two modules `main.rs` **calls** and does
+not merely declare: `.with_assets(assets::Assets)` on `Application::new()`,
+`window::bounds(bounds)` and `window::remember(&window, cx)` around the opening.
+Hence the shape of the wiring — a rebinding that shadows rather than an
+argument, a statement rather than a nested call: every line written has to be a
+line whose removal leaves a file that compiles, because deleting the module
+removes the line. The images module additionally carries a `build.rs`, which is
+not tracked in `maxx.toml`: the contract between the two — `assets.rs` in
+`OUT_DIR`, the `ASSETS` symbol — is written in the header of each.
+
+The system module deserves its rule: it holds only what differs from one system
+to the next **and** what gpui does not already provide. The clipboard,
+`open_url`, `reveal_path`, `open_with_system`, the file pickers are in gpui;
+wrapping them would add a layer to maintain for nothing. What is left is where
+an application's files go and what "delete" means — what every desktop
+application ends up writing, and what nobody wants to write a third time.
+
+A necessary symmetry: deleting `src/<module>.rs` from the project panel removes
+its `mod` line from `main.rs`, and with it the wiring the module gave itself —
+the `scaffold::modules::WIRING` table says, per module, the whole statements to
+remove and the fragments to take out of the line that carries them. Without it,
+deleting a file breaks the build, which is the opposite of the point.
+
+**A copy is a debt**, and it has to be named: the system module and the settings
+take over code maxx wrote for itself. A defect found on one side has to be
+carried to the other. It has happened already — the `.trashinfo` record,
+non-conforming in both at once.
+
+`maxx.toml`, committed at the root of the project, makes that debt recoverable.
+It notes which module was copied, in which version, and the fingerprint it had
+on the way out. maxx then knows which projects carry a version it has since
+fixed, and the fingerprint tells it whether the developer has touched it: **a
+modified file is never replaced**, it is reported. That is a third way between
+extracting a crate — which would break the promise that a generated project owes
+maxx nothing — and generating the template from maxx's own code.
+
+The same file carries **the project itself**, and not only what it borrowed: the
+view its window opens on, and the cargo line that launches it — profile,
+features, arguments handed to the application. Both were set in stone: the entry
+view in `main.rs`, the launch a bare `cargo run`. A project that wanted
+`--release`, a feature or a different first screen had nowhere to say so. Every
+key is optional, and a project that sets none behaves exactly as before.
+
+Moving the entry view writes in two places that have to agree: `src/main.rs`,
+which actually opens the window, and `maxx.toml`, where maxx reads it back. The
+code first — a `maxx.toml` announcing an entry the code does not open would be
+worse than no record at all. And it is the construction site that is
+authoritative, not the `use` line: a `main.rs` may import several views, only one
+is handed to `Root`.
+
+**The managed region's comments are in the model.** `syn` throws them away —
+they are not tokens — and `codegen` rewrites the region from the model:
+everything the model does not carry is erased on the first save. The reader
+therefore scans the region's text before handing it to `syn`, skipping strings,
+raw strings and character literals, then attributes each comment to **what
+follows it** — the walk through the chain goes in file order, and a queue of
+comments empties as it goes. Hence three places in the model: above a call
+(`Call::comments`), above a node (`Node::comments`, written by the parent, which
+knows the column), and after the last call (`Node::trailing`).
+
+Two traps the mechanism has to avoid and that the tests hold: a comment written
+**inside** an argument — a closure, a `match` kept verbatim — is already in that
+argument's text, so it is taken off the queue without being kept, or it would be
+written twice; and a chain carrying a comment is never rendered on a single
+line, a comment having nowhere to go on one.
+
+**Two calls do not live on an ordinary element**: scrolling and the tooltip.
+gpui offers them only to a *stateful* element, that is, once `id` has been set —
+written in the other order they do not compile, in the developer's project and
+on a line maxx wrote. Hence targets of their own, `Target::Scrollable` and
+`Target::Tooltip`, which set the `id` first. And hence `Common::Element`, which
+only the column, the row and the spacer carry: no `gpui-component` component is
+a gpui element, so a tooltip offered on all of them would be a call that does
+not exist.
+
+**What the catalogue imports** has been conditional ever since it started
+writing variants. A call such as `.primary()` or `.disabled(…)` comes from a
+trait, and a trait has to be in scope — but importing it as soon as the
+component is seen leaves an unused `use` on the button that has no variant, and
+so a warning in a project maxx has just written. `Spec::extra_imports` therefore
+holds pairs of "these calls ask for this line", and the condition is per
+component: `outline` is a button variant *and* a badge flag, so that a shared
+table of calls would import the button's trait into a file that holds only
+badges.
+
+**The project shapes** are the third kind of code maxx writes, after the views
+it draws and the modules it copies. `src/ui/shell.rs` — a sidebar and the view
+of the moment — is ordinary Rust written once at creation: no `maxx:` markers,
+no version, no catching up. That is deliberate, and it is the difference from a
+module: a shell is the shape of the project, which the developer will make their
+own from the first page added.
+
+They posed a problem the views do not have: nothing compiled them.
+`src/scaffold/templates.rs` depends on nothing, so `build.rs` includes it, calls
+the same functions the projects receive and writes their output into `OUT_DIR`;
+`examples/shapes.rs` compiles it there, against a view and a settings module
+reduced to their surface. A `clippy --all-targets` therefore catches a method
+`gpui-component` does not have. What it does not catch — the wiring of
+`main.rs`, the declared crates, the whole settings module — is in
+`tests/project.rs::every_shape_compiles`, ignored by default because it builds
+two entire projects.
+
+**The fingerprint cannot be the bytes alone.** A project formatted by its
+developer — `cargo fmt`, the most ordinary gesture there is — is no longer byte
+for byte the one maxx wrote, even though no line of code has moved: the default
+layout moves ten lines of `system.rs` and fifty-six of `theme.rs`, and goes as
+far as writing `else { return; }` where the template says `else { return }`.
+maxx concluded "edited by the developer" and stopped there, without a word.
+`maxx.toml` therefore carries **two** fingerprints: the bytes, and the shape —
+the same text put through the default `rustfmt`, the project's configuration
+ignored, because what is wanted here is a fixed standard and not the one of the
+moment. Either one is enough to recognise a file; both have to fail for it to be
+held as edited.
+
+The guard that holds the whole thing together is in `tests/modules.rs`: it keeps
+each template's fingerprint at its current version. Changing a template makes
+that test fail, which forces a decision about whether the fix should reach the
+projects already written. Without it, a version would never be raised and the
+mechanism would be decorative.
+
+## Formatting what maxx writes
+
+A setting, off by default, runs `rustfmt` over the file after every write.
+`rustfmt` and not `cargo fmt`: the second formats a whole crate, the first takes
+a file and finds the project's `rustfmt.toml` on its own by walking up from it —
+the developer's conventions win over `codegen`'s.
+
+It is also the only place where maxx launches a process and waits for it,
+against the rule laid down elsewhere: it has to read the file back afterwards.
+And that re-read is not optional — maxx keeps a copy of the file and compares it
+to the disk to spot what changed outside it. Leaving the copy behind would make
+the next save believe someone had touched the file: maxx accusing itself.
+
+Why it is on by default, and this is the design point: a Rust editor formats on
+save — that is the default in Zed as in rust-analyzer — and `codegen` does not
+write what rustfmt would write. Checked rather than assumed: rustfmt rewrites
+the demo's managed region. Without this setting, the editor reformats what maxx
+wrote, maxx rewrites it its own way on the next save, and the two pass the ball
+back and forth with one spurious diff per turn. maxx therefore applies itself
+what the editor would apply anyway.
+
+A consequence to state honestly: **maxx's round trip is neutral up to rustfmt**,
+and it is that composition `tests/demo.rs` checks. The template itself already
+comes out in rustfmt's format — a freshly generated project comes back through
+unchanged, which a test observes.
+
+It remains that rustfmt formats the whole file, so beyond the managed region. On
+a project already put through the formatter that changes nothing elsewhere; on a
+project that ignores it, the setting goes off.
+
+## An entry's shortcut
+
+In gpui a shortcut is not a property of the menu entry: it is a separate list,
+`key_bindings`, which the bar reads to display the accelerator. It lives outside
+the managed region, in a function the developer edits too.
+
+A first attempt, set aside: writing the shortcut to disk at the moment it is
+typed, since the model did not carry it. That was wrong on four counts at once —
+one write per key, so one for every intermediate state of the keystroke; a write
+that went around the "file changed outside maxx" guard; a shortcut written for
+an action `actions!` did not declare yet; and a shortcut that outlived the entry
+being renamed or deleted.
+
+What settles all four: **the shortcut is in the model**, read at opening and set
+on the entry, written at `⌘S` with the rest. It then travels with the entry you
+rename or move, it leaves with it when you delete it, and it is written after
+`ensure_action`, never before.
+
+Two edge rules. Every line binding an action is removed before one is written,
+because gpui accepts several for the same action: rewriting only one would leave
+the old one alive. And a binding for an action that appears in no menu belongs
+to the developer — saving does not touch it.
+
+## The repository's formatting
+
+maxx goes through `rustfmt`, with a single exception: `use_small_heuristics =
+"Max"`, which lets a short expression stay on its line. That is what preserves
+the tables of `registry/catalogue.rs`, the file others are invited to extend —
+reading a list of styles there at one word per line would be a punishment. The
+rest is the default rustfmt.
+
+The reason for going along with it is the same as for generated projects: a Rust
+editor formats on save. With no shared reference, the first contributor to open
+a file in Zed reformats the whole thing and their real change drowns in it.
+`cargo fmt --check` in CI closes the question.
+
+The demo has a `rustfmt.toml` of its own, empty, and is therefore not concerned:
+it has to be formatted the way a project generated elsewhere is, at the default
+rustfmt.
+
+## The demo as a reference
+
+`demo/` is a complete project, committed, with a workspace root of its own — so
+`cargo check` at the root of the repository does not build it. It is written in
+the exact form `codegen` produces, which makes a property checkable:
+`tests/demo.rs` reads every view back, rewrites it, and demands the file be
+identical to the byte. Any divergence is a loss.
+
+It is also the only reference for what maxx has to understand. It replaced an
+absolute path to a personal folder, in a test that stopped without failing when
+it was missing: on anybody else's machine the coverage was nil, and silent.
+
+## Where to plug what in
+
+- **One more component**: `registry/catalogue.rs`, one entry. Nothing else to
+  touch. If it needs an entity the view owns — a text field, a dropdown — the
+  entry additionally carries a `StateSpec`: the field's type, its imports, and
+  the expression `new` gives it. That is all `view::save` needs to know to
+  declare the field and initialise it, and the list of fields offered in the
+  inspector is filtered on that type — offering a text field's field to a
+  dropdown would be offering what does not compile.
+- **One more setting**: a field in `settings::Preferences` with its default, a
+  line in `documented_defaults`, then a `SettingItem` in `preferences.rs`. The
+  field reads and writes the settings, it copies nothing.
+- **One more menu entry**: an action in `actions.rs`, its handler, and the line
+  in `menus.rs`. An action carrying data cannot come from the `actions!` macro —
+  see `OpenRecent`.
+- **One more system call**: `run.rs`, and nowhere else.
