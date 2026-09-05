@@ -3,6 +3,51 @@
 What changed, for whoever opens maxx and wonders what is new. The commits say
 how; this says what for.
 
+## 0.3.1
+
+Nothing in maxx behaves differently. This version exists to carry the page
+that describes it: crates.io serves the README taken from the published
+package, so the one rewritten below reached GitHub and nowhere else.
+
+### Arriving at maxx
+
+- **Four commands at the top of the README**, before the prose rather than
+  after it: install, write a project, run it, design it. With the two long
+  builds named — `gpui` and `gpui-component` are some 750 crates, paid once
+  for maxx and once for your first generated project — because an unexplained
+  five-minute wait is the first thing anyone meets.
+- **The `apt` line itself**, in Requirements, instead of a link to the CI
+  workflow that holds it. On Linux the build stops on missing C headers rather
+  than on Rust, which is the confusing way round; a reader who cannot build is
+  not going to read YAML to find out why.
+- A table of contents, since crates.io renders no heading list of its own, and
+  four badges.
+- `documentation` in `Cargo.toml`, pointed at the README. maxx carries a
+  `src/lib.rs`, so docs.rs tries to build it and fails on the system libraries
+  gpui wants and its sandbox has not — leaving a red link as the first thing
+  the crates.io page showed. maxx is an application; there is no API there to
+  browse.
+
+### `ARCHITECTURE.md` is in English
+
+The document you read before trusting maxx, or before extending its catalogue,
+was the last one still in French — while the code it explains, its comments
+and its tests are in English. `BACKLOG.md` and `ROADMAP.md` stay as they are:
+they are workshop notes, read by whoever is holding the tools.
+
+### What maxx writes is compiled before a version goes out
+
+The tests that scaffold whole projects and compile them are the only proof
+that the Rust maxx *writes* holds together — nothing in compiling maxx checks
+the method names its catalogue puts in your file. They ran on the Monday cron
+and on demand, and nowhere else, so a catalogue touched between two releases
+was published having been checked by nobody. They now run in the release gate
+as well, and no version opens without them.
+
+The cron stays, and catches something else entirely: a generated project
+carries no `Cargo.lock` of its own, so an upstream release of `gpui-component`
+can break the catalogue with no change here at all.
+
 ## 0.3.0
 
 ### Building without reaching for the menu bar
