@@ -284,12 +284,14 @@ the same libraries under names of their own.
 **Windows**: the MSVC toolchain.
 
 CI builds and tests all three systems on every push and every pull request,
-plus once a week. A separate job runs on the weekly schedule alone: it scaffolds
-whole projects and compiles them, which is the only check that what maxx *writes*
-holds together — nothing in compiling maxx verifies the calls its catalogue puts
-in your file. A `v*` tag opens the release gate: the whole matrix, a release
-build on each system, and a release opened on GitHub. No binary is attached to
-it — maxx is built from its source, by people who have a Rust toolchain anyway.
+plus once a week. A separate job scaffolds whole projects and compiles them,
+which is the only check that what maxx *writes* holds together — nothing in
+compiling maxx verifies the calls its catalogue puts in your file. It runs on
+the weekly schedule, on demand, and in the release gate, where it has to pass
+before a version can go out. A `v*` tag opens that gate: the whole matrix, a
+release build on each system, the generated projects, and a release opened on
+GitHub. No binary is attached to it — maxx is built from its source, by people
+who have a Rust toolchain anyway.
 
 What CI does not prove: that maxx is usable. No test opens a window — they cover
 the model, the parser, the templates and the settings. maxx is developed on

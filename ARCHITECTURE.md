@@ -281,7 +281,8 @@ maxx has only ever been tried by hand on macOS.
 Two workflows, two roles. `ci.yml` gives a fast, frequent signal; `release.yml`
 is the release gate: it starts on a `v*` tag, runs the whole matrix, builds in
 release — which the ordinary CI never does, and an optimisation reveals what a
-debug build tolerates — checks what would go into a crates.io package, then
+debug build tolerates — scaffolds whole projects and compiles them, checks what
+would go into a crates.io package, then
 opens the release on GitHub with the CHANGELOG's section for its body. It
 attaches no binary, and that is deliberate: an executable is a distribution in
 the sense the licences mean — Apache-2.0 for gpui, MPL-2.0 for option-ext — with

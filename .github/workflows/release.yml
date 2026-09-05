@@ -104,9 +104,43 @@ jobs:
           grep -q "^demo/" package.txt && { echo "the demo has no business in the package"; exit 1; }
           exit 0
 
+  generated:
+    name: what maxx writes compiles
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: rust
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # The generated projects do not compile into `target/`: they carry a
+      # `.cargo/config.toml` pointing at `run::shared_target_dir()`. `rust-cache`
+      # knows nothing about that path, so it is cached here — with the compiler
+      # in the key, because `stable` moves every six weeks and `actions/cache`
+      # skips the save on an exact hit, which would keep stale artefacts for ever.
+      - name: Cache what the generated projects compile into
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/maxx/target
+          key: generated-${{ runner.os }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('src/scaffold.rs') }}
+          restore-keys: generated-${{ runner.os }}-${{ steps.rust.outputs.cachekey }}-
+
+      # The five tests `cargo test` never runs, and the only proof that the Rust
+      # maxx *writes* still compiles. Nothing in compiling maxx checks the method
+      # names its catalogue puts in your file, and three defects of that class
+      # have already lived there.
+      #
+      # It is here as well as on the Monday cron because the two catch different
+      # things. The cron catches what nobody committed: a generated project has
+      # no `Cargo.lock` of its own and asks for `gpui-component = "0.5.1"`, a
+      # caret — so an upstream release can break the catalogue with no change
+      # here at all. This job catches what *was* committed, before it ships.
+      - name: The tests that build whole projects
+        run: cargo test --profile ci -- --ignored
+
   publish:
     name: open the release
-    needs: [verify, package]
+    needs: [verify, package, generated]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
