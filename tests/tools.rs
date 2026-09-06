@@ -154,3 +154,32 @@ fn scratch_file(name: &str) -> std::path::PathBuf {
     std::fs::create_dir_all(&directory).expect("the test directory must be created");
     directory.join(name)
 }
+
+/// A maxx started from its icon inherits a `PATH` where neither `cargo` nor
+/// `zed` lives; what it searches has to be wider than what it was given.
+#[test]
+fn the_search_path_holds_the_usual_directories_once_each() {
+    let searched: Vec<std::path::PathBuf> =
+        std::env::split_paths(maxx::tools::search_path()).collect();
+
+    let mut seen = std::collections::HashSet::new();
+    for directory in &searched {
+        assert!(seen.insert(directory.clone()), "{} is listed twice", directory.display());
+    }
+
+    // The same variable the search reads: `HOME` is not what names the home
+    // directory on Windows, where CI also runs this.
+    let home = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+    if let Some(home) = std::env::var_os(home).filter(|home| !home.is_empty()) {
+        let cargo = std::path::Path::new(&home).join(".cargo/bin");
+        assert!(searched.contains(&cargo), "{} is missing", cargo.display());
+    }
+
+    // An empty entry is dropped on purpose — `PATH=$PATH:` writes one, and it
+    // means the working directory, which is not a place to look for a tool.
+    for directory in std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .filter(|directory| !directory.as_os_str().is_empty())
+    {
+        assert!(searched.contains(&directory), "{} was dropped", directory.display());
+    }
+}

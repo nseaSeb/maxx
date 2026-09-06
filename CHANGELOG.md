@@ -3,6 +3,36 @@
 What changed, for whoever opens maxx and wonders what is new. The commits say
 how; this says what for.
 
+## 0.3.2
+
+The version that makes maxx work when it is started the way an application is
+started: from its icon.
+
+### maxx started from its icon
+
+- **`cargo` is found again.** An application launched from the Finder or the
+  Dock inherits `/usr/bin:/bin:/usr/sbin:/sbin` and nothing else, where neither
+  `cargo`, nor `rustfmt`, nor `zed` lives: the Run button answered `cargo run:
+  No such file or directory`, and the editor could only be reached through its
+  application bundle, without the line number. maxx now asks the login shell,
+  once at startup and on a thread of its own, for the `PATH` it would give a
+  terminal, keeps the usual directories behind that answer, and hands the whole
+  of it to every command it starts.
+- **A `cargo` that is still missing says where it was looked for**, in the
+  output panel — the only place a run is watched.
+- **An editor that does not open says so**, in the window rather than on a
+  stderr nobody reads — from the menu bar, the context menu and the
+  preferences alike.
+- **A project folder renamed while its window is open** is named as such, and
+  no longer blamed on the `PATH`: `cargo` and a missing working directory fail
+  with the same error, and only one of them is about where cargo lives.
+
+### The output panel
+
+- **Copy**, in its header, puts every line it holds on the clipboard. The panel
+  is a list of lines and not a text box, so a compiler error had to be retyped
+  by hand to be shown to anyone.
+
 ## 0.3.1
 
 Nothing in maxx behaves differently. This version exists to carry the page

@@ -372,7 +372,7 @@ fn file_page(cx: &mut Context<Workspace>) -> SettingPage {
                 action_button("prefs-open-file", "prefs.open_in_editor", path.is_none(), {
                     move |cx| {
                         if let Some(path) = settings::settings_path() {
-                            crate::tools::open_in_editor(cx, &path, None);
+                            crate::workspace::open_in_editor(cx, &path, None);
                         }
                     }
                 })

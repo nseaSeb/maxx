@@ -8,7 +8,10 @@
 //! The catalogue is a table on purpose. A heuristic would be wrong for every
 //! editor that does not follow the majority, and there is no majority.
 
-use std::path::Path;
+use std::collections::HashSet;
+use std::ffi::{OsStr, OsString};
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use gpui::App;
 
@@ -191,6 +194,172 @@ pub const TERMINALS: &[Terminal] = &[
     },
 ];
 
+static SEARCH_PATH: OnceLock<OsString> = OnceLock::new();
+static KNOWN_PATH: OnceLock<OsString> = OnceLock::new();
+
+/// The `PATH` maxx hands to every command it starts.
+///
+/// A maxx started from its icon inherits launchd's environment, whose `PATH`
+/// is `/usr/bin:/bin:/usr/sbin:/sbin` — where neither `cargo` nor `zed` lives.
+/// The Run button answered `cargo run: No such file or directory`, and the
+/// editor could only be reached through its application bundle, losing the
+/// line number. So the login shell is asked once for the `PATH` it would give
+/// a terminal, and the usual directories are added behind its answer, so the
+/// result is still right when there is no shell to ask.
+///
+/// Reading it waits for that shell, which is why `lib::run` asks for it on a
+/// thread of its own as maxx starts: by the first click it is already there.
+pub fn search_path() -> &'static OsString {
+    SEARCH_PATH.get_or_init(build_search_path)
+}
+
+/// The `PATH` to use without waiting: the full one once the shell has answered,
+/// and the immediate one until then.
+///
+/// `on_path` is called while the menu bar is being built and on every repaint
+/// of the preferences, and the commands maxx starts from a click — the editor,
+/// the terminal, `rustfmt` on ⌘S — are started on the interface thread. None of
+/// them may wait seconds for a shell. What is lost in that first moment is a
+/// tool installed *only* in a directory a version manager adds; the run itself,
+/// which happens on a thread of its own, does wait for the complete answer.
+pub fn lookup_path() -> &'static OsString {
+    SEARCH_PATH.get().unwrap_or_else(|| KNOWN_PATH.get_or_init(build_known_path))
+}
+
+/// What is known without asking anyone: the inherited `PATH` and the usual
+/// directories.
+fn build_known_path() -> OsString {
+    join_unique(&[std::env::var_os("PATH").unwrap_or_default()])
+}
+
+/// The inherited `PATH`, then the login shell's, then the usual directories.
+///
+/// In that order, and without duplicates: what the process was given wins over
+/// what a shell says, and a guess comes last.
+fn build_search_path() -> OsString {
+    let inherited = std::env::var_os("PATH").unwrap_or_default();
+    match login_shell_path() {
+        Some(shell) => join_unique(&[inherited, shell]),
+        None => join_unique(&[inherited]),
+    }
+}
+
+/// Those sources, then the usual directories, each directory kept once and in
+/// the order it was first seen.
+fn join_unique(sources: &[OsString]) -> OsString {
+    let mut directories: Vec<PathBuf> = Vec::new();
+    let mut seen: HashSet<PathBuf> = HashSet::new();
+    let mut add = |value: &OsStr| {
+        for directory in std::env::split_paths(value) {
+            if !directory.as_os_str().is_empty() && seen.insert(directory.clone()) {
+                directories.push(directory);
+            }
+        }
+    };
+
+    for source in sources {
+        add(source);
+    }
+    for directory in usual_directories() {
+        add(directory.as_os_str());
+    }
+
+    // `join_paths` refuses a directory containing the separator; what was
+    // inherited is then the only honest answer, rather than a truncated list.
+    std::env::join_paths(&directories)
+        .unwrap_or_else(|_| sources.first().cloned().unwrap_or_default())
+}
+
+/// Where a tool installed by a package manager or an installer usually lands.
+///
+/// The fallback for a maxx started with no shell to ask: `rustup` writes
+/// `~/.cargo/bin`, Homebrew `/opt/homebrew/bin` on Apple silicon and
+/// `/usr/local/bin` on Intel — which is also where Zed puts its `zed`.
+fn usual_directories() -> Vec<PathBuf> {
+    let mut directories = Vec::new();
+    if let Some(home) = home_directory() {
+        directories.push(home.join(".cargo/bin"));
+        directories.push(home.join(".local/bin"));
+    }
+    if cfg!(windows) {
+        return directories;
+    }
+    directories.extend(
+        ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin", "/bin"]
+            .iter()
+            .map(PathBuf::from),
+    );
+    directories
+}
+
+fn home_directory() -> Option<PathBuf> {
+    let name = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+    std::env::var_os(name).filter(|home| !home.is_empty()).map(PathBuf::from)
+}
+
+/// The `PATH` the user's login shell would give a terminal.
+///
+/// `-l -i` because the directory that holds `cargo` is as often written in an
+/// interactive file (`.zshrc`) as in a login one, and a version manager writes
+/// it nowhere else. Waited on for ten seconds and no longer: a shell that hangs
+/// on a prompt must not hold maxx, and the usual directories are the answer in
+/// that case. Ten and not one because a `.zshrc` that starts mise, asdf and
+/// conda was measured between 1.6 s warm and 4.1 s cold — the wait itself costs
+/// nothing, it is paid on a thread while maxx opens.
+#[cfg(unix)]
+fn login_shell_path() -> Option<OsString> {
+    let shell = std::env::var("SHELL").ok().filter(|shell| !shell.is_empty())?;
+
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let (pid_sender, pids) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut command = std::process::Command::new(shell);
+        let command = command
+            // Between two unit separators: an interactive configuration that
+            // greets the user writes on the same stream, and what is wanted is
+            // what lies between the markers, not the whole output.
+            .args(["-l", "-i", "-c", "printf '\\037%s\\037' \"$PATH\""])
+            // A configuration that asks the user something must not wait for
+            // an answer, and its own noise does not belong in maxx's streams.
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null());
+        let Ok(child) = command.spawn() else {
+            let _ = sender.send(None);
+            return;
+        };
+        let _ = pid_sender.send(child.id());
+        let _ = sender.send(child.wait_with_output().ok());
+    });
+
+    let output = match receiver.recv_timeout(std::time::Duration::from_secs(10)) {
+        Ok(output) => output?,
+        // A configuration that hangs would otherwise leave a shell of its own
+        // behind for as long as maxx is open.
+        Err(_) => {
+            if let Ok(pid) = pids.try_recv() {
+                let _ =
+                    std::process::Command::new("kill").arg("-TERM").arg(pid.to_string()).status();
+            }
+            return None;
+        }
+    };
+    if !output.status.success() {
+        return None;
+    }
+    let printed = String::from_utf8(output.stdout).ok()?;
+    let mut parts = printed.split('\u{1f}');
+    parts.next()?;
+    let path = parts.next()?.trim();
+    if path.is_empty() { None } else { Some(OsString::from(path)) }
+}
+
+/// Windows has no login shell to ask: the usual directories are all there is.
+#[cfg(not(unix))]
+fn login_shell_path() -> Option<OsString> {
+    None
+}
+
 /// Whether `command` is on the `PATH`.
 ///
 /// Walked by hand rather than shelled out to `which`: spawning a process to
@@ -200,9 +369,7 @@ pub fn on_path(command: &str) -> bool {
     if command.is_empty() {
         return false;
     }
-    let Ok(path) = std::env::var("PATH") else {
-        return false;
-    };
+    let path = lookup_path();
 
     // On Windows the file does not carry the command's name: `code` is
     // `code.cmd`, `nvim` is `nvim.exe`. Looking for the bare name never finds
@@ -220,7 +387,7 @@ pub fn on_path(command: &str) -> bool {
         vec![String::new()]
     };
 
-    std::env::split_paths(&path).any(|directory| {
+    std::env::split_paths(path).any(|directory| {
         extensions.iter().any(|extension| directory.join(format!("{command}{extension}")).is_file())
     })
 }
@@ -306,15 +473,21 @@ pub fn editor_label(cx: &App) -> String {
         .unwrap_or_else(|| crate::tr("tools.the_editor").to_string())
 }
 
-/// Opens `path` in the chosen editor, at `line` when there is one.
-pub fn open_in_editor(cx: &App, path: &Path, line: Option<usize>) {
+/// Opens `path` in the chosen editor, at `line` when there is one, and answers
+/// whether anything opened.
+///
+/// `false` covers the three ways this ends in nothing: no editor found at all,
+/// a terminal editor with no terminal able to hold it, and a command that did
+/// not start. The caller says so in the window — the alternative is a menu item
+/// that looks broken.
+pub fn open_in_editor(cx: &App, path: &Path, line: Option<usize>) -> bool {
     let Some(editor) = editor(cx) else {
-        return;
+        return false;
     };
     if editor.terminal_bound {
-        crate::run::open_editor_in_terminal(editor, terminal(cx), path, line);
+        crate::run::open_editor_in_terminal(editor, terminal(cx), path, line)
     } else {
-        crate::run::open_editor(editor, path, line);
+        crate::run::open_editor(editor, path, line)
     }
 }
 

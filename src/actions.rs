@@ -458,7 +458,7 @@ pub fn register_handlers(cx: &mut App) {
     });
     cx.on_action(|_: &OpenProjectInZed, cx: &mut App| {
         if let Some(path) = active_workspace_path(cx) {
-            crate::tools::open_in_editor(cx, &path, None);
+            crate::workspace::open_in_editor(cx, &path, None);
         }
     });
     cx.on_action(|_: &Minimize, cx: &mut App| {

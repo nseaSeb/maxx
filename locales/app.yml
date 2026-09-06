@@ -737,6 +737,12 @@ message.no_other_tab:
 message.no_tab_to_the_right:
   en: "no tab to the right of this one"
   fr: "aucun onglet à droite de celui-ci"
+message.editor_refused:
+  en: "%{editor} did not open"
+  fr: "%{editor} ne s'est pas ouvert"
+message.output_copied:
+  en: "output copied"
+  fr: "sortie copiée"
 message.path_copied:
   en: "path copied"
   fr: "chemin copié"
@@ -1352,6 +1358,15 @@ prop.width:
 run.close:
   en: "Close"
   fr: "Fermer"
+run.cargo_missing:
+  en: "cargo was not found in:"
+  fr: "cargo est introuvable dans :"
+run.copy:
+  en: "Copy"
+  fr: "Copier"
+run.project_gone:
+  en: "the project folder is gone: %{path}"
+  fr: "le dossier du projet a disparu : %{path}"
 run.failed:
   en: "failed"
   fr: "échec"

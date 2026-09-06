@@ -147,7 +147,7 @@ impl Workspace {
         }
 
         match menus.handler_line(action) {
-            Some(line) => crate::tools::open_in_editor(cx, &menus.path, Some(line)),
+            Some(line) => self.hand_to_editor(&menus.path.clone(), Some(line), cx),
             None => {
                 self.message = Some(SharedString::from(
                     t!("message.action_unwired", action = action).into_owned(),

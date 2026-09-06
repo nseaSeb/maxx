@@ -531,6 +531,18 @@ When a project is created, `cargo build` starts in the background to pay that
 cost while you are drawing. `Run > Prewarm dependencies` runs it again on
 demand.
 
+The output panel carries *Copy*, which puts every line it holds on the
+clipboard — a compiler error is meant to be pasted somewhere, and the panel is
+a list of lines rather than a text box.
+
+A maxx started from its icon inherits a `PATH` that holds neither `cargo` nor
+your editor: macOS gives an application launched that way `/usr/bin:/bin`
+and little else. So maxx asks your login shell, once at startup, for the `PATH`
+it would give a terminal, adds the usual directories behind the answer
+(`~/.cargo/bin`, `/opt/homebrew/bin`, `/usr/local/bin`), and hands that to
+everything it starts — `cargo`, `rustfmt`, your editor and your terminal. When
+`cargo` is still not found, the panel lists the directories it looked in.
+
 ## Layout
 
 | File | Role |

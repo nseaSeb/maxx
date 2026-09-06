@@ -109,6 +109,14 @@ pub fn run() {
     // can all write a project without anything trying to open a window.
     let path = cli::dispatch(std::env::args().skip(1));
 
+    // Asked for now, on a thread of its own, so it is already answered when the
+    // Run button is first pressed: a maxx started from its icon has to ask the
+    // login shell where `cargo` lives, and a shell that sources a version
+    // manager takes a couple of seconds to say.
+    std::thread::spawn(|| {
+        tools::search_path();
+    });
+
     Application::new().run(move |cx: &mut App| {
         // Without this the menu bar stays behind whatever was frontmost when
         // the app was launched from a terminal.

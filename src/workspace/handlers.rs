@@ -3,7 +3,49 @@
 
 use super::*;
 
+/// Hands a file to the chosen editor from outside a workspace — a menu action,
+/// the preferences — and says so in the frontmost project window when nothing
+/// opened.
+///
+/// The message has to travel: the preferences and the menu bar have nowhere to
+/// write, and a gesture that silently does nothing is the failure this answers.
+pub(crate) fn open_in_editor(cx: &mut App, path: &std::path::Path, line: Option<usize>) {
+    if crate::tools::open_in_editor(cx, path, line) {
+        return;
+    }
+    let refused = editor_refused(cx);
+    crate::workspace::defer_active(cx, move |workspace, _, cx| {
+        workspace.message = Some(refused);
+        cx.notify();
+    });
+}
+
+/// What the window says when the editor did not open.
+fn editor_refused(cx: &App) -> SharedString {
+    SharedString::from(
+        t!("message.editor_refused", editor = crate::tools::editor_label(cx)).into_owned(),
+    )
+}
+
 impl Workspace {
+    /// Hands a file to the chosen editor, and says so when nothing opened.
+    ///
+    /// Which is the point of the return value: a maxx started from its icon
+    /// once had neither `zed` on its `PATH` nor a way to say so, and the menu
+    /// item simply did nothing.
+    pub(crate) fn hand_to_editor(
+        &mut self,
+        path: &std::path::Path,
+        line: Option<usize>,
+        cx: &mut Context<Self>,
+    ) {
+        if crate::tools::open_in_editor(cx, path, line) {
+            return;
+        }
+        self.message = Some(editor_refused(cx));
+        cx.notify();
+    }
+
     /// Opens what is being edited in Zed: the file if one is open, the project
     /// otherwise.
     ///
@@ -20,7 +62,7 @@ impl Workspace {
             .or_else(|| self.project().map(|project| project.root.clone()));
 
         match path {
-            Some(path) => crate::tools::open_in_editor(cx, &path, None),
+            Some(path) => self.hand_to_editor(&path, None, cx),
             None => {
                 self.message = Some(crate::tr("message.no_project"));
                 cx.notify();
@@ -40,7 +82,7 @@ impl Workspace {
             return;
         };
         match view.method_line(&name) {
-            Some(line) => crate::tools::open_in_editor(cx, &view.path, Some(line)),
+            Some(line) => self.hand_to_editor(&view.path.clone(), Some(line), cx),
             None => {
                 self.message = Some(SharedString::from(
                     t!("message.handler_unwritten", name = name).into_owned(),

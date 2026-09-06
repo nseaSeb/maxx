@@ -108,6 +108,22 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Copies the output panel, as it stands, to the clipboard.
+    ///
+    /// The panel is a list of lines rather than a text box, so what is read
+    /// there cannot be selected with the mouse: a compiler error had to be
+    /// retyped by hand to be shown to anyone.
+    pub fn copy_output(&mut self, cx: &mut Context<Self>) {
+        if self.run_output.is_empty() {
+            return;
+        }
+        let text =
+            self.run_output.iter().map(|line| line.to_string()).collect::<Vec<_>>().join("\n");
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+        self.message = Some(crate::tr("message.output_copied"));
+        cx.notify();
+    }
+
     /// Shows or hides the output panel.
     pub fn toggle_output(&mut self, cx: &mut Context<Self>) {
         crate::settings::update_prefs(cx, |preferences| {
@@ -175,6 +191,18 @@ impl Workspace {
                                 .hover(|this| this.bg(theme::hover_bg()))
                                 .child(crate::tr("run.stop"))
                                 .on_click(cx.listener(|this, _, _, cx| this.stop_project(cx))),
+                        )
+                    })
+                    .when(!self.run_output.is_empty(), |this| {
+                        this.child(
+                            div()
+                                .id("run-copy")
+                                .px_2()
+                                .rounded_sm()
+                                .cursor_pointer()
+                                .hover(|this| this.bg(theme::hover_bg()))
+                                .child(crate::tr("run.copy"))
+                                .on_click(cx.listener(|this, _, _, cx| this.copy_output(cx))),
                         )
                     })
                     .child(

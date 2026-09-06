@@ -121,6 +121,23 @@ fn spawn_cargo(root: PathBuf, arguments: Vec<String>) -> Receiver<Message> {
     receiver
 }
 
+/// A command that will find its program, and whose children will find theirs.
+///
+/// Both halves matter, and the second is the one that is easy to miss: giving
+/// maxx a `PATH` where `cargo` is found is not enough, because the `cargo` it
+/// starts then looks for `rustc` on the `PATH` it was handed — the minimal one
+/// a maxx started from its icon inherits. So the resolved `PATH` is written
+/// into the child's environment, not only used to find the program.
+///
+/// `lookup_path` and not `search_path`: these are started from a click, on the
+/// interface thread, and the complete answer can be a login shell away. The run
+/// itself has a thread of its own and does wait for it.
+fn command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    command.env("PATH", crate::tools::lookup_path());
+    command
+}
+
 /// Opens `terminal` at `path`.
 ///
 /// Two ways in, and the first one matters: a terminal with a command line tool
@@ -138,7 +155,7 @@ pub fn open_terminal(terminal: Option<&Terminal>, path: &Path) {
     if !terminal.command.is_empty()
         && let Some(flag) = terminal.directory_flag
         && on_path(terminal.command)
-        && Command::new(terminal.command)
+        && command(terminal.command)
             // The `--flag=value` form, not two arguments: Ghostty accepts only
             // that one, and every other terminal here takes it too.
             .arg(format!("{flag}={}", path.display()))
@@ -167,7 +184,7 @@ fn open_terminal_bundle(terminal: &Terminal, path: &Path) {
     // `-n` and `--args` are what carry the flag through to a bundle that has
     // no command line tool of its own.
     if let Some(flag) = terminal.directory_flag {
-        let opened = Command::new("open")
+        let opened = command("open")
             .arg("-na")
             .arg(bundle)
             .arg("--args")
@@ -178,7 +195,7 @@ fn open_terminal_bundle(terminal: &Terminal, path: &Path) {
             return;
         }
     }
-    let _ = Command::new("open").arg("-a").arg(bundle).arg(path).spawn();
+    let _ = command("open").arg("-a").arg(bundle).arg(path).spawn();
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -201,31 +218,36 @@ pub fn editor_arguments(editor: &Editor, path: &Path, line: Option<usize>) -> Ve
     }
 }
 
-/// Opens `path` in a windowed editor.
+/// Opens `path` in a windowed editor, and answers whether anything started.
 ///
 /// Through its command line tool when it has one, and through the application
 /// bundle otherwise — losing the line number in that second case, because
-/// `open -a` has nowhere to put it.
-pub fn open_editor(editor: &Editor, path: &Path, line: Option<usize>) {
+/// `open -a` has nowhere to put it. The answer is what the window says when
+/// neither way in worked: this is called from a menu, and a failure written on
+/// stderr is read by nobody who started maxx from its icon.
+pub fn open_editor(editor: &Editor, path: &Path, line: Option<usize>) -> bool {
     let arguments = editor_arguments(editor, path, line);
-    if on_path(editor.command) && Command::new(editor.command).args(&arguments).spawn().is_ok() {
-        return;
+    if on_path(editor.command) && command(editor.command).args(&arguments).spawn().is_ok() {
+        return true;
     }
-    open_editor_bundle(editor, path);
+    open_editor_bundle(editor, path)
 }
 
 /// Opens a file through the editor's macOS application bundle.
 ///
 /// The line number is lost here: `open -a` has nowhere to put it.
 #[cfg(target_os = "macos")]
-fn open_editor_bundle(editor: &Editor, path: &Path) {
-    if let Some(bundle) = editor.bundle {
-        let _ = Command::new("open").arg("-a").arg(bundle).arg(path).spawn();
-    }
+fn open_editor_bundle(editor: &Editor, path: &Path) -> bool {
+    let Some(bundle) = editor.bundle else {
+        return false;
+    };
+    command("open").arg("-a").arg(bundle).arg(path).spawn().is_ok()
 }
 
 #[cfg(not(target_os = "macos"))]
-fn open_editor_bundle(_editor: &Editor, _path: &Path) {}
+fn open_editor_bundle(_editor: &Editor, _path: &Path) -> bool {
+    false
+}
 
 /// Opens `path` in an editor that draws inside a terminal.
 ///
@@ -238,32 +260,28 @@ pub fn open_editor_in_terminal(
     terminal: Option<&Terminal>,
     path: &Path,
     line: Option<usize>,
-) {
+) -> bool {
     let Some(terminal) = terminal else {
-        return;
+        return false;
     };
     let Some(flag) = terminal.command_flag else {
-        eprintln!(
-            "{} needs a terminal able to run a command; {} is not one",
-            editor.label, terminal.label
-        );
-        return;
+        return false;
     };
 
     let arguments = editor_arguments(editor, path, line);
     let directory = path.parent().unwrap_or(path);
 
-    let mut command = Command::new(terminal.command);
+    let mut command = command(terminal.command);
     if let Some(directory_flag) = terminal.directory_flag {
         command.arg(format!("{directory_flag}={}", directory.display()));
     }
     command.arg(flag).arg(editor.command).args(&arguments);
 
     if on_path(terminal.command) && command.spawn().is_ok() {
-        return;
+        return true;
     }
 
-    open_terminal_editor_bundle(terminal, editor, flag, &arguments);
+    open_terminal_editor_bundle(terminal, editor, flag, &arguments)
 }
 
 /// Starts a terminal editor through the terminal's macOS bundle.
@@ -273,12 +291,13 @@ fn open_terminal_editor_bundle(
     editor: &Editor,
     flag: &str,
     arguments: &[String],
-) {
-    if let Some(bundle) = terminal.bundle {
-        let mut passed = vec![flag.to_string(), editor.command.to_string()];
-        passed.extend(arguments.iter().cloned());
-        let _ = Command::new("open").arg("-na").arg(bundle).arg("--args").args(&passed).spawn();
-    }
+) -> bool {
+    let Some(bundle) = terminal.bundle else {
+        return false;
+    };
+    let mut passed = vec![flag.to_string(), editor.command.to_string()];
+    passed.extend(arguments.iter().cloned());
+    command("open").arg("-na").arg(bundle).arg("--args").args(&passed).spawn().is_ok()
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -287,7 +306,8 @@ fn open_terminal_editor_bundle(
     _editor: &Editor,
     _flag: &str,
     _arguments: &[String],
-) {
+) -> bool {
+    false
 }
 
 /// Kills a run by its operating system pid.
@@ -297,8 +317,8 @@ fn open_terminal_editor_bundle(
 /// window it opened on screen.
 #[cfg(unix)]
 pub fn stop(pid: u32) {
-    let _ = Command::new("kill").arg("-TERM").arg(format!("-{pid}")).status();
-    let _ = Command::new("kill").arg("-TERM").arg(pid.to_string()).status();
+    let _ = command("kill").arg("-TERM").arg(format!("-{pid}")).status();
+    let _ = command("kill").arg("-TERM").arg(pid.to_string()).status();
 }
 
 /// Kills a run by its process id, and the tree under it.
@@ -308,14 +328,17 @@ pub fn stop(pid: u32) {
 /// is a window that will not close on a polite request.
 #[cfg(windows)]
 pub fn stop(pid: u32) {
-    let _ = Command::new("taskkill").arg("/PID").arg(pid.to_string()).arg("/T").arg("/F").status();
+    let _ = command("taskkill").arg("/PID").arg(pid.to_string()).arg("/T").arg("/F").status();
 }
 
 fn run(root: PathBuf, arguments: Vec<String>, sender: Sender<Message>) {
-    let mut command = Command::new("cargo");
+    let mut command = command("cargo");
     let child = command
         .args(&arguments)
         .current_dir(&root)
+        // The complete `PATH`, waited for: this runs on the runner thread, and
+        // a cargo that is not found is the whole failure this answers.
+        .env("PATH", crate::tools::search_path())
         // Colour codes would end up in the panel as escape sequences.
         .env("CARGO_TERM_COLOR", "never")
         .stdout(Stdio::piped())
@@ -336,6 +359,26 @@ fn run(root: PathBuf, arguments: Vec<String>, sender: Sender<Message>) {
         Ok(child) => child,
         Err(error) => {
             let _ = sender.send(Message::Line(format!("cargo {}: {error}", arguments.join(" "))));
+            // "No such file or directory" names no file, and the panel is the
+            // only place this is read: what was searched is the answer.
+            if error.kind() == std::io::ErrorKind::NotFound {
+                // `spawn` answers the same error for a program it cannot find
+                // and for a working directory that is not there — a project
+                // renamed while its window was open. Blaming the `PATH` for
+                // that one would send the reader looking in the wrong place.
+                if !root.is_dir() {
+                    let _ = sender.send(Message::Line(
+                        t!("run.project_gone", path = root.display()).into_owned(),
+                    ));
+                } else {
+                    // One message per directory: the panel is a list of lines,
+                    // and a single message holding newlines is drawn as one.
+                    let _ = sender.send(Message::Line(crate::tr("run.cargo_missing").to_string()));
+                    for directory in std::env::split_paths(crate::tools::search_path()) {
+                        let _ = sender.send(Message::Line(format!("  {}", directory.display())));
+                    }
+                }
+            }
             let _ = sender.send(Message::Finished(false));
             return;
         }
@@ -437,7 +480,7 @@ fn format_inside(directory: &Path, source: &str) -> Option<String> {
     let file = directory.join("shape.rs");
     std::fs::write(&file, source).ok()?;
 
-    let status = Command::new("rustfmt")
+    let status = command("rustfmt")
         .arg("--edition")
         .arg("2024")
         .arg("--config-path")
@@ -672,7 +715,7 @@ fn copy_recursively(from: &Path, to: &Path) -> std::io::Result<()> {
 pub fn format_rust(path: &Path) -> Result<bool, String> {
     let before = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
 
-    let status = Command::new("rustfmt")
+    let status = command("rustfmt")
         .arg("--edition")
         .arg("2024")
         .arg(path)

@@ -18,6 +18,7 @@ pub use chrome::fillable;
 pub use code::{CodeFile, language_for};
 pub use edits::Insert;
 pub use explorer::{protected_entry, top_level_module, unregister_view, view_module};
+pub(crate) use handlers::open_in_editor;
 
 use rust_i18n::t;
 
