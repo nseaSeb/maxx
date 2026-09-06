@@ -312,6 +312,39 @@ impl View {
         Ok(flag_duplicate_imports(source))
     }
 
+    /// Takes `text` as this view's file: parses it, writes it, and lets the
+    /// canvas follow.
+    ///
+    /// Parsed before anything is written, and that order is the whole point: a
+    /// text with the markers deleted, or with a `render` that no longer reads
+    /// as an expression, leaves the file exactly as it was, and the parser's
+    /// own words say why. Nothing half-written, and nothing to undo.
+    ///
+    /// What comes back on screen afterwards is not this text but the render of
+    /// the tree it produced — the same normalisation a save from the canvas
+    /// performs. An expression written on four lines inside the managed region
+    /// comes back on one if that is how the generator writes it; outside the
+    /// region, every byte is kept.
+    ///
+    /// The undo history goes, as it does on `reload`: the past holds trees that
+    /// belong to another text, and stepping back into one would write it over
+    /// the file that has just been edited by hand.
+    pub fn adopt_source(&mut self, text: &str, force: bool) -> Result<(), String> {
+        let (root, _) = parser::parse(text).map_err(|error| error.to_string())?;
+        if !force && self.disk_changed() {
+            return Err(crate::tr("error.changed_on_disk").to_string());
+        }
+        std::fs::write(&self.path, text).map_err(|error| error.to_string())?;
+        self.source = text.to_string();
+        self.saved = root.clone();
+        self.root = root;
+        self.source_edited = false;
+        self.selected.clear();
+        self.past.clear();
+        self.future.clear();
+        Ok(())
+    }
+
     /// Renders the tree, splices it into the file and writes it to disk.
     pub fn save(&mut self) -> Result<(), String> {
         let source = self.render_source()?;

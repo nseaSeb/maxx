@@ -47,7 +47,7 @@ model and the parser exist to guarantee.
 | `workspace/edits.rs` | dropping, duplicating, pasting, deleting, and the checkpoints |
 | `workspace/handlers.rs` | a component's handler: opened, written, reached in your editor |
 | `workspace/explorer.rs` | the file tree, its selection, its deletions |
-| `workspace/code.rs` | the code reader: any text file, read-only |
+| `workspace/code.rs` | the code panel: any text file, read and written |
 | `workspace/menus.rs` | the menu bar editor |
 | `workspace/chrome.rs` | the shell: title, welcome screen, status bar, `Render` |
 | `workspace/process.rs` | `cargo run` and the output panel |

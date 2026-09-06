@@ -6,7 +6,24 @@ how; this says what for.
 ## 0.3.2
 
 The version that makes maxx work when it is started the way an application is
-started: from its icon.
+started: from its icon — and the one where the code panel stops being a window
+onto the disk and becomes a place to write.
+
+### The code panel writes
+
+- **`⌘S` writes the open file.** The panel showed any text file of the project
+  and refused every keystroke; it takes them now, with a dot on its tab while
+  something is waiting to be written, `⌘⇧R` to take the file back from the
+  disk, and the same refusal a view gets when the file changed underneath in
+  the meantime.
+- **A view's text (`⌘E`) is parsed back**, so the canvas takes what the text
+  says. A text maxx cannot read — a deleted marker, a `render` that no longer
+  returns an expression — leaves the file exactly as it was and says why:
+  nothing is written before the reading has succeeded. Inside the managed
+  region what comes back is maxx's own rendering of the tree it read; outside
+  it, every byte typed is kept.
+- **The undo history ends at such a save**, as it does when a file is reloaded
+  from the disk: the trees behind it belong to a text that no longer exists.
 
 ### maxx started from its icon
 

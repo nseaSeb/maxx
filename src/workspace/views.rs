@@ -101,7 +101,11 @@ impl Workspace {
         let Some(view) = self.views.get(index) else {
             return;
         };
-        if view.dirty() {
+        // The panel's own text counts as the view's: it is that file, typed in
+        // another part of the same window, and `forget_code` below drops it
+        // without a word.
+        let held = self.code().is_some_and(|file| file.of_view && file.edited);
+        if view.dirty() || held {
             self.message = Some(SharedString::from(
                 t!("message.view_unsaved_close", name = view.name()).into_owned(),
             ));
@@ -350,6 +354,13 @@ impl Workspace {
     }
 
     fn write_view(&mut self, force: bool, cx: &mut Context<Self>) {
+        // The panel first, and only when it is what the middle shows: it holds
+        // a document that survives being covered, and ⌘S over the canvas means
+        // the canvas even with a file still open behind it.
+        if self.showing_code() && self.code().is_some_and(|file| !file.image) {
+            self.save_code(force, cx);
+            return;
+        }
         // What the caret is in the middle of typing is already in the tree —
         // every keystroke writes it — so the save needs nothing from the field.
         // What it does need is the undo step: saving is a boundary, and what was
@@ -421,7 +432,7 @@ impl Workspace {
     /// behind it is the silent failure this module exists to remove, and saving
     /// a view already adds a field, an import and a handler stub to the
     /// developer's file.
-    fn ensure_assets_module(&mut self) {
+    pub(super) fn ensure_assets_module(&mut self) {
         let Some(project) = self.project.as_ref() else {
             return;
         };
@@ -489,6 +500,13 @@ impl Workspace {
 
     /// Drops what the designer holds and re-reads the file.
     pub fn reload_view(&mut self, cx: &mut Context<Self>) {
+        // Same reasoning as the save: what is on screen is what is reloaded,
+        // and it is the panel's only way out of an edit it does not want to
+        // keep.
+        if self.showing_code() && self.code().is_some_and(|file| !file.image) {
+            self.reload_code(cx);
+            return;
+        }
         self.edit_snapshot = None;
         if let Some(menus) = self.menu_file_mut() {
             self.message = match menus.reload() {
@@ -584,15 +602,41 @@ impl Workspace {
         let mut reloaded = Vec::new();
         let mut conflicted = Vec::new();
 
+        // A view whose code is open in the panel and typed in is dirty, whatever
+        // its tree says: the edit lives in the field, not in `root`. Reloading
+        // it here would move `view.source` to the disk's text, and the save that
+        // follows would find nothing changed and write over the other side.
+        let typed = self.code().filter(|file| file.of_view && file.edited).map(|file| &file.path);
+
         for index in 0..self.views.len() {
             let view = &self.views[index];
             if !view.disk_changed() {
                 continue;
             }
-            if view.dirty() {
+            if view.dirty() || typed == Some(&view.path) {
                 conflicted.push(view.path.clone());
             } else {
                 reloaded.push(index);
+            }
+        }
+
+        // The panel holds a file of its own, which no view knows about. Left
+        // out of this, a `Cargo.toml` edited here and in Zed at once would be
+        // written over by whichever side saved last, with nothing said.
+        if let Some(file) = self.code().filter(|file| !file.of_view && file.disk_changed()) {
+            let path = file.path.clone();
+            if file.edited {
+                if self.conflicts.insert(path) {
+                    self.message = Some(crate::tr("message.conflict_both"));
+                }
+            } else if self.reread_code() {
+                self.message = Some(SharedString::from(
+                    t!(
+                        "message.reloaded_outside",
+                        name = self.code().map(|file| file.name()).unwrap_or_default()
+                    )
+                    .into_owned(),
+                ));
             }
         }
 

@@ -135,8 +135,8 @@ impl Workspace {
                 )
             })
             .collect();
-        // Never dirty: the reader does not write.
-        let read_tab = self.code().filter(|file| !file.of_view).map(|file| file.name());
+        let read_tab =
+            self.code().filter(|file| !file.of_view).map(|file| (file.name(), file.edited));
 
         // The editor's name is read here rather than inside the menu builder,
         // which is `'static` and cannot hold the application. Changing the
@@ -230,7 +230,7 @@ impl Workspace {
                         )
                     }),
             )
-            .children(read_tab.map(|name| {
+            .children(read_tab.map(|(name, edited)| {
                 h_flex()
                     .id("tab-code")
                     .gap_1()
@@ -242,6 +242,9 @@ impl Workspace {
                     .text_xs()
                     .text_color(theme::text())
                     .child(name)
+                    // The same dot a view's tab carries: the panel writes now,
+                    // so it can be behind its file.
+                    .when(edited, |this| this.child("•"))
                     .child(
                         div()
                             .id("tab-code-close")

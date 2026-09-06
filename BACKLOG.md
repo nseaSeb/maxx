@@ -852,7 +852,9 @@ ressortir sur trois. Ce qui est garanti est le contenu, pas la colonne.
   l'ancre à défaut d'import, qui était l'octet 0. Une vue sans aucun `use`
   recevait donc le premier au-dessus de son `//!`, ce qui ne compile pas : c'est
   maintenant la fin des attributs internes du fichier.
-- ~~Voir un fichier que maxx ne sait pas dessiner~~ — fait, en lecture seule.
+- ~~Voir un fichier que maxx ne sait pas dessiner~~ — fait, et depuis 0.3.2 le
+  panneau écrit aussi : ⌘S enregistre, ⌘⇧R reprend le fichier sur le disque, et
+  le texte d'une vue (⌘E) est relu par le parseur, donc le canvas suit.
   N'importe quel fichier texte de l'explorateur s'ouvre dans `workspace/code.rs`,
   colorisé par tree-sitter, avec ses numéros de ligne ; un `.rs` sans région
   gérée — `main.rs`, `ui/mod.rs` — y va aussi, au lieu de l'erreur d'analyse

@@ -737,6 +737,12 @@ message.no_other_tab:
 message.no_tab_to_the_right:
   en: "no tab to the right of this one"
   fr: "aucun onglet à droite de celui-ci"
+message.code_reloaded:
+  en: "file taken back from the disk"
+  fr: "fichier repris sur le disque"
+message.code_unsaved:
+  en: "the open file has unsaved edits: ⌘S writes it, ⌘⇧R takes it back from the disk"
+  fr: "le fichier ouvert a des modifications non enregistrées : ⌘S l'écrit, ⌘⇧R le reprend sur le disque"
 message.editor_refused:
   en: "%{editor} did not open"
   fr: "%{editor} ne s'est pas ouvert"

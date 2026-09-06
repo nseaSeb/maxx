@@ -1,4 +1,5 @@
-//! The code reader: showing a file maxx does not know how to design.
+//! The code panel: showing, and editing, a file maxx does not know how to
+//! design.
 
 use super::*;
 
@@ -9,16 +10,26 @@ use super::*;
 /// is visible; a frozen window looks like a crash.
 const MAX_BYTES: u64 = 2 * 1024 * 1024;
 
-/// A file open in the code reader.
+/// A file open in the code panel.
 ///
-/// Read once, at opening, and never written: the reader is a window onto the
-/// disk, not a second writer. The `.rs` files maxx designs already have a
-/// source of truth — the canvas — and the rest belong to the editor.
+/// Read at opening, and written by `⌘S` like anything else maxx holds. The
+/// panel stays a small editor and not a rival to yours: no completion, no
+/// refactoring, no search across the project — what it is for is the line one
+/// does not want to change window for.
 pub struct CodeFile {
     /// Absolute path of the file being read.
     pub path: PathBuf,
-    /// Its full text, as it was on opening.
+    /// Its full text, as it was on opening or at the last save.
+    ///
+    /// What the field holds is the live text; this is the copy the dirty mark
+    /// and the disk check are answered from.
     pub text: SharedString,
+    /// Whether the field holds something other than `text`.
+    ///
+    /// Set from the field's own event rather than derived on demand: the tab
+    /// strip asks on every repaint, and reading the box would mean holding the
+    /// application there.
+    pub edited: bool,
     /// The grammar it is coloured with.
     pub language: &'static str,
     /// Whether this is the other side of the view being designed, rather than a
@@ -55,6 +66,7 @@ fn from_text(path: PathBuf, text: String, language: &'static str, of_view: bool)
         path,
         language,
         of_view,
+        edited: false,
         image: false,
         size: 0,
     }
@@ -70,6 +82,7 @@ fn from_image(path: PathBuf, size: u64) -> CodeFile {
         path,
         language: "text",
         of_view: false,
+        edited: false,
         image: true,
         size,
     }
@@ -123,6 +136,45 @@ impl CodeFile {
     /// Its weight in kilobytes, for a picture.
     pub fn kilobytes(&self) -> u64 {
         self.size / 1024
+    }
+
+    /// Writes `text` to the file, refusing when the file changed underneath.
+    ///
+    /// The same bargain a view is saved on: what maxx last read is compared
+    /// with what is on disk, and a file written by someone else in the
+    /// meantime is not overwritten without being asked. `force` is the answer
+    /// to that question.
+    ///
+    /// A picture is refused outright: there is no text to write, and the field
+    /// the panel would take it from does not exist.
+    pub fn write(&mut self, text: &str, force: bool) -> Result<(), String> {
+        if self.image {
+            return Err(crate::tr("error.not_a_file").to_string());
+        }
+        if !force && self.disk_changed() {
+            return Err(crate::tr("error.changed_on_disk").to_string());
+        }
+        std::fs::write(&self.path, text).map_err(|error| error.to_string())?;
+        self.adopt(text);
+        Ok(())
+    }
+
+    /// Takes `text` as what is now both on screen and on disk.
+    pub fn adopt(&mut self, text: &str) {
+        self.lines = text.lines().count();
+        self.text = SharedString::from(text.to_string());
+        self.edited = false;
+    }
+
+    /// Whether the file on disk differs from what maxx last read or wrote.
+    ///
+    /// Unreadable is not "changed", as for a view: refusing to save a file
+    /// nobody can read would not help anyone.
+    pub fn disk_changed(&self) -> bool {
+        match std::fs::read_to_string(&self.path) {
+            Ok(text) => text != self.text.as_ref(),
+            Err(_) => false,
+        }
     }
 }
 
@@ -180,6 +232,11 @@ impl Workspace {
         if self.discard_menu_edits(cx) {
             return;
         }
+        // And the panel's own, now that it writes: opening another file drops
+        // the field it holds.
+        if self.discard_code_edits(cx) {
+            return;
+        }
         match CodeFile::load(&path) {
             Ok(file) => self.show_code(file),
             // The mode does not change: a refusal must not blank the area the
@@ -207,7 +264,18 @@ impl Workspace {
         // read tab is only drawn for a file that is *not* a view's, so there
         // was nothing to click either.
         if self.showing_code() && self.code().is_some_and(|file| file.of_view) {
+            if self.discard_code_edits(cx) {
+                return;
+            }
             self.show_designer();
+            cx.notify();
+            return;
+        }
+        // Held but covered: a view's code has no tab of its own, so `⌘E` is the
+        // only way back to it — and rendering a fresh one here would drop what
+        // was typed into the one already open.
+        if self.code().is_some_and(|file| file.of_view && file.edited) {
+            self.show(Center::Code);
             cx.notify();
             return;
         }
@@ -261,6 +329,9 @@ impl Workspace {
 
     /// Closes the code reader.
     pub(crate) fn close_code(&mut self, cx: &mut Context<Self>) {
+        if self.discard_code_edits(cx) {
+            return;
+        }
         self.code = None;
         self.show_designer();
         self.code_input = None;
@@ -278,6 +349,226 @@ impl Workspace {
         }
     }
 
+    /// Whether the panel holds something not yet written.
+    pub(crate) fn code_dirty(&self) -> bool {
+        self.code().is_some_and(|file| file.edited)
+    }
+
+    /// Refuses a mode change that would drop what the panel holds.
+    ///
+    /// The same guard the menu editor has, for the same reason: leaving the
+    /// panel throws its field away, and a file edited by hand has nowhere else
+    /// to be. `⌘S` writes it, `Reload` throws it away on purpose.
+    pub(super) fn discard_code_edits(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.code_dirty() {
+            self.message = Some(crate::tr("message.code_unsaved"));
+            cx.notify();
+            return true;
+        }
+        false
+    }
+
+    /// Writes what the panel holds, refusing when the file changed underneath.
+    ///
+    /// Two files behind one panel. A file opened on its own is written as it
+    /// stands. The other side of a view is parsed first and only then written,
+    /// so the canvas follows the text — and a text that no longer reads leaves
+    /// the file alone and says why.
+    pub(super) fn save_code(&mut self, force: bool, cx: &mut Context<Self>) {
+        let Some(state) = self.code_input.clone() else {
+            return;
+        };
+        let text = state.read(cx).value().to_string();
+        let of_view = self.code().is_some_and(|file| file.of_view);
+        let path = match self.code() {
+            Some(file) => file.path.clone(),
+            None => return,
+        };
+
+        if of_view {
+            let Some(view) = self.view_mut() else {
+                return;
+            };
+            let name = view.name();
+            let saved = match view.adopt_source(&text, force) {
+                Ok(()) => {
+                    // The tree has been replaced by the one this text parses
+                    // to: a box open over the old one is typing into a node
+                    // that may no longer exist, and the undo step it was going
+                    // to record belongs to a document that is gone.
+                    self.edit_snapshot = None;
+                    self.canvas_edit = None;
+                    self.conflicts.remove(&path);
+                    self.message =
+                        Some(SharedString::from(t!("message.saved", name = name).into_owned()));
+                    self.revision += 1;
+                    // Rebuilt here rather than left to `refresh_view_code`,
+                    // which steps aside while the panel is dirty — and the
+                    // panel is still dirty at this line, because what marks it
+                    // clean is precisely this new document. What comes back is
+                    // what `⌘S` would write, normalised, and no longer the raw
+                    // text typed here.
+                    self.rebuild_view_code();
+                    // A picture asked for by name needs the assets module, and
+                    // a view adopted from text can name one just as a canvas
+                    // save can.
+                    self.ensure_assets_module();
+                    true
+                }
+                Err(error) => {
+                    if error == crate::tr("error.changed_on_disk").as_ref() {
+                        self.conflicts.insert(path.clone());
+                    }
+                    self.message = Some(SharedString::from(error));
+                    false
+                }
+            };
+            self.format_code_after_save(&path, saved, cx);
+            cx.notify();
+            return;
+        }
+
+        let Some(file) = self.code_mut() else {
+            return;
+        };
+        let name = file.name();
+        let saved = match file.write(&text, force) {
+            Ok(()) => {
+                self.conflicts.remove(&path);
+                self.message =
+                    Some(SharedString::from(t!("message.saved", name = name).into_owned()));
+                true
+            }
+            Err(error) => {
+                if error == crate::tr("error.changed_on_disk").as_ref() {
+                    self.conflicts.insert(path.clone());
+                }
+                self.message = Some(SharedString::from(error));
+                false
+            }
+        };
+        self.format_code_after_save(&path, saved, cx);
+        cx.notify();
+    }
+
+    /// Renders the view being designed into the panel again, clean.
+    ///
+    /// The one way an `of_view` panel goes from edited back to written: its
+    /// text is not a file maxx reads back but a rendering of the tree, so
+    /// "clean" means a rendering made after the tree moved.
+    pub(super) fn rebuild_view_code(&mut self) {
+        let Some(view) = self.view() else {
+            return;
+        };
+        let Ok(file) = CodeFile::of_view(view) else {
+            return;
+        };
+        self.code = Some(file);
+        self.code_synced = None;
+        self.code_revision = self.revision;
+    }
+
+    /// Runs the formatter over the file just written, when the preference asks
+    /// for it and the file is Rust.
+    ///
+    /// `saved` and not "the panel was open": a write refused because the file
+    /// changed underneath must not be followed by a formatter run over that
+    /// other person's text, whose reread would then replace the edit the
+    /// refusal was protecting.
+    ///
+    /// `rustfmt` is handed a path and nothing else, so a `Cargo.toml` or a
+    /// `README.md` would come back untouched at best — the extension is the
+    /// gate. What it reformats has to be read again, which costs the caret and
+    /// the scroll position: the field is rebuilt around the new text.
+    fn format_code_after_save(
+        &mut self,
+        path: &std::path::Path,
+        saved: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if !saved || !crate::settings::prefs(cx).format_on_save {
+            return;
+        }
+        if path.extension().is_none_or(|extension| extension != "rs") {
+            return;
+        }
+        match crate::run::format_rust(path) {
+            Ok(false) => {}
+            Ok(true) => {
+                // The view holds a copy of the text it wrote, and the formatter
+                // has just changed the file under it: left alone, the next save
+                // would see a file that "changed on disk" and accuse the person
+                // typing of a conflict maxx made itself.
+                if self.code().is_some_and(|file| file.of_view) {
+                    if let Some(view) = self.view_mut()
+                        && let Err(error) = view.reload()
+                    {
+                        self.message = Some(SharedString::from(error));
+                        return;
+                    }
+                    self.revision += 1;
+                    self.rebuild_view_code();
+                } else {
+                    self.reread_code();
+                }
+            }
+            Err(error) => self.message = Some(SharedString::from(error)),
+        }
+    }
+
+    /// Takes the file back from the disk, into the panel.
+    ///
+    /// For a view, the panel is rendered from the tree instead — the view
+    /// itself was re-read by whoever called this.
+    pub(super) fn reread_code(&mut self) -> bool {
+        let Some(file) = self.code() else {
+            return false;
+        };
+        if file.of_view {
+            self.code_synced = None;
+            return true;
+        }
+        // A file that has grown past the ceiling, or stopped being text, is not
+        // re-read — and the panel is then one version behind, which is what the
+        // caller has to be able to say rather than claim a reload.
+        let Ok(reread) = CodeFile::load(&file.path) else {
+            return false;
+        };
+        self.code = Some(reread);
+        self.code_synced = None;
+        true
+    }
+
+    /// Throws away what the panel holds and takes the file as it is on disk.
+    pub(super) fn reload_code(&mut self, cx: &mut Context<Self>) {
+        let Some(file) = self.code() else {
+            return;
+        };
+        let path = file.path.clone();
+        if file.of_view {
+            if let Some(view) = self.view_mut()
+                && let Err(error) = view.reload()
+            {
+                self.message = Some(SharedString::from(error));
+                cx.notify();
+                return;
+            }
+            self.edit_snapshot = None;
+            self.canvas_edit = None;
+            self.revision += 1;
+            // Not `refresh_view_code`, which steps aside for a dirty panel:
+            // this is the gesture that throws that edit away on purpose.
+            self.rebuild_view_code();
+        } else if !self.reread_code() {
+            self.message = Some(crate::tr("error.file_not_text"));
+            cx.notify();
+            return;
+        }
+        self.conflicts.remove(&path);
+        self.message = Some(crate::tr("message.code_reloaded"));
+        cx.notify();
+    }
+
     /// Renders the view's code again when the tree it comes from has moved.
     ///
     /// The canvas is not on screen while its code is, but `⌘Z`, `⌘⇧Z` and the
@@ -290,6 +581,12 @@ impl Workspace {
             return;
         }
         if self.code_revision == self.revision {
+            return;
+        }
+        // Not over something typed here and not yet written: an undo on the
+        // canvas side, or a reload the watcher decided on, would otherwise
+        // rebuild the field and take the edit with it.
+        if self.code_dirty() {
             return;
         }
         self.code_revision = self.revision;
@@ -325,7 +622,7 @@ impl Workspace {
         }
         let language = file.language;
         let text = file.text.clone();
-        self.code_input = Some(cx.new(|cx| {
+        let state = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor(language)
                 .line_number(true)
@@ -333,7 +630,26 @@ impl Workspace {
                 // horizontal scroll says the truth about its width.
                 .soft_wrap(false)
                 .default_value(text)
-        }));
+        });
+        // Compared with the text the panel opened on rather than flagged: a
+        // line typed and then taken back leaves the tab clean, the way undoing
+        // back to the saved tree does on the canvas.
+        cx.subscribe(&state, move |this, state, event: &InputEvent, cx| {
+            if !matches!(event, InputEvent::Change) {
+                return;
+            }
+            let typed = state.read(cx).value().to_string();
+            let Some(file) = this.code_mut() else {
+                return;
+            };
+            let edited = typed != file.text.as_ref();
+            if file.edited != edited {
+                file.edited = edited;
+                cx.notify();
+            }
+        })
+        .detach();
+        self.code_input = Some(state);
     }
 
     /// The file being read, filling the main area.
@@ -368,12 +684,10 @@ impl Workspace {
             .overflow_hidden()
             .bg(theme::bg())
             .child(
-                // `disabled` takes the writing away and leaves the reading:
-                // arrows, ⌘A, ⌘C, mouse selection and the wheel are all
-                // registered outside the `disabled` guard in gpui-component.
-                // `appearance(false)` drops the grey wash it paints on a
-                // disabled field — a reader is not a dead form control.
-                Input::new(state).h_full().appearance(false).disabled(true),
+                // Writable, and `appearance(false)` so it is a page of code and
+                // not a form control: the panel fills the middle of the window,
+                // where a border and a wash would draw a box around nothing.
+                Input::new(state).h_full().appearance(false),
             )
             .into_any_element()
     }

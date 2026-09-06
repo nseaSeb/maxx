@@ -201,11 +201,26 @@ them alone, because there the name may be a field, a comment or a string.
 
 In the project panel, a view opens on the canvas and every other file — a
 `Cargo.toml`, a `README.md`, a `main.rs` with no managed region — opens in the
-code reader: syntax highlighting, line numbers, selection and copy, and no
-writing. The panel's header carries ＋ and 🗑 for a new view and for deleting
-what is selected, and a right-click on any row offers the same, plus *View the
-code*, *Reveal in Finder*, *Open in your editor* and *Open the window on this
-view*. Editing stays in your editor, one `⌘⌥Z` away.
+code panel: syntax highlighting, line numbers, and a field you can type in.
+`⌘S` writes it, `⌘⇧R` takes it back from the disk, and a tab with a dot on it
+is a file waiting to be written. Like a view, it is not overwritten when the
+file changed underneath in the meantime: maxx says so and waits for you.
+
+The panel is a small editor, not a rival to yours — no completion, no search
+across the project, no refactoring. It is for the line you would rather not
+change window for. Everything else is still one `⌘⌥Z` away, in your editor.
+
+`⌘E` is the same field on the view being designed, and there the two sides meet:
+what you type is parsed back, so the canvas takes what the text says. A text
+maxx cannot read — a marker deleted, a `render` that no longer returns an
+expression — leaves the file exactly as it was and says why. Inside the managed
+region, what comes back on screen after the save is maxx's own rendering of the
+tree it read, which is the text `⌘S` would have written; outside it, every byte
+you typed is kept.
+
+The panel's header carries ＋ and 🗑 for a new view and for deleting what is
+selected, and a right-click on any row offers the same, plus *View the code*,
+*Reveal in Finder*, *Open in your editor* and *Open the window on this view*.
 
 `⌘P` opens a file by name. It is the palette's box on another list: type words
 in any order, and the whole path answers — `ui home` finds `src/ui/home.rs`.

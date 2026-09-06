@@ -138,3 +138,56 @@ fn the_code_shown_is_the_one_save_would_write() {
         std::fs::remove_dir_all(directory).ok();
     }
 }
+
+/// The panel writes now, and the file it writes is the one it opened.
+#[test]
+fn a_file_opened_in_the_panel_is_written_back() {
+    let directory = scratch("written-back");
+    let path = directory.join("notes.md");
+    std::fs::write(&path, "one\n").unwrap();
+
+    let mut file = CodeFile::load(&path).expect("the file must open");
+    assert!(!file.edited);
+
+    file.write("one\ntwo\n", false).expect("the file must be written");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "one\ntwo\n");
+    // What was written is what the panel now compares against: saving twice
+    // must not look like a conflict with itself.
+    assert!(!file.disk_changed());
+    assert!(!file.edited);
+    assert_eq!(file.lines(), 2);
+}
+
+/// The same bargain a view is saved on: what someone else wrote is not lost
+/// without a word.
+#[test]
+fn a_file_changed_underneath_is_not_written_over_without_asking() {
+    let directory = scratch("changed-underneath");
+    let path = directory.join("Cargo.toml");
+    std::fs::write(&path, "[package]\n").unwrap();
+
+    let mut file = CodeFile::load(&path).expect("the file must open");
+    std::fs::write(&path, "[package]\nname = \"typed in Zed\"\n").unwrap();
+    assert!(file.disk_changed());
+
+    let refused = file.write("[package]\nname = \"typed in maxx\"\n", false);
+    assert!(refused.is_err(), "a file changed underneath is not overwritten");
+    assert!(
+        std::fs::read_to_string(&path).unwrap().contains("typed in Zed"),
+        "and nothing is written while the question stands"
+    );
+
+    file.write("[package]\nname = \"typed in maxx\"\n", true).expect("forced, it goes through");
+    assert!(std::fs::read_to_string(&path).unwrap().contains("typed in maxx"));
+}
+
+/// A picture has no text to write, and no field to take one from.
+#[test]
+fn a_picture_is_never_written() {
+    let directory = scratch("picture-write");
+    let path = directory.join("logo.png");
+    std::fs::write(&path, [0x89, b'P', b'N', b'G']).unwrap();
+
+    let mut file = CodeFile::load(&path).expect("a picture opens as a picture");
+    assert!(file.write("not a picture", true).is_err());
+}

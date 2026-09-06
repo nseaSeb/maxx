@@ -35,6 +35,67 @@ fn a_generated_project_is_readable_by_maxx() {
     assert_eq!(view.root.children[0].base.path(), Some("Label::new"));
 }
 
+/// The code panel writes a view's file, and the canvas takes what it says.
+#[test]
+fn a_view_edited_as_text_moves_the_canvas() {
+    let root = scratch("maxx_scaffold_adopt_test");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    let path = root.join("src/ui/home.rs");
+
+    // The text is maxx's own rendering of a tree with one node more, which is
+    // exactly what someone typing in the panel would produce by hand.
+    let mut designed = View::load(&path).unwrap();
+    let label = maxx::registry::instantiate("label").expect("the label is in the catalogue");
+    designed.root.push_child(label);
+    let typed = designed.render_source().expect("the tree must render");
+
+    let mut view = View::load(&path).unwrap();
+    let before = view.root.children.len();
+    view.adopt_source(&typed, false).expect("the text must be adopted");
+
+    assert_eq!(view.root.children.len(), before + 1, "the canvas follows the text");
+    assert!(!view.dirty(), "what was just written is not waiting to be written");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), typed);
+}
+
+/// A text maxx cannot read leaves the file alone: the parse comes first.
+#[test]
+fn a_view_whose_markers_are_gone_is_not_written() {
+    let root = scratch("maxx_scaffold_adopt_refusal_test");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    let path = root.join("src/ui/home.rs");
+
+    let mut view = View::load(&path).unwrap();
+    let before = std::fs::read_to_string(&path).unwrap();
+    let broken = before.replace("// maxx:begin", "// begin");
+
+    assert!(view.adopt_source(&broken, false).is_err(), "with no markers, maxx refuses");
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        before,
+        "and the file is left exactly as it was"
+    );
+}
+
+/// And a view changed on disk is not written over without being asked.
+#[test]
+fn a_view_changed_underneath_is_not_written_over_without_asking() {
+    let root = scratch("maxx_scaffold_adopt_conflict_test");
+    scaffold::create_project(&root, "trial", Template::Empty).unwrap();
+    let path = root.join("src/ui/home.rs");
+
+    let mut view = View::load(&path).unwrap();
+    let typed = view.render_source().unwrap();
+    let elsewhere = typed.replace("pub struct Home", "// touched in Zed\npub struct Home");
+    std::fs::write(&path, &elsewhere).unwrap();
+
+    assert!(view.adopt_source(&typed, false).is_err(), "a view changed underneath waits");
+    assert!(std::fs::read_to_string(&path).unwrap().contains("touched in Zed"));
+
+    view.adopt_source(&typed, true).expect("forced, it goes through");
+    assert!(!std::fs::read_to_string(&path).unwrap().contains("touched in Zed"));
+}
+
 #[test]
 fn adding_a_view_registers_it() {
     let root = scratch("maxx_scaffold_view_test");
